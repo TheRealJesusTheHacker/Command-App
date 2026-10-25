@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +42,7 @@ private enum class ClientsView { LIST, PIPELINE }
  * (moving cards is a later version — the board lives here, inside
  * the Clients area, so the five bottom tabs stay exactly as spec'd).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClientsScreen(viewModel: AppViewModel) {
     var selectedId by remember { mutableStateOf<String?>(null) }

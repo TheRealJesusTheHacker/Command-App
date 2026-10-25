@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +33,7 @@ import java.time.format.DateTimeFormatter
  * Schedule (spec §2.1): Sentinel jobs only — today and this week,
  * with a "my jobs" filter and a job detail view. Read-only in v1.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleScreen(viewModel: AppViewModel) {
     var selectedId by remember { mutableStateOf<String?>(null) }
