@@ -1,0 +1,16 @@
+# Dependabot — fleet rule (2026-10-25): GitHub Actions updates ON;
+# Gradle version updates OFF (open-pull-requests-limit: 0) because Dependabot
+# cannot maintain gradle/verification-metadata.xml under the fleet hash-lock
+# policy. Gradle bumps land via crew relock passes. Alerts and security
+# updates stay enabled at repo level regardless of this file.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
