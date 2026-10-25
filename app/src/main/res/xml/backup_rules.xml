@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Legacy full-backup-content rules (API < 31): the same total exclusion
+  as data_extraction_rules.xml, so the device token, the mailbox
+  password, and mail data are backup-ineligible on every API level
+  this app runs on (minSdk 26), not just 31+.
+-->
+<full-backup-content>
+    <exclude domain="root" />
+    <exclude domain="file" />
+    <exclude domain="database" />
+    <exclude domain="sharedpref" />
+    <exclude domain="external" />
+</full-backup-content>

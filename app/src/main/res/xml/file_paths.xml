@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the update-download cache is ever shared, and only with the
+     Android package installer (spec §7). -->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

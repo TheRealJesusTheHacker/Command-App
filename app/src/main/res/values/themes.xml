@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-only v1 (spec §8): the window chrome matches the Compose
+         base black so nothing flashes light before the UI draws. -->
+    <style name="Theme.SentinelApp" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#060806</item>
+        <item name="android:statusBarColor">#060806</item>
+        <item name="android:navigationBarColor">#060806</item>
+    </style>
+</resources>

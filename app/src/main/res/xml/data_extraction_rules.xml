@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Data extraction rules (API 31+), spec §5: ALL auth material and mail
+  data stay off cloud backup and device transfer — harder than the
+  OffLeash precedent, because this app holds a mailbox password as well
+  as a device token. Every domain is excluded, on both surfaces: the
+  encrypted secure store, the plain settings, the databases, and the
+  app-private mail/update caches simply never leave the phone.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>
