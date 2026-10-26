@@ -54,6 +54,14 @@ jobs:
       SENTINEL_APP_KEYSTORE_PASSWORD: ${{ secrets.SENTINEL_APP_KEYSTORE_PASSWORD }}
       SENTINEL_APP_KEY_ALIAS: ${{ secrets.SENTINEL_APP_KEY_ALIAS }}
       SENTINEL_APP_KEY_PASSWORD: ${{ secrets.SENTINEL_APP_KEY_PASSWORD }}
+      # Gate values for the build's sealing step (see
+      # app/build.gradle.kts generateGateConfig). These two secrets
+      # do not exist until the Cloudflare Access layer lands (the
+      # BUILD-1 record's Wall 2); while they are unset the build
+      # seals empty values and the app runs unconfigured, exactly
+      # as designed. They are never printed and never committed.
+      SENTINEL_APP_CF_ACCESS_CLIENT_ID: ${{ secrets.SENTINEL_APP_CF_ACCESS_CLIENT_ID }}
+      SENTINEL_APP_CF_ACCESS_CLIENT_SECRET: ${{ secrets.SENTINEL_APP_CF_ACCESS_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -109,3 +117,15 @@ jobs:
           name: sentinel-app-hunt-signed-apk
           path: ${{ env.SENTINEL_SIGNED_APK }}
           if-no-files-found: error
+
+      # The mapping for THIS signed build — the deobfuscation key
+      # for any crash report from the APK above. Artifact only,
+      # never committed; keep it with the build it belongs to.
+      - name: Archive the R8 mapping for this hunt build (never committed)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: r8-mapping-hunt
+          path: app/build/outputs/mapping/huntRelease/mapping.txt
+          if-no-files-found: warn
+          retention-days: 90

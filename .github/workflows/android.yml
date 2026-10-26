@@ -37,6 +37,19 @@ jobs:
       - name: Build both flavors (debug + unsigned release compile proof)
         run: ./gradlew assembleDebug assembleRelease --console=plain
 
+      # The R8 mapping file is the ONLY way to read an obfuscated
+      # release crash report. It is archived as a build artifact —
+      # never committed to the repo (committing it would hand out
+      # the deobfuscation key with the source).
+      - name: Archive the R8 mapping files (deobfuscation keys — never committed)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: r8-mapping-android-gate
+          path: app/build/outputs/mapping/
+          if-no-files-found: ignore
+          retention-days: 90
+
       - name: Prove the release compile proof is unsigned
         run: |
           apk=$(ls app/build/outputs/apk/standard/release/*-unsigned.apk)
