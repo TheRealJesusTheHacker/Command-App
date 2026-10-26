@@ -50,6 +50,7 @@ jobs:
     needs: gate
     if: inputs.build_signed
     runs-on: ubuntu-latest
+    environment: release
     env:
       SENTINEL_APP_KEYSTORE_PASSWORD: ${{ secrets.SENTINEL_APP_KEYSTORE_PASSWORD }}
       SENTINEL_APP_KEY_ALIAS: ${{ secrets.SENTINEL_APP_KEY_ALIAS }}
