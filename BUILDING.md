@@ -45,9 +45,22 @@ this reason (see `.github/dependabot.yml`); Actions updates stay on.
 The app talks to the Command app API from the project spec (§3.3):
 base `https://command.sentinelsafeguard.net`, resources under
 `/api/app/*`, device token in an `Authorization: Bearer …` header.
-Cloudflare Access service-auth headers are added when the build
-config values `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` are
-supplied (env `SENTINEL_APP_CF_ACCESS_CLIENT_ID` /
+Cloudflare Access service-auth headers are added when the values
+are supplied at build time (env `SENTINEL_APP_CF_ACCESS_CLIENT_ID` /
 `SENTINEL_APP_CF_ACCESS_CLIENT_SECRET` or `-PcfAccessClientId` /
-`-PcfAccessClientSecret`); they ship empty until the Access layer
-lands, and the app compiles and tests fine without them.
+`-PcfAccessClientSecret`). They are **not** plaintext build config:
+the `generateGateConfig` Gradle task seals them (AES-GCM) into a
+generated source file and the app unseals them at runtime — see
+HARDENING.md §2. They ship empty until the Access layer lands, and
+the app compiles and tests fine without them.
+
+## Release hardening
+
+Release builds (both flavors) are R8-minified and
+resource-shrunk, with keep rules in `app/proguard-rules.pro`.
+Each minified build's `mapping.txt` is archived by CI as a build
+artifact and is **never committed** — it is the deobfuscation key
+for release crash reports. Mail TLS is SPKI-pinned to the mail
+server's CA anchors; the command host is deliberately unpinned.
+The full story — doctrine, provenance, rotation procedures,
+failure modes — is in [HARDENING.md](HARDENING.md).
