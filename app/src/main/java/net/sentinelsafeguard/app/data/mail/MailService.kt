@@ -12,7 +12,7 @@ import jakarta.mail.Transport
 import jakarta.mail.internet.InternetAddress
 import jakarta.mail.internet.MimeMessage
 import jakarta.mail.search.BodyTerm
-import jakarta.mail.search.FromTerm
+import jakarta.mail.search.FromStringTerm
 import jakarta.mail.search.OrTerm
 import jakarta.mail.search.SearchTerm
 import jakarta.mail.search.SubjectTerm
@@ -32,6 +32,13 @@ import java.util.Properties
  * The mailbox password is supplied per call from SecureStore by the
  * caller, is only ever sent to the mail server over TLS, and is never
  * logged or written anywhere by this class.
+ *
+ * TLS posture: both protocols run through [MailTls] — platform chain
+ * validation plus SPKI anchor pinning (see CertificatePins). The
+ * `mail.imap.ssl.trust` property an earlier version set here is GONE:
+ * in Angus that property replaces chain validation with blind trust
+ * for the listed host, the opposite of pinning. Nothing in this
+ * class may reintroduce it.
  *
  * Cache rule (spec §5): message lists live in memory only, for the one
  * open folder, and are dropped on sign-out via [clearCache]. Nothing
@@ -53,8 +60,11 @@ class MailService(
             put("mail.imap.ssl.enable", "true")
             put("mail.imap.connectiontimeout", "20000")
             put("mail.imap.timeout", "30000")
+            // Pinning socket factory (object property — the one
+            // Angus consults first for implicit-TLS connections).
             // Dovecot advertises the shared namespace under Shared.*
-            put("mail.imap.ssl.trust", host)
+            put("mail.imap.ssl.socketFactory", MailTls.socketFactory())
+            put("mail.imap.ssl.checkserveridentity", "true")
         }
         return Session.getInstance(props)
     }
@@ -178,7 +188,7 @@ class MailService(
             folder.open(Folder.READ_ONLY)
             try {
                 val term: SearchTerm = OrTerm(
-                    arrayOf(SubjectTerm(query), FromTerm(query), BodyTerm(query))
+                    arrayOf(SubjectTerm(query), FromStringTerm(query), BodyTerm(query))
                 )
                 val found = folder.search(term).takeLast(limit).reversed()
                 val uidFolder = folder as jakarta.mail.UIDFolder
@@ -265,6 +275,10 @@ class MailService(
             put("mail.smtp.auth", "true")
             put("mail.smtp.starttls.enable", "true")
             put("mail.smtp.starttls.required", "true")
+            // Same pinning factory, used for the STARTTLS upgrade
+            // (Angus consults this property first in startTLS too).
+            put("mail.smtp.ssl.socketFactory", MailTls.socketFactory())
+            put("mail.smtp.ssl.checkserveridentity", "true")
             put("mail.smtp.connectiontimeout", "20000")
             put("mail.smtp.timeout", "30000")
         }
