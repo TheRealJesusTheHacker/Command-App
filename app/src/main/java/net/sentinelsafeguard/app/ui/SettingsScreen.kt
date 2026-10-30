@@ -175,7 +175,7 @@ fun SettingsScreen(viewModel: AppViewModel, onSignedOut: () -> Unit) {
 
         SectionHeader("Mail")
         Text(
-            "Messages in every folder delete themselves after 30 days. Archive keeps a message for good. " +
+            "Messages stay in your mailbox until you delete them — nothing deletes itself. " +
                 if (viewModel.secure.hasMailCredentials) {
                     "Mail is connected as ${viewModel.secure.mailUsername}."
                 } else {

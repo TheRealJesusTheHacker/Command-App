@@ -175,7 +175,7 @@ private fun FolderList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
                 item {
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "Messages here delete themselves after 30 days. Archive keeps a message for good.",
+                        "Nothing here deletes itself — messages stay until you delete them.",
                         color = SentinelMuted,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 16.dp),

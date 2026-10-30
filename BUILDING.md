@@ -21,15 +21,19 @@ keystore reaches the build only through the environment —
 `SENTINEL_APP_KEY_PASSWORD`. All four set signs; some set fails the
 build; none set leaves release builds unsigned (compile proofs only).
 The signed-hunt GitHub Actions workflow materialises the keystore
-from repo secrets, verifies the APK with apksigner, rejects the debug
+from the `release` environment's Actions secrets, verifies the APK with apksigner, rejects the debug
 certificate, and asserts the signer SHA-256 equals the fingerprint in
 the README.
 
 ## Dependency hash lock (fleet law)
 
-`gradle/verification-metadata.xml` is committed and enforced: every
-artifact Gradle resolves must match its recorded SHA-256 or the build
-fails. To change a pinned version:
+**Status (2026-10-30): not yet committed.** The generation workflow
+exists and the procedure below is the path; until its output is
+committed, builds resolve without hash verification — a known gap
+against fleet law, waiting on the same Actions minutes/billing wall
+as the rest of this repo's CI. Once the file below is committed,
+every artifact Gradle resolves must match its recorded SHA-256 or
+the build fails. To change a pinned version:
 
 1. Edit the version.
 2. Run the **Generate verification metadata** workflow manually.
