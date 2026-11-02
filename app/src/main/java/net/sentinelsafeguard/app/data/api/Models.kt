@@ -4,7 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Wire models for the Command app API (spec §3.3, base /api/app/*).
+ * Wire models for the Command app API (spec §3.3, /api/app/ endpoints).
  * Unknown fields are ignored so a backend addition never breaks the app.
  */
 
