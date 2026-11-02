@@ -134,7 +134,9 @@ class ContractShapeTest {
     @Test
     fun ticketsListParsesNumericIdsAndNames() = runBlocking {
         val transport = QueueTransport(200 to RealBodies.TICKETS_LIST)
-        val tickets = api(transport).tickets()
+        val page = api(transport).tickets()
+        assertEquals(3, page.total)
+        val tickets = page.items
         assertEquals(3, tickets.size)
         val first = tickets.first { it.title == "POS terminal drops offline" }
         assertEquals(1, first.id)
@@ -152,9 +154,10 @@ class ContractShapeTest {
     @Test
     fun ticketsStatusFilterUsesTheBackendParameter() = runBlocking {
         val transport = QueueTransport(200 to RealBodies.TICKETS_FILTERED)
-        val tickets = api(transport).tickets(status = "New")
-        assertEquals(1, tickets.size)
-        assertEquals("New", tickets.single().status)
+        val page = api(transport).tickets(status = "New")
+        assertEquals(1, page.total)
+        assertEquals(1, page.items.size)
+        assertEquals("New", page.items.single().status)
         assertTrue(transport.requests.single().path.contains("status=New"))
     }
 
@@ -232,7 +235,9 @@ class ContractShapeTest {
     @Test
     fun clientsListParsesNullablesAndTierTokens() = runBlocking {
         val transport = QueueTransport(200 to RealBodies.CLIENTS_LIST)
-        val clients = api(transport).clients()
+        val page = api(transport).clients()
+        assertEquals(3, page.total)
+        val clients = page.items
         assertEquals(3, clients.size)
         val bakery = clients.first { it.legalName == "Rehearsal Bakery LLC" }
         assertEquals(1, bakery.id)

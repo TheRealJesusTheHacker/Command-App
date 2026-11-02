@@ -53,7 +53,7 @@ fun ScheduleScreen(viewModel: AppViewModel) {
         try {
             jobs = viewModel.api.schedule()
         } catch (e: Exception) {
-            error = e.message ?: "The schedule could not be loaded. Check your connection and try again."
+            error = plainError(e, "The schedule could not be loaded. Check your connection and try again.")
         }
     }
 
@@ -77,7 +77,7 @@ fun ScheduleScreen(viewModel: AppViewModel) {
         }
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
-            jobs == null -> LoadingBox("Loading schedule…")
+            jobs == null -> SkeletonList()
             else -> {
                 val visible = jobs!!.filter { job ->
                     !mineOnly || job.assignees.any {
@@ -131,7 +131,7 @@ fun JobDetailScreen(viewModel: AppViewModel, jobId: Int, onBack: () -> Unit) {
         try {
             job = viewModel.api.job(jobId)
         } catch (e: Exception) {
-            error = e.message ?: "This job could not be loaded. Go back and try again."
+            error = plainError(e, "This job could not be loaded. Go back and try again.")
         }
     }
 
@@ -139,7 +139,7 @@ fun JobDetailScreen(viewModel: AppViewModel, jobId: Int, onBack: () -> Unit) {
         TextButton(onClick = onBack) { Text("‹ Back to schedule") }
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
-            job == null -> LoadingBox("Loading job…")
+            job == null -> SkeletonList(3)
             else -> {
                 val j = job!!
                 Column(Modifier.padding(horizontal = 16.dp)) {

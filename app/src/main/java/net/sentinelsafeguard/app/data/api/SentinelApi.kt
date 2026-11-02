@@ -9,6 +9,15 @@ import net.sentinelsafeguard.app.config.AppConfig
 /** The server refused the call. [message] is plain language, safe to show. */
 class ApiException(val status: Int, override val message: String) : Exception(message)
 
+/**
+ * One complete list from a paged backend envelope: every item the
+ * envelope holds (all pages fetched), plus the backend's own
+ * [total] so screens can show the true count. Before hunt4 the app
+ * read only the first page (50) and called it the list — the CRM
+ * holds ~266 clients, so 216 were silently invisible on the phone.
+ */
+data class Page<T>(val items: List<T>, val total: Int)
+
 /** The device token is gone or revoked — the app must return to sign-in. */
 class SignedOutException : Exception("Your sign-in has ended. Please sign in again.")
 
@@ -178,15 +187,50 @@ class SentinelApi(
     suspend fun today(): TodayResponse =
         json.decodeFromString(ensureOk(call("GET", "/api/app/today")).body)
 
+    /**
+     * Walk a paged list envelope to the end: request pages at the
+     * backend's maximum page size until everything the envelope's
+     * [totalOf] reports has been collected. A short or empty page
+     * also ends the walk, so a total that moves mid-fetch can never
+     * loop forever.
+     */
+    private suspend fun <T, R> fetchAllPages(
+        basePath: String,
+        params: List<String>,
+        decode: (String) -> R,
+        itemsOf: (R) -> List<T>,
+        totalOf: (R) -> Int,
+    ): Page<T> {
+        val all = mutableListOf<T>()
+        var total = Int.MAX_VALUE
+        var offset = 0
+        while (all.size < total) {
+            val query = (params + "limit=$PAGE_SIZE" + "offset=$offset")
+                .joinToString("&")
+            val page = decode(ensureOk(call("GET", "$basePath?$query")).body)
+            val items = itemsOf(page)
+            total = totalOf(page)
+            if (items.isEmpty()) break
+            all += items
+            offset += items.size
+        }
+        return Page(all, if (total == Int.MAX_VALUE) all.size else total)
+    }
+
     /** The backend's filters are a stage name (?status=) and an
-     *  assignee selector (?assignee=me / unassigned / a user id). */
-    suspend fun tickets(status: String? = null, assignee: String? = null): List<Ticket> {
+     *  assignee selector (?assignee=me / unassigned / a user id).
+     *  The full filtered set comes back — every page, not just the
+     *  first — with the backend's true filtered total. */
+    suspend fun tickets(status: String? = null, assignee: String? = null): Page<Ticket> {
         val params = mutableListOf<String>()
         if (!status.isNullOrBlank()) params += "status=${urlEncode(status)}"
         if (!assignee.isNullOrBlank()) params += "assignee=${urlEncode(assignee)}"
-        val path = "/api/app/tickets" +
-            if (params.isEmpty()) "" else "?" + params.joinToString("&")
-        return json.decodeFromString<TicketListResponse>(ensureOk(call("GET", path)).body).tickets
+        return fetchAllPages(
+            "/api/app/tickets", params,
+            decode = { json.decodeFromString<TicketListResponse>(it) },
+            itemsOf = { it.tickets },
+            totalOf = { it.total },
+        )
     }
 
     /** The detail envelope's ticket has no clientName; the name is
@@ -225,10 +269,22 @@ class SentinelApi(
             ensureOk(call("POST", "/api/app/tickets", json.encodeToString(request))).body
         ).ticket
 
-    suspend fun clients(query: String? = null): List<Client> {
-        val path = if (query.isNullOrBlank()) "/api/app/clients"
-        else "/api/app/clients?q=${urlEncode(query)}"
-        return json.decodeFromString<ClientListResponse>(ensureOk(call("GET", path)).body).clients
+    /**
+     * The complete client list — every page of the envelope, with
+     * the backend's true total. Search rides the backend's own ?q=
+     * (it matches name, business, contact, email and phone across
+     * the whole client base server-side), and the matches are paged
+     * through completely too, so search is never limited to page 1.
+     */
+    suspend fun clients(query: String? = null): Page<Client> {
+        val params = mutableListOf<String>()
+        if (!query.isNullOrBlank()) params += "q=${urlEncode(query)}"
+        return fetchAllPages(
+            "/api/app/clients", params,
+            decode = { json.decodeFromString<ClientListResponse>(it) },
+            itemsOf = { it.clients },
+            totalOf = { it.total },
+        )
     }
 
     suspend fun client(id: Int): Client =
@@ -282,6 +338,10 @@ class SentinelApi(
         java.net.URLEncoder.encode(value, "UTF-8")
 
     companion object {
+        /** The backend's own maximum page size (_app_page caps
+         *  limit at 200) — fewest round trips, no invented cap. */
+        private const val PAGE_SIZE = 200
+
         /** Every error the user sees says what happened and what to do. */
         fun plainError(status: Int, body: String): String = when (status) {
             0 -> "No connection. Check your internet and try again."

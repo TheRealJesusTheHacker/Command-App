@@ -23,6 +23,7 @@ fun TodayScreen(
     viewModel: AppViewModel,
     onOpenTickets: () -> Unit,
     onOpenClients: () -> Unit,
+    onOpenFullCommand: () -> Unit,
 ) {
     var today by remember { mutableStateOf<TodayResponse?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -33,16 +34,24 @@ fun TodayScreen(
         try {
             today = viewModel.api.today()
         } catch (e: Exception) {
-            error = e.message ?: "The server could not be reached. Check your connection and try again."
+            error = plainError(e, "Today could not be loaded. Check your connection and try again.")
         }
     }
 
     when {
         error != null -> ErrorBox(error!!) { reloadKey++ }
-        today == null -> LoadingBox("Loading today…")
+        today == null -> SkeletonList(6)
         else -> {
             val data = today!!
             LazyColumn {
+                item {
+                    ItemRow(
+                        "Open full Command",
+                        "The complete Sentinel Command — every view, exactly like the browser.",
+                        badge = "Full",
+                    ) { onOpenFullCommand() }
+                }
+
                 item { SectionHeader("Follow-ups due", data.followUps.total) }
                 if (data.followUps.items.isEmpty()) {
                     item { ItemRow("Nothing due", "No follow-ups are waiting today.") }

@@ -1,13 +1,23 @@
 package net.sentinelsafeguard.app.ui
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -15,17 +25,86 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import net.sentinelsafeguard.app.data.api.ApiException
+import net.sentinelsafeguard.app.data.api.SignedOutException
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
+import net.sentinelsafeguard.app.ui.theme.SentinelOutline
 import net.sentinelsafeguard.app.ui.theme.SentinelSurface
 import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceHigh
+import net.sentinelsafeguard.app.util.Diagnostics
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+/**
+ * Error dignity (hunt4 premium pass): the owner is never shown raw
+ * technical text — no parser offsets, no class names, no stack
+ * fragments. The failure is logged to the internal diagnostics log
+ * and the screen gets [fallback] in plain language. The one safe
+ * exception is the API layer's own messages, which are written for
+ * the owner by construction (ApiException / SignedOutException).
+ */
+fun plainError(e: Throwable, fallback: String): String {
+    Diagnostics.log("ui", e)
+    return when (e) {
+        is ApiException -> e.message
+        is SignedOutException -> e.message ?: fallback
+        else -> fallback
+    }
+}
+
+/**
+ * Loading placeholder in the shape of the list that is coming
+ * (hunt4 premium pass): softly pulsing card silhouettes instead of
+ * a bare spinner on a blank screen.
+ */
+@Composable
+fun SkeletonList(rows: Int = 5) {
+    val pulse = rememberInfiniteTransition(label = "skeleton")
+    val alpha by pulse.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "skeletonAlpha",
+    )
+    Column {
+        repeat(rows) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SentinelSurface),
+                border = BorderStroke(1.dp, SentinelOutline),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(0.55f)
+                            .height(16.dp)
+                            .alpha(alpha)
+                            .background(SentinelSurfaceHigh, RoundedCornerShape(4.dp)),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        Modifier
+                            .fillMaxWidth(0.8f)
+                            .height(12.dp)
+                            .alpha(alpha)
+                            .background(SentinelSurfaceHigh, RoundedCornerShape(4.dp)),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
 
 /** The backend stamps rows with epoch milliseconds; render them
  *  the way the rest of the app writes dates (yyyy-MM-dd HH:mm). */
@@ -51,6 +130,7 @@ fun LoadingBox(message: String = "Loading…") {
 fun ErrorBox(message: String, onRetry: (() -> Unit)? = null) {
     Card(
         colors = CardDefaults.cardColors(containerColor = SentinelSurface),
+        border = BorderStroke(1.dp, SentinelOutline),
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
@@ -113,6 +193,7 @@ fun ItemRow(
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = SentinelSurface),
+        border = BorderStroke(1.dp, SentinelOutline),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)

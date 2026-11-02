@@ -80,16 +80,16 @@ fun ClientsScreen(viewModel: AppViewModel) {
 @Composable
 private fun ClientList(viewModel: AppViewModel, onOpen: (Int) -> Unit) {
     var query by remember { mutableStateOf("") }
-    var clients by remember { mutableStateOf<List<Client>?>(null) }
+    var result by remember { mutableStateOf<net.sentinelsafeguard.app.data.api.Page<Client>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(query, reloadKey) {
         error = null
         try {
-            clients = viewModel.api.clients(query.ifBlank { null })
+            result = viewModel.api.clients(query.ifBlank { null })
         } catch (e: Exception) {
-            error = e.message ?: "Clients could not be loaded. Check your connection and try again."
+            error = plainError(e, "Clients could not be loaded. Check your connection and try again.")
         }
     }
 
@@ -105,21 +105,29 @@ private fun ClientList(viewModel: AppViewModel, onOpen: (Int) -> Unit) {
         )
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
-            clients == null -> LoadingBox("Loading clients…")
-            clients!!.isEmpty() -> EmptyBox(
+            result == null -> SkeletonList()
+            result!!.items.isEmpty() -> EmptyBox(
                 "No clients found",
                 if (query.isBlank()) "No clients are saved yet."
                 else "No client matches \"$query\". Try a different search.",
             )
             else -> {
-                val due = clients!!.filter { !it.nextFollowUp.isNullOrBlank() }
+                // The complete set (every page) with the backend's
+                // own total in the header — never a page size.
+                val clients = result!!.items
+                val due = clients.filter { !it.nextFollowUp.isNullOrBlank() }
                 LazyColumn {
                     if (due.isNotEmpty()) {
                         item { SectionHeader("Follow-ups due", due.size) }
                         items(due) { client -> ClientRow(client) { onOpen(client.id) } }
                     }
-                    item { SectionHeader("All clients", clients!!.size) }
-                    items(clients!!) { client -> ClientRow(client) { onOpen(client.id) } }
+                    item {
+                        SectionHeader(
+                            if (query.isBlank()) "All clients" else "Matching clients",
+                            result!!.total,
+                        )
+                    }
+                    items(clients) { client -> ClientRow(client) { onOpen(client.id) } }
                     item { Spacer(Modifier.height(24.dp)) }
                 }
             }
@@ -159,7 +167,7 @@ fun ClientProfileScreen(viewModel: AppViewModel, clientId: Int, onBack: () -> Un
         try {
             client = viewModel.api.client(clientId)
         } catch (e: Exception) {
-            error = e.message ?: "This client could not be loaded. Go back and try again."
+            error = plainError(e, "This client could not be loaded. Go back and try again.")
         }
     }
 
@@ -167,7 +175,7 @@ fun ClientProfileScreen(viewModel: AppViewModel, clientId: Int, onBack: () -> Un
         TextButton(onClick = onBack) { Text("‹ Back to clients") }
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
-            client == null -> LoadingBox("Loading client…")
+            client == null -> SkeletonList(3)
             else -> {
                 val c = client!!
                 Column(Modifier.padding(horizontal = 16.dp)) {
@@ -222,13 +230,13 @@ private fun PipelineBoard(viewModel: AppViewModel) {
         try {
             board = viewModel.api.pipeline()
         } catch (e: Exception) {
-            error = e.message ?: "The pipeline could not be loaded. Check your connection and try again."
+            error = plainError(e, "The pipeline could not be loaded. Check your connection and try again.")
         }
     }
 
     when {
         error != null -> ErrorBox(error!!) { reloadKey++ }
-        board == null -> LoadingBox("Loading pipeline…")
+        board == null -> SkeletonList(6)
         else -> LazyColumn {
             item {
                 Text(

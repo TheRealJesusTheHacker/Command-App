@@ -1,5 +1,13 @@
 package net.sentinelsafeguard.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
@@ -15,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,8 +35,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.launch
+import net.sentinelsafeguard.app.ui.theme.SentinelGreen
+import net.sentinelsafeguard.app.ui.theme.SentinelMuted
+import net.sentinelsafeguard.app.web.WebDestination
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     TODAY("Today", Icons.Filled.Home),
@@ -38,13 +52,26 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 /**
- * The app shell (spec §8): sign-in → lock gate → five bottom tabs,
- * one thumb away. Settings hangs off the top bar so the five tabs
- * stay exactly the five tabs.
+ * The app shell (spec §8): Command's entry splash on cold start →
+ * sign-in → lock gate → five bottom tabs, one thumb away. Settings
+ * hangs off the top bar so the five tabs stay exactly the five
+ * tabs; the hunt4 embedded browser (Full Command / Full Webmail)
+ * takes over the content area the same way Settings does.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(viewModel: AppViewModel) {
+    var splashDone by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize()) {
+        AppShell(viewModel)
+        if (!splashDone) {
+            SplashScreen { splashDone = true }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppShell(viewModel: AppViewModel) {
     if (!viewModel.signedIn) {
         SignInScreen(viewModel)
         return
@@ -56,8 +83,10 @@ fun AppRoot(viewModel: AppViewModel) {
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     var tab by remember { mutableStateOf(Tab.TODAY) }
     var showSettings by remember { mutableStateOf(false) }
+    var webDestination by remember { mutableStateOf<WebDestination?>(null) }
 
     // Launch update prompt (spec §7): plain words, owner decides.
     viewModel.updateAvailable?.let { available ->
@@ -95,9 +124,20 @@ fun AppRoot(viewModel: AppViewModel) {
     Scaffold(
         topBar = {
             androidx.compose.material3.TopAppBar(
-                title = { Text(if (showSettings) "Settings" else tab.label) },
+                title = {
+                    Text(
+                        webDestination?.title
+                            ?: if (showSettings) "Settings" else tab.label
+                    )
+                },
                 actions = {
-                    IconButton(onClick = { showSettings = !showSettings }) {
+                    IconButton(onClick = {
+                        if (webDestination != null) {
+                            webDestination = null
+                        } else {
+                            showSettings = !showSettings
+                        }
+                    }) {
                         Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
                 },
@@ -107,32 +147,57 @@ fun AppRoot(viewModel: AppViewModel) {
             NavigationBar {
                 Tab.entries.forEach { entry ->
                     NavigationBarItem(
-                        selected = tab == entry && !showSettings,
+                        selected = tab == entry && !showSettings && webDestination == null,
                         onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             tab = entry
                             showSettings = false
+                            webDestination = null
                         },
                         icon = { Icon(entry.icon, contentDescription = entry.label) },
                         label = { Text(entry.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = SentinelGreen,
+                            selectedTextColor = SentinelGreen,
+                            indicatorColor = SentinelGreen.copy(alpha = 0.16f),
+                            unselectedIconColor = SentinelMuted,
+                            unselectedTextColor = SentinelMuted,
+                        ),
                     )
                 }
             }
         },
     ) { padding ->
-        androidx.compose.foundation.layout.Box(Modifier.padding(padding)) {
-            if (showSettings) {
-                SettingsScreen(viewModel) { showSettings = false }
-            } else {
-                when (tab) {
-                    Tab.TODAY -> TodayScreen(
-                        viewModel,
-                        onOpenTickets = { tab = Tab.TICKETS },
-                        onOpenClients = { tab = Tab.CLIENTS },
-                    )
-                    Tab.TICKETS -> TicketsScreen(viewModel)
-                    Tab.SCHEDULE -> ScheduleScreen(viewModel)
-                    Tab.MAIL -> MailScreen(viewModel)
-                    Tab.CLIENTS -> ClientsScreen(viewModel)
+        Box(Modifier.padding(padding)) {
+            when {
+                webDestination != null -> WebScreen(webDestination!!) {
+                    webDestination = null
+                }
+                showSettings -> SettingsScreen(
+                    viewModel,
+                    onSignedOut = { showSettings = false },
+                    onOpenWeb = { webDestination = it },
+                )
+                else -> AnimatedContent(
+                    targetState = tab,
+                    transitionSpec = {
+                        (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 10 })
+                            .togetherWith(fadeOut(tween(160)))
+                    },
+                    label = "tabs",
+                ) { targetTab ->
+                    when (targetTab) {
+                        Tab.TODAY -> TodayScreen(
+                            viewModel,
+                            onOpenTickets = { tab = Tab.TICKETS },
+                            onOpenClients = { tab = Tab.CLIENTS },
+                            onOpenFullCommand = { webDestination = WebDestination.COMMAND },
+                        )
+                        Tab.TICKETS -> TicketsScreen(viewModel)
+                        Tab.SCHEDULE -> ScheduleScreen(viewModel)
+                        Tab.MAIL -> MailScreen(viewModel)
+                        Tab.CLIENTS -> ClientsScreen(viewModel)
+                    }
                 }
             }
         }

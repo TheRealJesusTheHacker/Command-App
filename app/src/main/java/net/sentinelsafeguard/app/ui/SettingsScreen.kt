@@ -1,6 +1,9 @@
 package net.sentinelsafeguard.app.ui
 
+import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +16,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -36,15 +41,24 @@ import net.sentinelsafeguard.app.data.api.DeviceInfo
 import net.sentinelsafeguard.app.notify.QuietHours
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
+import net.sentinelsafeguard.app.ui.theme.SentinelOutline
+import net.sentinelsafeguard.app.ui.theme.SentinelSurface
 import net.sentinelsafeguard.app.update.UpdateState
+import net.sentinelsafeguard.app.web.WebDestination
+import java.security.MessageDigest
 
 /**
  * Settings (spec §2.1): fingerprint unlock, quiet hours, notification
  * switches, this-device info, sign out (revokes this device), and the
- * app version + update check.
+ * app version + update check. Hunt4 adds the Full Access entries —
+ * the complete Command and Webmail in the embedded browser.
  */
 @Composable
-fun SettingsScreen(viewModel: AppViewModel, onSignedOut: () -> Unit) {
+fun SettingsScreen(
+    viewModel: AppViewModel,
+    onSignedOut: () -> Unit,
+    onOpenWeb: (WebDestination) -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings = viewModel.settings
@@ -173,6 +187,25 @@ fun SettingsScreen(viewModel: AppViewModel, onSignedOut: () -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
         )
 
+        SectionHeader("Full Access")
+        Text(
+            "The complete Sentinel Command and the full webmail, inside the app — " +
+                "everything the browser shows. The first time, Cloudflare asks for an " +
+                "email sign-in code; after that it stays signed in on this phone.",
+            color = SentinelMuted,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = { onOpenWeb(WebDestination.COMMAND) },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Open full Command") }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { onOpenWeb(WebDestination.WEBMAIL) },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Open full Webmail") }
+
         SectionHeader("Mail")
         Text(
             "Messages stay in your mailbox until you delete them — nothing deletes itself. " +
@@ -184,8 +217,32 @@ fun SettingsScreen(viewModel: AppViewModel, onSignedOut: () -> Unit) {
             style = MaterialTheme.typography.bodyMedium,
         )
 
-        SectionHeader("App version")
-        Text(viewModel.versionLabel, style = MaterialTheme.typography.bodyLarge)
+        SectionHeader("About this app")
+        Card(
+            colors = CardDefaults.cardColors(containerColor = SentinelSurface),
+            border = BorderStroke(1.dp, SentinelOutline),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                IdentityLine("App", "Sentinel App")
+                IdentityLine("Version", viewModel.versionLabel.removePrefix("Sentinel App "))
+                IdentityLine(
+                    "Signed by",
+                    "Sentinel Safeguard LLC — the owner's custodied release key",
+                )
+                signerFingerprint(context)?.let { fingerprint ->
+                    Text(
+                        fingerprint,
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+                IdentityLine("This phone", "${Build.MANUFACTURER} ${Build.MODEL}")
+                devices?.firstOrNull { it.current }?.let { device ->
+                    IdentityLine("Device name", device.deviceName)
+                }
+            }
+        }
         if (updateNote != null) {
             Text(updateNote!!, color = SentinelMuted, style = MaterialTheme.typography.bodyMedium)
         }
@@ -250,6 +307,38 @@ fun SettingsScreen(viewModel: AppViewModel, onSignedOut: () -> Unit) {
             },
         )
     }
+}
+
+@Composable
+private fun IdentityLine(label: String, value: String) {
+    Text(label, color = SentinelMuted, style = MaterialTheme.typography.labelLarge)
+    Text(value, style = MaterialTheme.typography.bodyLarge)
+    Spacer(Modifier.height(10.dp))
+}
+
+/**
+ * The SHA-256 fingerprint of the certificate this installed copy
+ * is actually signed with, read from the package manager — the
+ * About block shows the real signer of the bits on the phone,
+ * never a typed-in claim. Null if it cannot be read.
+ */
+private fun signerFingerprint(context: Context): String? = try {
+    val packageManager = context.packageManager
+    val packageName = context.packageName
+    val certificates = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        val info = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+        info.signingInfo?.apkContentsSigners
+    } else {
+        @Suppress("DEPRECATION")
+        packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES).signatures
+    }
+    val certificate = certificates?.firstOrNull()?.toByteArray()
+    certificate?.let { bytes ->
+        MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString(":") { "%02x".format(it) }
+    }
+} catch (e: Exception) {
+    null
 }
 
 @Composable

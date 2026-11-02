@@ -162,7 +162,7 @@ private fun FolderList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
     Column {
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
-            folders == null -> LoadingBox("Loading mail folders…")
+            folders == null -> SkeletonList(6)
             else -> LazyColumn {
                 items(folders!!) { folder ->
                     ItemRow(
@@ -243,7 +243,7 @@ private fun MessageList(
         }
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
-            messages == null -> LoadingBox("Loading messages…")
+            messages == null -> SkeletonList(6)
             messages!!.isEmpty() -> EmptyBox("No messages", "This folder is empty.")
             else -> LazyColumn {
                 items(messages!!) { message ->
@@ -298,7 +298,7 @@ private fun MessageRead(
         try {
             message = viewModel.mail.getMessage(username, password, folder, uid)
         } catch (e: Exception) {
-            error = e.message ?: "This message could not be opened. Go back and try again."
+            error = plainError(e, "This message could not be opened. Go back and try again.")
         }
     }
 

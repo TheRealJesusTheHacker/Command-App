@@ -58,23 +58,23 @@ fun TicketsScreen(viewModel: AppViewModel) {
     }
 
     var filter by remember { mutableStateOf("New") }
-    var tickets by remember { mutableStateOf<List<Ticket>?>(null) }
+    var result by remember { mutableStateOf<net.sentinelsafeguard.app.data.api.Page<Ticket>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var showCreate by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(filter, reloadKey) {
         error = null
-        tickets = null
+        result = null
         try {
-            tickets = when (filter) {
+            result = when (filter) {
                 "New" -> viewModel.api.tickets(status = "New")
                 "Mine" -> viewModel.api.tickets(assignee = "me")
                 "Done" -> viewModel.api.tickets(status = "Closed")
                 else -> viewModel.api.tickets()
             }
         } catch (e: Exception) {
-            error = e.message ?: "Tickets could not be loaded. Check your connection and try again."
+            error = plainError(e, "Tickets could not be loaded. Check your connection and try again.")
         }
     }
 
@@ -102,8 +102,8 @@ fun TicketsScreen(viewModel: AppViewModel) {
             }
             when {
                 error != null -> ErrorBox(error!!) { reloadKey++ }
-                tickets == null -> LoadingBox("Loading tickets…")
-                tickets!!.isEmpty() -> EmptyBox(
+                result == null -> SkeletonList()
+                result!!.items.isEmpty() -> EmptyBox(
                     "No tickets here",
                     when (filter) {
                         "New" -> "No new tickets are waiting."
@@ -112,7 +112,18 @@ fun TicketsScreen(viewModel: AppViewModel) {
                     },
                 )
                 else -> LazyColumn {
-                    items(tickets!!) { ticket ->
+                    item {
+                        Text(
+                            // The complete filtered set, with the
+                            // backend's true total for this view.
+                            "${result!!.total} " +
+                                if (result!!.total == 1) "ticket" else "tickets",
+                            color = SentinelMuted,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                    }
+                    items(result!!.items) { ticket ->
                         ItemRow(
                             title = ticket.title,
                             subtitle = listOfNotNull(
@@ -203,7 +214,7 @@ private fun CreateTicketDialog(
                             onCreated()
                         } catch (e: Exception) {
                             busy = false
-                            error = e.message ?: "The ticket could not be saved. Try again."
+                            error = plainError(e, "The ticket could not be saved. Try again.")
                         }
                     }
                 },
@@ -250,7 +261,7 @@ fun TicketDetailScreen(viewModel: AppViewModel, ticketId: Int, onBack: () -> Uni
         try {
             ticket = viewModel.api.ticket(ticketId)
         } catch (e: Exception) {
-            error = e.message ?: "This ticket could not be loaded. Go back and try again."
+            error = plainError(e, "This ticket could not be loaded. Go back and try again.")
         }
     }
 
@@ -258,7 +269,7 @@ fun TicketDetailScreen(viewModel: AppViewModel, ticketId: Int, onBack: () -> Uni
         TextButton(onClick = onBack) { Text("‹ Back to tickets") }
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
-            ticket == null -> LoadingBox("Loading ticket…")
+            ticket == null -> SkeletonList(3)
             else -> {
                 val t = ticket!!
                 Column(Modifier.padding(horizontal = 16.dp)) {
@@ -285,7 +296,7 @@ fun TicketDetailScreen(viewModel: AppViewModel, ticketId: Int, onBack: () -> Uni
                                         t.id, TicketPatchRequest(status = picked)
                                     )
                                 } catch (e: Exception) {
-                                    actionError = e.message
+                                    actionError = plainError(e, "That change could not be saved. Try again.")
                                 }
                             }
                         }
@@ -296,7 +307,7 @@ fun TicketDetailScreen(viewModel: AppViewModel, ticketId: Int, onBack: () -> Uni
                                         t.id, TicketPatchRequest(priority = picked)
                                     )
                                 } catch (e: Exception) {
-                                    actionError = e.message
+                                    actionError = plainError(e, "That change could not be saved. Try again.")
                                 }
                             }
                         }
@@ -309,7 +320,7 @@ fun TicketDetailScreen(viewModel: AppViewModel, ticketId: Int, onBack: () -> Uni
                                     t.id, TicketPatchRequest(assignToMe = true)
                                 )
                             } catch (e: Exception) {
-                                actionError = e.message
+                                actionError = plainError(e, "That change could not be saved. Try again.")
                             }
                         }
                     }) {
@@ -357,7 +368,7 @@ fun TicketDetailScreen(viewModel: AppViewModel, ticketId: Int, onBack: () -> Uni
                                 try {
                                     ticket = viewModel.api.addTicketNote(t.id, body)
                                 } catch (e: Exception) {
-                                    actionError = e.message
+                                    actionError = plainError(e, "That change could not be saved. Try again.")
                                 }
                             }
                         },
