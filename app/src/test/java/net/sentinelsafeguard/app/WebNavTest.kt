@@ -18,8 +18,8 @@ class WebNavTest {
 
     @Test
     fun destinationsPointAtTheRealDoors() {
-        assertEquals("https://command.sentinelsafeguard.net", WebDestination.COMMAND.url)
-        assertEquals("https://mail.sentinelsafeguard.net", WebDestination.WEBMAIL.url)
+        assertEquals("https://command.sentinelsafeguard.net", WebDestination.COMMAND.startUrl)
+        assertEquals("https://mail.sentinelsafeguard.net", WebDestination.WEBMAIL.startUrl)
         assertEquals("Full Command", WebDestination.COMMAND.title)
         assertEquals("Full Webmail", WebDestination.WEBMAIL.title)
     }
