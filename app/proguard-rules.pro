@@ -102,3 +102,24 @@
     public static int d(...);
     public static int v(...);
 }
+
+# ---------------------------------------------------------------------
+# R8 missing-class warnings — compile-time-only annotations and
+# desktop-Java APIs that Android does not ship. Neither is ever
+# loaded at runtime on Android; both are referenced (only) from
+# library bytecode, which is exactly what -dontwarn is for. Named
+# exactly, nothing broader (first real CI release build, android
+# run 41422792202, 2026-11-02):
+#
+#   com.google.errorprone.annotations.** — Error Prone's
+#     compile-time-only annotations, referenced by Tink (via
+#     androidx.security:security-crypto). Tink's own consumer
+#     rules prescribe this dontwarn.
+#   javax.security.auth.callback.** / javax.security.sasl.** —
+#     desktop Java SASL APIs referenced by Angus Mail's SASL
+#     authenticators. Android has no javax.security.sasl; the app
+#     authenticates with PLAIN over TLS, never those code paths.
+# ---------------------------------------------------------------------
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.security.auth.callback.**
+-dontwarn javax.security.sasl.**
