@@ -59,27 +59,65 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun deviceName(): String =
         "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim()
 
+    /** The pending TOTP challenge from the first sign-in leg, held
+     *  only in memory; the server challenge is single-use and
+     *  short-lived, so nothing about it is persisted. */
+    private var pendingTotpChallenge: String? = null
+    private var pendingDisplayName: String? = null
+
     fun signIn(
         displayName: String,
         passphrase: String,
-        totpCode: String?,
         onResult: (LoginResult) -> Unit,
     ) {
         viewModelScope.launch {
             val result = try {
-                api.login(displayName, passphrase, deviceName(), totpCode)
+                api.login(displayName, passphrase, deviceName())
+            } catch (e: Exception) {
+                LoginResult.Failed("No connection. Check your internet and try again.")
+            }
+            if (result is LoginResult.TotpRequired) {
+                pendingTotpChallenge = result.challenge
+                pendingDisplayName = displayName
+            }
+            if (result is LoginResult.Success) {
+                completeSignIn(result, displayName)
+            }
+            onResult(result)
+        }
+    }
+
+    /** Second leg: answer the pending challenge with the typed code. */
+    fun submitTotpCode(
+        code: String,
+        onResult: (LoginResult) -> Unit,
+    ) {
+        val challenge = pendingTotpChallenge
+        if (challenge == null) {
+            onResult(LoginResult.Failed("That sign-in challenge has expired — sign in again."))
+            return
+        }
+        viewModelScope.launch {
+            val result = try {
+                api.completeTotp(challenge, code, deviceName())
             } catch (e: Exception) {
                 LoginResult.Failed("No connection. Check your internet and try again.")
             }
             if (result is LoginResult.Success) {
-                secure.deviceToken = result.token
-                secure.displayName = result.displayName ?: displayName
-                signedIn = true
-                locked = false
-                checkForUpdate()
+                completeSignIn(result, pendingDisplayName)
+                pendingTotpChallenge = null
+                pendingDisplayName = null
             }
             onResult(result)
         }
+    }
+
+    private fun completeSignIn(result: LoginResult.Success, fallbackName: String?) {
+        secure.deviceToken = result.token
+        secure.displayName = result.displayName ?: fallbackName
+        signedIn = true
+        locked = false
+        checkForUpdate()
     }
 
     /** Mail sign-in is separate: the mailbox password, stored encrypted. */

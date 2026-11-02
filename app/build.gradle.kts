@@ -1,7 +1,3 @@
-import java.security.MessageDigest
-import java.security.SecureRandom
-import java.util.Base64
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -71,7 +67,7 @@ android {
         applicationId = "net.sentinelsafeguard.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        versionCode = 2
         versionName = "0.1.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
@@ -98,7 +94,7 @@ android {
         create("hunt") {
             dimension = "line"
             applicationId = "net.sentinelsafeguard.app.hunt"
-            versionNameSuffix = "-hunt1"
+            versionNameSuffix = "-hunt2"
         }
     }
 
@@ -192,22 +188,22 @@ val generateGateConfig by tasks.registering {
             )
         }
         val key = javax.crypto.spec.SecretKeySpec(
-            MessageDigest.getInstance("SHA-256")
+            java.security.MessageDigest.getInstance("SHA-256")
                 .digest(fragments.joinToString(":").toByteArray(Charsets.UTF_8)),
             "AES",
         )
         fun seal(plain: String): String {
-            val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
+            val iv = ByteArray(12).also { java.security.SecureRandom().nextBytes(it) }
             val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(
                 javax.crypto.Cipher.ENCRYPT_MODE, key,
                 javax.crypto.spec.GCMParameterSpec(128, iv),
             )
-            return Base64.getEncoder()
+            return java.util.Base64.getEncoder()
                 .encodeToString(iv + cipher.doFinal(plain.toByteArray(Charsets.UTF_8)))
         }
         fun unseal(blob: String): String {
-            val raw = Base64.getDecoder().decode(blob)
+            val raw = java.util.Base64.getDecoder().decode(blob)
             val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(
                 javax.crypto.Cipher.DECRYPT_MODE, key,

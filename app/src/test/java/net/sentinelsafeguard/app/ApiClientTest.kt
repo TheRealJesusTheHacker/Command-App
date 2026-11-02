@@ -38,28 +38,53 @@ class ApiClientTest {
 
     @Test
     fun loginTotpBranchAsksForCode() = runTest {
+        // The backend's real shape (server _app_login): HTTP 200 with
+        // totpRequired + the single-use challenge, NOT a status flag.
         val transport = FakeTransport {
-            HttpResponse(200, """{"requiresTotp":true}""")
+            HttpResponse(200, """{"ok":true,"totpRequired":true,"challenge":"ch-abc","challengeExpiresAt":1899999999999}""")
         }
         val api = SentinelApi(config, transport)
         val result = api.login("Skyler", "passphrase", "Test phone")
-        assertEquals(LoginResult.TotpRequired, result)
+        assertTrue(result is LoginResult.TotpRequired)
+        assertEquals("ch-abc", (result as LoginResult.TotpRequired).challenge)
         assertEquals(null, api.deviceToken)
     }
 
     @Test
-    fun loginWithTotpCodeSucceeds() = runTest {
+    fun completeTotpSendsChallengeShapeAndSucceeds() = runTest {
         val transport = FakeTransport { request ->
-            if (request.body?.contains("123456") == true) {
-                HttpResponse(200, """{"deviceToken":"tok-totp"}""")
+            if (request.body?.contains(""""challenge"""") == true) {
+                HttpResponse(200, """{"ok":true,"deviceToken":"tok-totp"}""")
             } else {
-                HttpResponse(200, """{"status":"totp_required"}""")
+                HttpResponse(200, """{"ok":true,"totpRequired":true,"challenge":"ch-abc","challengeExpiresAt":1899999999999}""")
             }
         }
         val api = SentinelApi(config, transport)
-        assertEquals(LoginResult.TotpRequired, api.login("Skyler", "pw", "phone"))
-        val second = api.login("Skyler", "pw", "phone", totpCode = "123456")
+        val first = api.login("Skyler", "pw", "phone")
+        assertTrue(first is LoginResult.TotpRequired)
+        val second = api.completeTotp(
+            (first as LoginResult.TotpRequired).challenge, "123456", "phone")
         assertTrue(second is LoginResult.Success)
+        assertEquals("tok-totp", api.deviceToken)
+        // The completion call answers {challenge, code, deviceName} —
+        // and must NOT resend the passphrase.
+        val completion = transport.requests.last()
+        assertEquals("/api/app/auth/login", completion.path)
+        assertTrue(completion.body!!.contains(""""challenge":"ch-abc""""))
+        assertTrue(completion.body!!.contains(""""code":"123456""""))
+        assertTrue(!completion.body!!.contains("passphrase"))
+    }
+
+    @Test
+    fun completeTotpWrongCodeFailsWithServerMessage() = runTest {
+        val transport = FakeTransport {
+            HttpResponse(403, """{"ok":false,"authorized":false,"message":"That code doesn't match — check the time-based code and try again."}""")
+        }
+        val api = SentinelApi(config, transport)
+        val result = api.completeTotp("ch-abc", "000000", "phone")
+        assertTrue(result is LoginResult.Failed)
+        assertTrue((result as LoginResult.Failed).message.contains("That code doesn't match"))
+        assertEquals(null, api.deviceToken)
     }
 
     @Test

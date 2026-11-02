@@ -13,7 +13,10 @@ class SignedOutException : Exception("Your sign-in has ended. Please sign in aga
 
 sealed interface LoginResult {
     data class Success(val token: String, val displayName: String?, val role: String?) : LoginResult
-    data object TotpRequired : LoginResult
+
+    /** The passphrase verified; the server issued a single-use
+     *  challenge that [SentinelApi.completeTotp] must answer. */
+    data class TotpRequired(val challenge: String) : LoginResult
     data class Failed(val message: String) : LoginResult
 }
 
@@ -80,21 +83,46 @@ class SentinelApi(
         displayName: String,
         passphrase: String,
         deviceName: String,
-        totpCode: String? = null,
     ): LoginResult {
         val payload = json.encodeToString(
-            LoginRequest(displayName, passphrase, deviceName, totpCode)
+            LoginRequest(displayName, passphrase, deviceName)
         )
         val response = transport.execute(
             HttpRequest("POST", "/api/app/auth/login", payload, headers(authenticated = false))
         )
         val parsed = runCatching { json.decodeFromString<LoginResponse>(response.body) }.getOrNull()
-        if (parsed?.requiresTotp == true || parsed?.status == "totp_required") {
-            return LoginResult.TotpRequired
+        // The backend's real TOTP shape: HTTP 200, totpRequired=true,
+        // plus the single-use challenge the completion call answers.
+        val challenge = parsed?.challenge
+        if (parsed?.totpRequired == true && !challenge.isNullOrBlank()) {
+            return LoginResult.TotpRequired(challenge)
         }
-        if (response.status == 401 && response.body.contains("totp", ignoreCase = true)) {
-            return LoginResult.TotpRequired
+        val token = parsed?.deviceToken
+        if (response.status in 200..299 && !token.isNullOrBlank()) {
+            deviceToken = token
+            return LoginResult.Success(token, parsed.displayName, parsed.role)
         }
+        return LoginResult.Failed(
+            parsed?.message ?: plainError(response.status, response.body)
+        )
+    }
+
+    /** Second leg of enrollment sign-in: answer the challenge from
+     *  [login] with the 6-digit code. The backend's completion shape
+     *  is {challenge, code, deviceName} on the same endpoint — the
+     *  passphrase is NOT resent. */
+    suspend fun completeTotp(
+        challenge: String,
+        code: String,
+        deviceName: String,
+    ): LoginResult {
+        val payload = json.encodeToString(
+            TotpCompleteRequest(challenge, code, deviceName)
+        )
+        val response = transport.execute(
+            HttpRequest("POST", "/api/app/auth/login", payload, headers(authenticated = false))
+        )
+        val parsed = runCatching { json.decodeFromString<LoginResponse>(response.body) }.getOrNull()
         val token = parsed?.deviceToken
         if (response.status in 200..299 && !token.isNullOrBlank()) {
             deviceToken = token

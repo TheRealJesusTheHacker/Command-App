@@ -21,11 +21,23 @@ data class LoginRequest(
 @Serializable
 data class LoginResponse(
     val deviceToken: String? = null,
-    val requiresTotp: Boolean = false,
+    // The backend's TOTP step (server _app_login): on a verified
+    // passphrase for a TOTP-confirmed account it answers 200 with
+    // totpRequired + a single-use challenge; the completion call
+    // posts TotpCompleteRequest to the same endpoint.
+    val totpRequired: Boolean = false,
+    val challenge: String? = null,
     val status: String? = null,
     val displayName: String? = null,
     val role: String? = null,
     val message: String? = null,
+)
+
+@Serializable
+data class TotpCompleteRequest(
+    val challenge: String,
+    val code: String,
+    val deviceName: String,
 )
 
 @Serializable

@@ -107,15 +107,11 @@ fun SignInScreen(viewModel: AppViewModel) {
             onClick = {
                 busy = true
                 error = null
-                viewModel.signIn(
-                    displayName.trim(),
-                    passphrase,
-                    if (needsTotp) totpCode else null,
-                ) { result ->
+                val callback: (LoginResult) -> Unit = { result ->
                     busy = false
                     when (result) {
                         is LoginResult.Success -> Unit // shell switches screens
-                        LoginResult.TotpRequired -> {
+                        is LoginResult.TotpRequired -> {
                             needsTotp = true
                             error = null
                         }
@@ -129,6 +125,13 @@ fun SignInScreen(viewModel: AppViewModel) {
                             }
                         }
                     }
+                }
+                if (needsTotp) {
+                    // Second leg answers the server challenge with
+                    // the typed code; the passphrase is not resent.
+                    viewModel.submitTotpCode(totpCode, callback)
+                } else {
+                    viewModel.signIn(displayName.trim(), passphrase, callback)
                 }
             },
             enabled = !busy && displayName.isNotBlank() && passphrase.isNotEmpty() &&
