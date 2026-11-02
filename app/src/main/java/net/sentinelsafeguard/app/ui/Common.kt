@@ -23,6 +23,14 @@ import net.sentinelsafeguard.app.ui.theme.SentinelDanger
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import net.sentinelsafeguard.app.ui.theme.SentinelSurface
 import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceHigh
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** The backend stamps rows with epoch milliseconds; render them
+ *  the way the rest of the app writes dates (yyyy-MM-dd HH:mm). */
+fun formatEpochMs(ms: Long): String =
+    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(ms))
 
 @Composable
 fun LoadingBox(message: String = "Loading…") {

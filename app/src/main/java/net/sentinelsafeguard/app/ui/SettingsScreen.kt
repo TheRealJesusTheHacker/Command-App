@@ -66,7 +66,7 @@ fun SettingsScreen(viewModel: AppViewModel, onSignedOut: () -> Unit) {
 
     LaunchedEffect(Unit) {
         try {
-            accountName = viewModel.api.me().displayName
+            accountName = viewModel.api.me().user.displayName
         } catch (ignored: Exception) {
         }
         try {
@@ -88,9 +88,9 @@ fun SettingsScreen(viewModel: AppViewModel, onSignedOut: () -> Unit) {
         )
         devices?.firstOrNull { it.current }?.let { device ->
             Text(
-                "Device name: ${device.name}" +
-                    (device.createdAt?.let { "\nAdded: $it" } ?: "") +
-                    (device.lastSeenAt?.let { "\nLast used: $it" } ?: ""),
+                "Device name: ${device.deviceName}" +
+                    (if (device.createdAt > 0) "\nAdded: ${formatEpochMs(device.createdAt)}" else "") +
+                    (if (device.lastSeenAt > 0) "\nLast used: ${formatEpochMs(device.lastSeenAt)}" else ""),
                 color = SentinelMuted,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -200,8 +200,8 @@ fun SettingsScreen(viewModel: AppViewModel, onSignedOut: () -> Unit) {
                         when (val state = viewModel.updates.check()) {
                             UpdateState.UpToDate -> updateNote = "You have the newest version."
                             is UpdateState.Available -> {
-                                updateNote = "Sentinel App ${state.info.latestVersion} is ready." +
-                                    (state.info.notes?.let { " $it" } ?: "")
+                                updateNote = "Sentinel App ${state.info.version} is ready." +
+                                    (state.info.notes.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
                                 val file = viewModel.updates.download(context)
                                 viewModel.updates.install(context, file)
                             }

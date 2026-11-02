@@ -28,7 +28,10 @@ class UpdateManager(private val api: SentinelApi) {
 
     suspend fun check(): UpdateState {
         val remote = api.version()
-        return if (VersionCompare.isNewer(remote.latestVersion, BuildConfig.VERSION_NAME)) {
+        val staged = remote.version
+        return if (remote.available && staged != null &&
+            VersionCompare.isNewer(staged, BuildConfig.VERSION_NAME)
+        ) {
             UpdateState.Available(remote)
         } else {
             UpdateState.UpToDate

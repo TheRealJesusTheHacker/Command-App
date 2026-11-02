@@ -1,5 +1,6 @@
 package net.sentinelsafeguard.app.data.api
 
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import net.sentinelsafeguard.app.config.ApiConfig
@@ -20,8 +21,19 @@ sealed interface LoginResult {
     data class Failed(val message: String) : LoginResult
 }
 
+/** The ticket-patch body as the backend reads it: only the fields
+ *  being changed ride along (unset fields are omitted, never sent
+ *  as nulls — the backend treats a present assignedUserId key,
+ *  even null, as an assignment change). */
+@Serializable
+private data class TicketPatchWire(
+    val status: String? = null,
+    val priority: String? = null,
+    val assignedUserId: Int? = null,
+)
+
 /**
- * Client for the Command app API (spec §3.3). Every authenticated call
+ * Client for the Command app API. Every authenticated call
  * carries the device token in an Authorization header, plus the
  * Cloudflare Access service-auth headers when the Access layer has
  * supplied them. A 401 anywhere means the device token is dead:
@@ -34,6 +46,11 @@ class SentinelApi(
 ) {
     @Volatile
     var deviceToken: String? = null
+
+    /** The signed-in account as the backend last described it
+     *  (login / me responses); used to resolve "assign to me". */
+    @Volatile
+    private var cachedUser: User? = null
 
     /** Set by the app shell; invoked once per 401 so the UI can sign out. */
     var onSignedOut: (() -> Unit)? = null
@@ -100,7 +117,8 @@ class SentinelApi(
         val token = parsed?.deviceToken
         if (response.status in 200..299 && !token.isNullOrBlank()) {
             deviceToken = token
-            return LoginResult.Success(token, parsed.displayName, parsed.role)
+            cachedUser = parsed.user
+            return LoginResult.Success(token, parsed.user?.displayName, parsed.user?.role)
         }
         return LoginResult.Failed(
             parsed?.message ?: plainError(response.status, response.body)
@@ -126,7 +144,8 @@ class SentinelApi(
         val token = parsed?.deviceToken
         if (response.status in 200..299 && !token.isNullOrBlank()) {
             deviceToken = token
-            return LoginResult.Success(token, parsed.displayName, parsed.role)
+            cachedUser = parsed.user
+            return LoginResult.Success(token, parsed.user?.displayName, parsed.user?.role)
         }
         return LoginResult.Failed(
             parsed?.message ?: plainError(response.status, response.body)
@@ -141,40 +160,70 @@ class SentinelApi(
             // the token is wiped by the caller either way.
         } finally {
             deviceToken = null
+            cachedUser = null
         }
     }
 
-    suspend fun me(): MeResponse =
-        json.decodeFromString(ensureOk(call("GET", "/api/app/me")).body)
+    suspend fun me(): MeResponse {
+        val out = json.decodeFromString<MeResponse>(ensureOk(call("GET", "/api/app/me")).body)
+        cachedUser = out.user
+        return out
+    }
+
+    /** The signed-in account's id, from the cached login/me user —
+     *  fetching /me once if nothing is cached yet. */
+    private suspend fun myUserId(): Int =
+        cachedUser?.id ?: me().user.id
 
     suspend fun today(): TodayResponse =
         json.decodeFromString(ensureOk(call("GET", "/api/app/today")).body)
 
-    suspend fun tickets(filter: String? = null): List<Ticket> {
-        val path = if (filter.isNullOrBlank()) "/api/app/tickets"
-        else "/api/app/tickets?filter=$filter"
+    /** The backend's filters are a stage name (?status=) and an
+     *  assignee selector (?assignee=me / unassigned / a user id). */
+    suspend fun tickets(status: String? = null, assignee: String? = null): List<Ticket> {
+        val params = mutableListOf<String>()
+        if (!status.isNullOrBlank()) params += "status=${urlEncode(status)}"
+        if (!assignee.isNullOrBlank()) params += "assignee=${urlEncode(assignee)}"
+        val path = "/api/app/tickets" +
+            if (params.isEmpty()) "" else "?" + params.joinToString("&")
         return json.decodeFromString<TicketListResponse>(ensureOk(call("GET", path)).body).tickets
     }
 
-    suspend fun ticket(id: String): Ticket =
-        json.decodeFromString(ensureOk(call("GET", "/api/app/tickets/$id")).body)
-
-    suspend fun patchTicket(id: String, patch: TicketPatchRequest): Ticket =
-        json.decodeFromString(
-            ensureOk(call("PATCH", "/api/app/tickets/$id", json.encodeToString(patch))).body
+    /** The detail envelope's ticket has no clientName; the name is
+     *  backfilled from the embedded client so callers see the same
+     *  Ticket shape the list returns. */
+    suspend fun ticket(id: Int): Ticket {
+        val detail = json.decodeFromString<TicketDetailResponse>(
+            ensureOk(call("GET", "/api/app/tickets/$id")).body
         )
+        return detail.ticket.copy(
+            clientName = detail.ticket.clientName ?: detail.client?.legalName
+        )
+    }
 
-    suspend fun addTicketNote(id: String, body: String): Ticket =
-        json.decodeFromString(
+    suspend fun patchTicket(id: Int, patch: TicketPatchRequest): Ticket {
+        val wire = TicketPatchWire(
+            status = patch.status,
+            priority = patch.priority,
+            assignedUserId = patch.assignedUserId
+                ?: if (patch.assignToMe == true) myUserId() else null,
+        )
+        return json.decodeFromString<TicketWriteResponse>(
+            ensureOk(call("PATCH", "/api/app/tickets/$id", json.encodeToString(wire))).body
+        ).ticket
+    }
+
+    suspend fun addTicketNote(id: Int, body: String): Ticket =
+        json.decodeFromString<TicketWriteResponse>(
             ensureOk(
                 call("POST", "/api/app/tickets/$id/notes", json.encodeToString(NoteRequest(body)))
             ).body
-        )
+        ).ticket
 
     suspend fun createTicket(request: TicketCreateRequest): Ticket =
-        json.decodeFromString(
+        json.decodeFromString<TicketWriteResponse>(
             ensureOk(call("POST", "/api/app/tickets", json.encodeToString(request))).body
-        )
+        ).ticket
 
     suspend fun clients(query: String? = null): List<Client> {
         val path = if (query.isNullOrBlank()) "/api/app/clients"
@@ -182,24 +231,31 @@ class SentinelApi(
         return json.decodeFromString<ClientListResponse>(ensureOk(call("GET", path)).body).clients
     }
 
-    suspend fun client(id: String): Client =
-        json.decodeFromString(ensureOk(call("GET", "/api/app/clients/$id")).body)
+    suspend fun client(id: Int): Client =
+        json.decodeFromString<ClientDetailResponse>(
+            ensureOk(call("GET", "/api/app/clients/$id")).body
+        ).client
 
     suspend fun pipeline(): PipelineResponse =
         json.decodeFromString(ensureOk(call("GET", "/api/app/pipeline")).body)
 
-    suspend fun schedule(range: String = "week"): List<Job> {
-        val path = "/api/app/schedule?range=$range"
-        return json.decodeFromString<ScheduleResponse>(ensureOk(call("GET", path)).body).jobs
-    }
+    /** No range argument: with no window parameters the backend
+     *  serves its default window — today through six days out —
+     *  which is exactly what the schedule screen renders. */
+    suspend fun schedule(): List<Job> =
+        json.decodeFromString<ScheduleResponse>(
+            ensureOk(call("GET", "/api/app/schedule")).body
+        ).jobs
 
-    suspend fun job(id: String): Job =
-        json.decodeFromString(ensureOk(call("GET", "/api/app/jobs/$id")).body)
+    suspend fun job(id: Int): Job =
+        json.decodeFromString<JobDetailResponse>(
+            ensureOk(call("GET", "/api/app/jobs/$id")).body
+        ).job
 
     suspend fun devices(): List<DeviceInfo> =
         json.decodeFromString<DeviceListResponse>(ensureOk(call("GET", "/api/app/devices")).body).devices
 
-    suspend fun revokeDevice(id: String) {
+    suspend fun revokeDevice(id: Int) {
         ensureOk(call("DELETE", "/api/app/devices/$id"))
     }
 

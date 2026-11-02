@@ -43,7 +43,7 @@ class PollWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         try {
             val today = api.today()
 
-            if (today.newTickets > settings.lastNewTicketCount &&
+            if (today.newTickets.total > settings.lastNewTicketCount &&
                 settings.lastNewTicketCount >= 0 &&
                 QuietHours.shouldNotify(
                     NotifyCategory.TICKETS, now,
@@ -51,16 +51,16 @@ class PollWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     settings.notifyTickets,
                 )
             ) {
-                val rose = today.newTickets - settings.lastNewTicketCount
+                val rose = today.newTickets.total - settings.lastNewTicketCount
                 Notifier.notify(
                     applicationContext, NotifyCategory.TICKETS,
                     "New tickets",
                     if (rose == 1) "One new ticket is waiting." else "$rose new tickets are waiting.",
                 )
             }
-            settings.lastNewTicketCount = today.newTickets
+            settings.lastNewTicketCount = today.newTickets.total
 
-            if (today.signInAlerts > settings.lastSignInAlertCount &&
+            if (today.signinAlerts.total > settings.lastSignInAlertCount &&
                 settings.lastSignInAlertCount >= 0 &&
                 QuietHours.shouldNotify(
                     NotifyCategory.SIGN_IN_ALERT, now,
@@ -74,7 +74,7 @@ class PollWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     "There was a new sign-in to Sentinel Command. Open the app to check it.",
                 )
             }
-            settings.lastSignInAlertCount = today.signInAlerts
+            settings.lastSignInAlertCount = today.signinAlerts.total
         } catch (ignored: Exception) {
             // A failed poll is silent by design; the next one retries.
             // A dead token surfaces the next time the app is opened.

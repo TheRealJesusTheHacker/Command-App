@@ -43,13 +43,15 @@ import net.sentinelsafeguard.app.data.api.TicketPatchRequest
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 
 private val FILTERS = listOf("New", "Mine", "All open", "Done")
-private val STATUSES = listOf("new", "in progress", "waiting", "done")
-private val PRIORITIES = listOf("low", "normal", "high", "urgent")
+// The backend's own vocabularies (server TICKET_STAGES /
+// _DASH_PRIORITIES) — the patch endpoint refuses anything else.
+private val STATUSES = listOf("New", "Open", "In Progress", "On Hold", "Resolved", "Closed")
+private val PRIORITIES = listOf("Low", "Normal", "High", "Critical")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TicketsScreen(viewModel: AppViewModel) {
-    var selectedId by remember { mutableStateOf<String?>(null) }
+    var selectedId by remember { mutableStateOf<Int?>(null) }
     if (selectedId != null) {
         TicketDetailScreen(viewModel, selectedId!!) { selectedId = null }
         return
@@ -65,14 +67,12 @@ fun TicketsScreen(viewModel: AppViewModel) {
         error = null
         tickets = null
         try {
-            tickets = viewModel.api.tickets(
-                when (filter) {
-                    "New" -> "new"
-                    "Mine" -> "mine"
-                    "Done" -> "done"
-                    else -> "open"
-                }
-            )
+            tickets = when (filter) {
+                "New" -> viewModel.api.tickets(status = "New")
+                "Mine" -> viewModel.api.tickets(assignee = "me")
+                "Done" -> viewModel.api.tickets(status = "Closed")
+                else -> viewModel.api.tickets()
+            }
         } catch (e: Exception) {
             error = e.message ?: "Tickets could not be loaded. Check your connection and try again."
         }
@@ -116,13 +116,14 @@ fun TicketsScreen(viewModel: AppViewModel) {
                         ItemRow(
                             title = ticket.title,
                             subtitle = listOfNotNull(
-                                ticket.reporter,
-                                ticket.status.replaceFirstChar { it.uppercase() },
-                                ticket.createdAt,
+                                ticket.clientName?.takeIf { it.isNotBlank() },
+                                ticket.status.takeIf { it.isNotBlank() },
+                                if (ticket.createdAt > 0) formatEpochMs(ticket.createdAt) else null,
                             ).joinToString(" · "),
-                            badge = ticket.source?.let { sourceLabel(it) }
-                                ?: ticket.priority.takeIf { it == "high" || it == "urgent" }
-                                    ?.replaceFirstChar { it.uppercase() },
+                            badge = ticket.source
+                                .takeIf { it.isNotBlank() && it != "Internal" }
+                                ?.let { sourceLabel(it) }
+                                ?: ticket.priority.takeIf { it == "High" || it == "Critical" },
                         ) { selectedId = ticket.id }
                     }
                 }
@@ -157,7 +158,7 @@ private fun CreateTicketDialog(
     val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
-    var priority by remember { mutableStateOf("normal") }
+    var priority by remember { mutableStateOf("Normal") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -237,7 +238,7 @@ fun ChoiceMenu(
 }
 
 @Composable
-fun TicketDetailScreen(viewModel: AppViewModel, ticketId: String, onBack: () -> Unit) {
+fun TicketDetailScreen(viewModel: AppViewModel, ticketId: Int, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var ticket by remember { mutableStateOf<Ticket?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -265,16 +266,11 @@ fun TicketDetailScreen(viewModel: AppViewModel, ticketId: String, onBack: () -> 
                     Spacer(Modifier.height(6.dp))
                     Text(
                         listOfNotNull(
-                            t.reporter?.let { "From $it" },
-                            t.source?.let { sourceLabel(it) },
-                            t.createdAt,
+                            t.source.takeIf { it.isNotBlank() }?.let { sourceLabel(it) },
+                            if (t.createdAt > 0) formatEpochMs(t.createdAt) else null,
                         ).joinToString(" · "),
                         color = SentinelMuted,
                     )
-                    if (!t.message.isNullOrBlank()) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(t.message, style = MaterialTheme.typography.bodyLarge)
-                    }
                     if (!t.clientName.isNullOrBlank()) {
                         Spacer(Modifier.height(8.dp))
                         Text("Client: ${t.clientName}", color = SentinelMuted)
@@ -318,8 +314,8 @@ fun TicketDetailScreen(viewModel: AppViewModel, ticketId: String, onBack: () -> 
                         }
                     }) {
                         Text(
-                            if (t.assignee.isNullOrBlank()) "Assign to me"
-                            else "Assigned to ${t.assignee} — assign to me instead"
+                            if (t.assignedUserId == null) "Assign to me"
+                            else "Assigned — assign to me instead"
                         )
                     }
                     if (actionError != null) {
@@ -329,14 +325,19 @@ fun TicketDetailScreen(viewModel: AppViewModel, ticketId: String, onBack: () -> 
 
                     Spacer(Modifier.height(24.dp))
                     Text("Notes (only the team sees these)", style = MaterialTheme.typography.titleMedium)
-                    t.notes.forEach { note ->
+                    // The backend keeps a ticket's notes as one text
+                    // block — added notes are appended into it with
+                    // their own "App note by …" stamp lines.
+                    if (t.notes.isBlank()) {
                         Spacer(Modifier.height(8.dp))
-                        Text(note.body, style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            listOfNotNull(note.author, note.createdAt).joinToString(" · "),
+                            "No notes yet.",
                             color = SentinelMuted,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge,
                         )
+                    } else {
+                        Spacer(Modifier.height(8.dp))
+                        Text(t.notes, style = MaterialTheme.typography.bodyLarge)
                     }
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(

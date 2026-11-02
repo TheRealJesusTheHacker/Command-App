@@ -45,7 +45,7 @@ private enum class ClientsView { LIST, PIPELINE }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClientsScreen(viewModel: AppViewModel) {
-    var selectedId by remember { mutableStateOf<String?>(null) }
+    var selectedId by remember { mutableStateOf<Int?>(null) }
     if (selectedId != null) {
         ClientProfileScreen(viewModel, selectedId!!) { selectedId = null }
         return
@@ -78,7 +78,7 @@ fun ClientsScreen(viewModel: AppViewModel) {
 }
 
 @Composable
-private fun ClientList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
+private fun ClientList(viewModel: AppViewModel, onOpen: (Int) -> Unit) {
     var query by remember { mutableStateOf("") }
     var clients by remember { mutableStateOf<List<Client>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -112,7 +112,7 @@ private fun ClientList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
                 else "No client matches \"$query\". Try a different search.",
             )
             else -> {
-                val due = clients!!.filter { !it.followUpDate.isNullOrBlank() }
+                val due = clients!!.filter { !it.nextFollowUp.isNullOrBlank() }
                 LazyColumn {
                     if (due.isNotEmpty()) {
                         item { SectionHeader("Follow-ups due", due.size) }
@@ -127,19 +127,29 @@ private fun ClientList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
     }
 }
 
+/** The backend's tier token is "tier-a"…"tier-d" (or ""); the
+ *  badge shows the letter, the way the web UI presents it. */
+fun tierLabel(tier: String): String? =
+    tier.takeIf { it.isNotBlank() }?.let {
+        "Tier " + it.removePrefix("tier-").removePrefix("Tier-").uppercase()
+    }
+
 @Composable
 private fun ClientRow(client: Client, onClick: () -> Unit) {
     ItemRow(
-        title = client.name,
-        subtitle = listOfNotNull(client.business, client.phone, client.stage)
-            .joinToString(" · "),
-        badge = client.tier?.let { "Tier $it" },
+        title = client.legalName,
+        subtitle = listOfNotNull(
+            client.dba.takeIf { it.isNotBlank() },
+            client.phone.takeIf { it.isNotBlank() },
+            client.stage.takeIf { it.isNotBlank() },
+        ).joinToString(" · "),
+        badge = tierLabel(client.tier),
         onClick = onClick,
     )
 }
 
 @Composable
-fun ClientProfileScreen(viewModel: AppViewModel, clientId: String, onBack: () -> Unit) {
+fun ClientProfileScreen(viewModel: AppViewModel, clientId: Int, onBack: () -> Unit) {
     val context = LocalContext.current
     var client by remember { mutableStateOf<Client?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -161,17 +171,14 @@ fun ClientProfileScreen(viewModel: AppViewModel, clientId: String, onBack: () ->
             else -> {
                 val c = client!!
                 Column(Modifier.padding(horizontal = 16.dp)) {
-                    Text(c.name, style = MaterialTheme.typography.titleLarge)
-                    DetailLine("Business", c.business)
+                    Text(c.legalName, style = MaterialTheme.typography.titleLarge)
+                    DetailLine("Business", c.dba)
                     DetailLine("Phone", c.phone)
                     DetailLine("Email", c.email)
-                    DetailLine("Tier", c.tier?.let { "Tier $it" })
-                    DetailLine(
-                        "Tags",
-                        if (c.tags.isEmpty()) null else c.tags.joinToString(", "),
-                    )
+                    DetailLine("Tier", tierLabel(c.tier))
+                    DetailLine("Tags", c.tags)
                     DetailLine("Stage", c.stage)
-                    DetailLine("Next follow-up", c.followUpDate)
+                    DetailLine("Next follow-up", c.nextFollowUp)
                     DetailLine("Notes", c.notes)
 
                     Spacer(Modifier.height(20.dp))
@@ -232,12 +239,12 @@ private fun PipelineBoard(viewModel: AppViewModel) {
                 )
             }
             board!!.stages.forEach { stage ->
-                item { SectionHeader(stage.name, stage.count) }
+                item { SectionHeader(stage.stage, stage.count) }
                 if (stage.clients.isEmpty()) {
                     item { ItemRow("No clients", "Nobody is at this stage right now.") }
                 } else {
                     items(stage.clients) { card ->
-                        ItemRow(card.name)
+                        ItemRow(card.legalName)
                     }
                 }
             }

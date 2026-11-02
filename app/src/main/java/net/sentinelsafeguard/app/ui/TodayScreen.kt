@@ -43,48 +43,83 @@ fun TodayScreen(
         else -> {
             val data = today!!
             LazyColumn {
-                item { SectionHeader("Follow-ups due", data.followUpsDue) }
-                if (data.followUps.isEmpty()) {
+                item { SectionHeader("Follow-ups due", data.followUps.total) }
+                if (data.followUps.items.isEmpty()) {
                     item { ItemRow("Nothing due", "No follow-ups are waiting today.") }
                 } else {
-                    items(data.followUps) { entry ->
-                        ItemRow(entry.title, entry.subtitle) { onOpenClients() }
+                    items(data.followUps.items) { client ->
+                        ItemRow(
+                            client.legalName,
+                            listOfNotNull(
+                                client.nextFollowUp?.takeIf { it.isNotBlank() }
+                                    ?.let { "Due $it" },
+                                client.contactName.takeIf { it.isNotBlank() },
+                            ).joinToString(" · "),
+                        ) { onOpenClients() }
                     }
                 }
 
-                item { SectionHeader("New tickets", data.newTickets) }
-                if (data.tickets.isEmpty()) {
+                item { SectionHeader("New tickets", data.newTickets.total) }
+                if (data.newTickets.items.isEmpty()) {
                     item { ItemRow("No new tickets", "You are all caught up.") }
                 } else {
-                    items(data.tickets) { entry ->
-                        ItemRow(entry.title, entry.subtitle) { onOpenTickets() }
+                    items(data.newTickets.items) { ticket ->
+                        ItemRow(
+                            ticket.title,
+                            listOfNotNull(
+                                ticket.clientName?.takeIf { it.isNotBlank() },
+                                ticket.priority.takeIf { it.isNotBlank() },
+                            ).joinToString(" · "),
+                        ) { onOpenTickets() }
                     }
                 }
 
-                item { SectionHeader("Overdue cases", data.overdueCases) }
-                if (data.cases.isEmpty()) {
+                item { SectionHeader("Overdue cases", data.overdueCases.total) }
+                if (data.overdueCases.items.isEmpty()) {
                     item { ItemRow("No overdue cases", "Every case is on track.") }
                 } else {
-                    items(data.cases) { entry ->
-                        ItemRow(entry.title, entry.subtitle, badge = "Overdue")
+                    items(data.overdueCases.items) { entry ->
+                        ItemRow(
+                            entry.title,
+                            listOfNotNull(
+                                entry.clientName?.takeIf { it.isNotBlank() },
+                                entry.dueDate?.takeIf { it.isNotBlank() }
+                                    ?.let { "Due $it" },
+                            ).joinToString(" · "),
+                            badge = "Overdue",
+                        )
                     }
                 }
 
-                item { SectionHeader("Best clients not contacted in a while", data.tierAUntouched) }
-                if (data.tierA.isEmpty()) {
+                item { SectionHeader("Best clients not contacted in a while", data.tierA.total) }
+                if (data.tierA.items.isEmpty()) {
                     item { ItemRow("All caught up", "Your best clients have all been contacted recently.") }
                 } else {
-                    items(data.tierA) { entry ->
-                        ItemRow(entry.title, entry.subtitle) { onOpenClients() }
+                    items(data.tierA.items) { client ->
+                        ItemRow(
+                            client.legalName,
+                            listOfNotNull(
+                                client.stage.takeIf { it.isNotBlank() },
+                                client.contactName.takeIf { it.isNotBlank() },
+                            ).joinToString(" · "),
+                        ) { onOpenClients() }
                     }
                 }
 
-                item { SectionHeader("Sign-in alerts", data.signInAlerts) }
-                if (data.alerts.isEmpty()) {
+                item { SectionHeader("Sign-in alerts", data.signinAlerts.total) }
+                if (data.signinAlerts.items.isEmpty()) {
                     item { ItemRow("Nothing new", "No new sign-ins to check.") }
                 } else {
-                    items(data.alerts) { entry ->
-                        ItemRow(entry.title, entry.subtitle, badge = "Sign-in")
+                    items(data.signinAlerts.items) { alert ->
+                        ItemRow(
+                            alert.actorName.ifBlank { "Sign-in" },
+                            listOfNotNull(
+                                alert.detail?.takeIf { it.isNotBlank() },
+                                alert.ip.takeIf { it.isNotBlank() },
+                                if (alert.createdAt > 0) formatEpochMs(alert.createdAt) else null,
+                            ).joinToString(" · "),
+                            badge = "Sign-in",
+                        )
                     }
                 }
 

@@ -36,7 +36,7 @@ import java.time.format.DateTimeFormatter
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleScreen(viewModel: AppViewModel) {
-    var selectedId by remember { mutableStateOf<String?>(null) }
+    var selectedId by remember { mutableStateOf<Int?>(null) }
     if (selectedId != null) {
         JobDetailScreen(viewModel, selectedId!!) { selectedId = null }
         return
@@ -51,7 +51,7 @@ fun ScheduleScreen(viewModel: AppViewModel) {
     LaunchedEffect(reloadKey) {
         error = null
         try {
-            jobs = viewModel.api.schedule("week")
+            jobs = viewModel.api.schedule()
         } catch (e: Exception) {
             error = e.message ?: "The schedule could not be loaded. Check your connection and try again."
         }
@@ -80,11 +80,13 @@ fun ScheduleScreen(viewModel: AppViewModel) {
             jobs == null -> LoadingBox("Loading schedule…")
             else -> {
                 val visible = jobs!!.filter { job ->
-                    !mineOnly || job.assignees.any { it.equals(myName, ignoreCase = true) }
+                    !mineOnly || job.assignees.any {
+                        it.displayName.equals(myName, ignoreCase = true)
+                    }
                 }
                 val todayText = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
                 val (todays, rest) = visible.partition { job ->
-                    (job.date ?: job.start?.take(10)) == todayText
+                    job.workDate == todayText
                 }
                 LazyColumn {
                     item { SectionHeader("Jobs today", todays.size) }
@@ -111,16 +113,16 @@ private fun JobRow(job: Job, onClick: () -> Unit) {
     ItemRow(
         title = job.title,
         subtitle = listOfNotNull(
-            job.date ?: job.start?.take(10),
-            job.start?.drop(11)?.take(5)?.let { "at $it" },
-            job.clientName,
+            job.workDate.takeIf { it.isNotBlank() },
+            job.startTime.takeIf { it.isNotBlank() }?.let { "at $it" },
+            job.clientName?.takeIf { it.isNotBlank() },
         ).joinToString(" · "),
         onClick = onClick,
     )
 }
 
 @Composable
-fun JobDetailScreen(viewModel: AppViewModel, jobId: String, onBack: () -> Unit) {
+fun JobDetailScreen(viewModel: AppViewModel, jobId: Int, onBack: () -> Unit) {
     var job by remember { mutableStateOf<Job?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
@@ -143,12 +145,21 @@ fun JobDetailScreen(viewModel: AppViewModel, jobId: String, onBack: () -> Unit) 
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     Text(j.title, style = MaterialTheme.typography.titleLarge)
                     Spacer(Modifier.height(8.dp))
-                    DetailLine("When", listOfNotNull(j.date ?: j.start, j.end?.let { "until $it" }).joinToString(" "))
+                    DetailLine(
+                        "When",
+                        listOfNotNull(
+                            j.workDate.takeIf { it.isNotBlank() },
+                            if (j.allDay) "All day" else j.startTime.takeIf { it.isNotBlank() },
+                            if (j.allDay) null
+                            else j.endTime.takeIf { it.isNotBlank() }?.let { "until $it" },
+                        ).joinToString(" "),
+                    )
                     DetailLine("Client", j.clientName)
-                    DetailLine("Address", j.address)
+                    DetailLine("Address", j.location)
                     DetailLine(
                         "Who is going",
-                        if (j.assignees.isEmpty()) null else j.assignees.joinToString(", "),
+                        if (j.assignees.isEmpty()) null
+                        else j.assignees.joinToString(", ") { it.displayName },
                     )
                     DetailLine("Notes", j.notes)
                     Spacer(Modifier.height(32.dp))
