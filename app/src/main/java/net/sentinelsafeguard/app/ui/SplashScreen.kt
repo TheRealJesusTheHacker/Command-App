@@ -46,7 +46,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -681,22 +684,31 @@ private fun ThanksgivingStage(reduced: Boolean) {
                     scaleY = pushIn.value
                 },
         )
-        // The flash: FRONT AND CENTER, ~70% of frame height.
-        Image(
-            painter = painterResource(R.drawable.sentinel_logo),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
+        // The flash: FRONT AND CENTER, ~70% of frame height,
+        // screen-blended like the web build so the logo's black
+        // card melts into the feast (drawn on a Canvas — the
+        // DrawScope blend parameter is the supported route in
+        // this Compose version).
+        val logoBitmap = ImageBitmap.imageResource(
+            LocalContext.current.resources, R.drawable.sentinel_logo,
+        )
+        Canvas(
+            Modifier
                 .align(Alignment.Center)
                 .fillMaxHeight(0.7f)
                 .aspectRatio(390f / 475f)
                 .graphicsLayer {
-                    alpha = flashAlpha.value
                     scaleX = flashScale.value
                     scaleY = flashScale.value
-                    blendMode = BlendMode.Screen
                 },
-        )
+        ) {
+            drawImage(
+                image = logoBitmap,
+                dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                alpha = flashAlpha.value,
+                blendMode = BlendMode.Screen,
+            )
+        }
         // The greeting: CENTER BOTTOM, letter-built.
         Row(
             Modifier
