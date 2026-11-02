@@ -1,3 +1,7 @@
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -188,22 +192,22 @@ val generateGateConfig by tasks.registering {
             )
         }
         val key = javax.crypto.spec.SecretKeySpec(
-            java.security.MessageDigest.getInstance("SHA-256")
+            MessageDigest.getInstance("SHA-256")
                 .digest(fragments.joinToString(":").toByteArray(Charsets.UTF_8)),
             "AES",
         )
         fun seal(plain: String): String {
-            val iv = ByteArray(12).also { java.security.SecureRandom().nextBytes(it) }
+            val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
             val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(
                 javax.crypto.Cipher.ENCRYPT_MODE, key,
                 javax.crypto.spec.GCMParameterSpec(128, iv),
             )
-            return java.util.Base64.getEncoder()
+            return Base64.getEncoder()
                 .encodeToString(iv + cipher.doFinal(plain.toByteArray(Charsets.UTF_8)))
         }
         fun unseal(blob: String): String {
-            val raw = java.util.Base64.getDecoder().decode(blob)
+            val raw = Base64.getDecoder().decode(blob)
             val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(
                 javax.crypto.Cipher.DECRYPT_MODE, key,
