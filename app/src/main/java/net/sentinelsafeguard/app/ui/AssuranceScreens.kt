@@ -300,7 +300,14 @@ private fun BackupTestsCard(viewModel: AppViewModel) {
             onClick = {
                 scope.launch {
                     try {
-                        viewModel.api.setBackupCadence(assetId.toInt(), cadenceDays.toInt())
+                        val key = states.firstOrNull {
+                            Phase3Logic.int(it, "assetId") == assetId.toInt()
+                        }?.let { Phase3Logic.str(it, "assetKey") }
+                        if (key.isNullOrBlank()) {
+                            error = "That asset is not in the backup register above."
+                            return@launch
+                        }
+                        viewModel.api.setBackupCadence(key, cadenceDays.toInt())
                         error = null
                         reload()
                     } catch (e: Exception) {

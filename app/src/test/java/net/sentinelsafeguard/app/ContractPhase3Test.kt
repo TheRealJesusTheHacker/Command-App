@@ -918,7 +918,11 @@ class ContractPhase3OpsTest {
     fun assuranceBackupTestsAndCadence() = runBlocking {
         val transport = QueueTransport(
             step("assurance_backup_tests_list"), step("assurance_backup_test_create"),
-            step("assurance_backup_cadence_set"),
+            // The rehearsal's cadence capture is its own guessed-route 404
+            // (POST /api/app/assurance/assets/{id}/backup-cadence is not a
+            // route). The success body below is the deployed handler's
+            // return (a_cf2setbackupcadence in server.py), pinned verbatim.
+            200 to """{"ok":true,"message":"Backup test cadence saved.","cadenceDays":30,"assetKey":"asset:1"}""",
         )
         val api = api(transport)
         val tests = api.assuranceBackupTests()
@@ -930,7 +934,10 @@ class ContractPhase3OpsTest {
             put("assetId", 1); put("testedAt", "2026-11-03")
             put("method", "full_restore"); put("result", "pass"); put("notes", "")
         })
-        assertNotNull(api.setBackupCadence(1, 30))
+        val cadence = api.setBackupCadence("asset:1", 30)
+        assertEquals("Backup test cadence saved.", cadence.str("message"))
+        assertEquals("/api/app/assurance/backup-cadence", transport.requests.last().path)
+        assertTrue(transport.requests.last().body!!.contains("\"assetKey\":\"asset:1\""))
     }
 
     @Test
@@ -1025,7 +1032,7 @@ class ContractPhase3OpsTest {
             step("finding_create"), step("finding_edit"), step("finding_status"),
             step("finding_evidence"), step("finding_templates_list"),
             step("finding_template_create"), step("finding_from_template"),
-            step("finding_template_delete"), step("engagement_report_document"),
+            step("finding_template_delete"),
         )
         val api = api(transport)
         val body = buildJsonObject {
@@ -1045,9 +1052,17 @@ class ContractPhase3OpsTest {
         }, null)
         api.createFindingFromTemplate(1, 1)
         api.deleteFindingTemplate(1)
-        val report = api.engagementReportDocument(1)
-        assertTrue(report.str("filename")!!.isNotBlank())
-        assertEquals(9, transport.requests.size)
+        assertEquals(8, transport.requests.size)
+    }
+
+    @Test
+    fun engagementReportDocumentRefusesUntilGenerated() = runBlocking {
+        // The captured body is the deployed backend's honest state for an
+        // engagement with no generated report: 403, nothing invented.
+        val api = api(QueueTransport(step("engagement_report_document")))
+        expectRefusal(403, "No report has been generated") {
+            api.engagementReportDocument(1)
+        }
     }
 
     // ---- Booking admin ----

@@ -656,10 +656,13 @@ suspend fun SentinelApi.assuranceBackupTests(): JsonObject =
 suspend fun SentinelApi.saveAssuranceBackupTest(body: JsonObject): JsonObject =
     postJson("/api/app/assurance/backup-tests", body.toBody())
 
-suspend fun SentinelApi.setBackupCadence(assetId: Int, cadenceDays: Int): JsonObject =
+suspend fun SentinelApi.setBackupCadence(assetKey: String?, cadenceDays: Int): JsonObject =
     postJson(
-        "/api/app/assurance/assets/$assetId/backup-cadence",
-        buildJsonObject { put("cadenceDays", cadenceDays) }.toBody(),
+        "/api/app/assurance/backup-cadence",
+        buildJsonObject {
+            put("cadenceDays", cadenceDays)
+            if (!assetKey.isNullOrBlank()) put("assetKey", assetKey)
+        }.toBody(),
     )
 
 suspend fun SentinelApi.assuranceScans(clientId: Int? = null): JsonObject =
