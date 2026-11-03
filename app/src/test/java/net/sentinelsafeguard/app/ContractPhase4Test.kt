@@ -167,8 +167,22 @@ class ContractPhase4Test {
         expectRefusal(403, "Not authorized.") {
             api(QueueTransport(step("invoices_accountant_refusal"))).invoices()
         }
-        expectRefusal(401, "Sign-in required.") {
+    }
+
+    @Test
+    fun unauthenticatedInvoicesSignsOut() = runBlocking {
+        // The fixture pins the backend's 401 body; the app client
+        // treats any authenticated 401 as a sign-out (call() throws
+        // SignedOutException before the body is surfaced) — that is
+        // the hunt plumbing's standing behavior, pinned here.
+        val fixture = RealBodiesPhase4.bodyJson("unauth_invoices")
+        assertEquals("Sign-in required.", fixture.str("message"))
+        assertEquals(401, RealBodiesPhase4.status("unauth_invoices"))
+        try {
             api(QueueTransport(step("unauth_invoices"))).invoices()
+            fail("expected a SignedOutException")
+        } catch (e: net.sentinelsafeguard.app.data.api.SignedOutException) {
+            // expected
         }
     }
 
