@@ -4,7 +4,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import net.sentinelsafeguard.app.config.ApiConfig
 import net.sentinelsafeguard.app.config.AppConfig
@@ -500,6 +502,336 @@ class SentinelApi(
     suspend fun clientTimeline(id: Int): ClientTimelineResponse =
         json.decodeFromString(ensureOk(call("GET", "/api/app/clients/$id/timeline")).body)
 
+
+    // ---- Phase 2 (hunt6): Cases / Schedule writes / Engagements /
+    // Runbooks & Sign-off / Today panels / global search ----
+
+    /** Open-JSON GET for the Today panel family: the panel
+     *  payloads are the web handlers' own section objects, and the
+     *  Today screen renders them section by section. */
+    suspend fun getJson(path: String): JsonObject =
+        Json.parseToJsonElement(ensureOk(call("GET", path)).body).jsonObject
+
+    suspend fun postJson(path: String, body: String = "{}"): JsonObject =
+        Json.parseToJsonElement(ensureOk(call("POST", path, body)).body).jsonObject
+
+    /** The case list with the B3 filter/search/sort vocabulary,
+     *  paged through completely like every mirrored list. */
+    suspend fun casesFiltered(
+        q: String? = null,
+        status: String? = null,
+        priority: String? = null,
+        category: String? = null,
+        clientId: Int? = null,
+        assignee: String? = null,
+        overdue: Boolean = false,
+        unassigned: Boolean = false,
+        adMaterial: Boolean = false,
+        sort: String? = null,
+    ): Page<CaseItem> {
+        val params = mutableListOf<String>()
+        if (!q.isNullOrBlank()) params += "q=${urlEncode(q)}"
+        if (!status.isNullOrBlank()) params += "status=${urlEncode(status)}"
+        if (!priority.isNullOrBlank()) params += "priority=${urlEncode(priority)}"
+        if (!category.isNullOrBlank()) params += "category=${urlEncode(category)}"
+        if (clientId != null) params += "clientId=$clientId"
+        if (!assignee.isNullOrBlank()) params += "assignee=${urlEncode(assignee)}"
+        if (overdue) params += "overdue=1"
+        if (unassigned) params += "unassigned=1"
+        if (adMaterial) params += "adMaterial=1"
+        if (!sort.isNullOrBlank()) params += "sort=${urlEncode(sort)}"
+        return fetchAllPages(
+            "/api/app/cases", params,
+            decode = { json.decodeFromString<CaseListResponse>(it) },
+            itemsOf = { it.cases },
+            totalOf = { it.total },
+        )
+    }
+
+    /** The full case profile envelope (case + client + tickets + activity). */
+    suspend fun caseDetail(id: Int): CaseDetailResponse =
+        json.decodeFromString(ensureOk(call("GET", "/api/app/cases/$id")).body)
+
+    /** Full case write body (savecase field set). Nullables ride as
+     *  explicit JSON nulls when cleared — savecase semantics. */
+    private fun caseBody(edit: CaseFullEdit): String = buildJsonObject {
+        if (edit.clientId != null) put("clientId", edit.clientId) else put("clientId", JsonNull)
+        if (edit.assignedUserId != null) put("assignedUserId", edit.assignedUserId)
+        else put("assignedUserId", JsonNull)
+        put("title", edit.title)
+        put("status", edit.status)
+        put("priority", edit.priority)
+        put("category", edit.category)
+        if (edit.dueDate != null) put("dueDate", edit.dueDate) else put("dueDate", JsonNull)
+        put("notes", edit.notes)
+        put("adMaterial", edit.adMaterial)
+    }.toString()
+
+    suspend fun createCase(edit: CaseFullEdit): CaseItem =
+        json.decodeFromString<CaseWriteResponse>(
+            ensureOk(call("POST", "/api/app/cases", caseBody(edit))).body
+        ).case
+
+    suspend fun patchCase(id: Int, edit: CaseFullEdit): CaseItem =
+        json.decodeFromString<CaseWriteResponse>(
+            ensureOk(call("PATCH", "/api/app/cases/$id", caseBody(edit))).body
+        ).case
+
+    suspend fun setCaseStatus(id: Int, status: String): CaseItem =
+        json.decodeFromString<CaseStatusResponse>(
+            ensureOk(
+                call(
+                    "POST", "/api/app/cases/$id/status",
+                    json.encodeToString(StageRequest(status)),
+                )
+            ).body
+        ).case
+
+    suspend fun archiveCase(id: Int): CaseItem =
+        json.decodeFromString<CaseWriteResponse>(
+            ensureOk(call("POST", "/api/app/cases/$id/archive", "{}")).body
+        ).case
+
+    suspend fun restoreCase(id: Int): CaseItem =
+        json.decodeFromString<CaseWriteResponse>(
+            ensureOk(call("POST", "/api/app/cases/$id/restore", "{}")).body
+        ).case
+
+    /** A schedule window with web date-window semantics: jobs,
+     *  employees, and entries for [start]..[end] (yyyy-MM-dd). */
+    suspend fun scheduleWindow(
+        start: String,
+        end: String,
+        status: String? = null,
+        employeeId: String? = null,
+    ): ScheduleResponse {
+        val params = mutableListOf("start=${urlEncode(start)}", "end=${urlEncode(end)}")
+        if (!status.isNullOrBlank() && status != "All") params += "status=${urlEncode(status)}"
+        if (!employeeId.isNullOrBlank() && employeeId != "All") {
+            params += "employeeId=${urlEncode(employeeId)}"
+        }
+        return json.decodeFromString(
+            ensureOk(call("GET", "/api/app/schedule?${params.joinToString("&")}")).body
+        )
+    }
+
+    private fun jobBody(edit: JobFullEdit): String = buildJsonObject {
+        put("title", edit.title)
+        if (edit.clientId != null) put("clientId", edit.clientId) else put("clientId", JsonNull)
+        if (edit.caseId != null) put("caseId", edit.caseId) else put("caseId", JsonNull)
+        put("location", edit.location)
+        put("workDate", edit.workDate)
+        put("startTime", edit.startTime)
+        put("endTime", edit.endTime)
+        put("allDay", edit.allDay)
+        put("status", edit.status)
+        put("notes", edit.notes)
+        put("assigneeIds", kotlinx.serialization.json.JsonArray(
+            edit.assigneeIds.map { kotlinx.serialization.json.JsonPrimitive(it) }
+        ))
+    }.toString()
+
+    suspend fun createJob(edit: JobFullEdit): Job =
+        json.decodeFromString<JobWriteResponse>(
+            ensureOk(call("POST", "/api/app/jobs", jobBody(edit))).body
+        ).job
+
+    suspend fun patchJob(id: Int, edit: JobFullEdit): Job =
+        json.decodeFromString<JobWriteResponse>(
+            ensureOk(call("PATCH", "/api/app/jobs/$id", jobBody(edit))).body
+        ).job
+
+    suspend fun setJobStatus(id: Int, status: String): Job =
+        json.decodeFromString<JobStatusResponse>(
+            ensureOk(
+                call(
+                    "POST", "/api/app/jobs/$id/status",
+                    json.encodeToString(StageRequest(status)),
+                )
+            ).body
+        ).job
+
+    suspend fun deleteJob(id: Int) {
+        ensureOk(call("DELETE", "/api/app/jobs/$id"))
+    }
+
+    suspend fun saveScheduleEntry(request: ScheduleEntryRequest): Int? {
+        val body = buildJsonObject {
+            if (request.id != null) put("id", request.id)
+            put("userId", request.userId)
+            put("entryType", request.entryType)
+            put("workDate", request.workDate)
+            put("startTime", request.startTime)
+            put("endTime", request.endTime)
+            put("notes", request.notes)
+        }
+        return json.decodeFromString<EntrySaveResponse>(
+            ensureOk(call("POST", "/api/app/schedule-entries", body.toString())).body
+        ).id
+    }
+
+    suspend fun deleteScheduleEntry(id: Int) {
+        ensureOk(call("DELETE", "/api/app/schedule-entries/$id"))
+    }
+
+    suspend fun engagements(clientId: Int? = null): EngagementsListResponse {
+        val path = if (clientId != null) "/api/app/engagements?clientId=$clientId"
+        else "/api/app/engagements"
+        return json.decodeFromString(ensureOk(call("GET", path)).body)
+    }
+
+    suspend fun engagement(id: Int): Engagement =
+        json.decodeFromString<EngagementDetailResponse>(
+            ensureOk(call("GET", "/api/app/engagements/$id")).body
+        ).engagement
+
+    private fun engagementBody(edit: EngagementEdit): String = buildJsonObject {
+        if (edit.clientId != null) put("clientId", edit.clientId) else put("clientId", JsonNull)
+        put("title", edit.title)
+        put("scope", edit.scope)
+        put("rulesOfEngagement", edit.rulesOfEngagement)
+        put("status", edit.status)
+        if (edit.startDate != null) put("startDate", edit.startDate) else put("startDate", JsonNull)
+        if (edit.endDate != null) put("endDate", edit.endDate) else put("endDate", JsonNull)
+    }.toString()
+
+    suspend fun createEngagement(edit: EngagementEdit): Engagement =
+        json.decodeFromString<EngagementWriteResponse>(
+            ensureOk(call("POST", "/api/app/engagements", engagementBody(edit))).body
+        ).engagement
+
+    suspend fun patchEngagement(id: Int, edit: EngagementEdit): Engagement =
+        json.decodeFromString<EngagementWriteResponse>(
+            ensureOk(call("PATCH", "/api/app/engagements/$id", engagementBody(edit))).body
+        ).engagement
+
+    suspend fun rbProcedures(): List<RbProcedure> =
+        json.decodeFromString<RbProceduresResponse>(
+            ensureOk(call("GET", "/api/app/runbooks/procedures")).body
+        ).procedures
+
+    suspend fun rbSetProcedure(id: Int, isProcedure: Boolean, steps: List<RbStep>): RbProcedure? {
+        val body = buildJsonObject {
+            put("isProcedure", isProcedure)
+            put("steps", kotlinx.serialization.json.JsonArray(steps.map { step ->
+                buildJsonObject {
+                    put("title", step.title)
+                    put("detail", step.detail)
+                }
+            }))
+        }
+        return json.decodeFromString<RbProcedureSetResponse>(
+            ensureOk(call("POST", "/api/app/runbooks/procedures/$id", body.toString())).body
+        ).procedure
+    }
+
+    suspend fun rbRuns(ticketId: Int? = null): List<RbRun> {
+        val path = if (ticketId != null) "/api/app/runbooks/runs?ticketId=$ticketId"
+        else "/api/app/runbooks/runs"
+        return json.decodeFromString<RbRunsResponse>(ensureOk(call("GET", path)).body).runs
+    }
+
+    suspend fun rbRun(id: Int): RbRun? {
+        val out = json.decodeFromString<RbRunsResponse>(
+            ensureOk(call("GET", "/api/app/runbooks/runs/$id")).body
+        )
+        return out.run ?: out.runs.firstOrNull { it.id == id }
+    }
+
+    suspend fun rbStartRun(kbId: Int, ticketId: Int?): RbRun? {
+        val body = buildJsonObject {
+            put("kbId", kbId)
+            if (ticketId != null) put("ticketId", ticketId) else put("ticketId", JsonNull)
+        }
+        return json.decodeFromString<RbRunResponse>(
+            ensureOk(call("POST", "/api/app/runbooks/runs", body.toString())).body
+        ).run
+    }
+
+    suspend fun rbCheckStep(id: Int, stepIndex: Int, note: String = "", undo: Boolean = false): RbRun? {
+        val body = buildJsonObject {
+            put("stepIndex", stepIndex)
+            put("note", note)
+            put("undo", undo)
+        }
+        return json.decodeFromString<RbRunResponse>(
+            ensureOk(call("POST", "/api/app/runbooks/runs/$id/check-step", body.toString())).body
+        ).run
+    }
+
+    /** which: pause | resume | cancel (the run lifecycle verbs). */
+    suspend fun rbRunState(id: Int, which: String): RbRun? =
+        json.decodeFromString<RbRunResponse>(
+            ensureOk(call("POST", "/api/app/runbooks/runs/$id/$which", "{}")).body
+        ).run
+
+    suspend fun rbExtraction(): RbExtractionResponse =
+        json.decodeFromString(ensureOk(call("GET", "/api/app/runbooks/extraction-status")).body)
+
+    suspend fun rbBackfill(): JsonObject = postJson("/api/app/runbooks/backfill")
+
+    suspend fun ticketSignOff(id: Int): SignOffResponse =
+        json.decodeFromString(ensureOk(call("GET", "/api/app/tickets/$id/signoff")).body)
+
+    suspend fun postTicketSignOff(id: Int, signerName: String, clientId: Int?): SignOffResponse {
+        val body = buildJsonObject {
+            put("signerName", signerName)
+            if (clientId != null) put("clientId", clientId)
+        }
+        return json.decodeFromString(
+            ensureOk(call("POST", "/api/app/tickets/$id/signoff", body.toString())).body
+        )
+    }
+
+    suspend fun todayPanels(): JsonObject = getJson("/api/app/today/panels")
+
+    suspend fun todayAsk(question: String): AskResponse {
+        val body = buildJsonObject { put("q", question) }
+        return json.decodeFromString(
+            ensureOk(call("POST", "/api/app/today/ask", body.toString())).body
+        )
+    }
+
+    suspend fun todayAutomations(): JsonObject = getJson("/api/app/today/automations")
+
+    suspend fun runAutomations(): JsonObject = postJson("/api/app/today/automations/run")
+
+    suspend fun slaScan(): JsonObject = postJson("/api/app/today/sla-scan")
+
+    suspend fun todayDigests(): JsonObject = getJson("/api/app/today/digests")
+
+    suspend fun generateDigests(): JsonObject = postJson("/api/app/today/digests/generate")
+
+    suspend fun sendDigest(id: Int): JsonObject = postJson("/api/app/today/digests/$id/send")
+
+    suspend fun discardDigest(id: Int): JsonObject =
+        postJson("/api/app/today/digests/$id/discard")
+
+    suspend fun todayEstateHealth(): JsonObject = getJson("/api/app/today/estate-health")
+
+    suspend fun todayPlatformDigest(): JsonObject = getJson("/api/app/today/platform-digest")
+
+    suspend fun todayCalendarSync(): CalendarSyncResponse =
+        json.decodeFromString(ensureOk(call("GET", "/api/app/today/calendar-sync")).body)
+
+    suspend fun todayReportsSummary(): JsonObject = getJson("/api/app/today/reports-summary")
+
+    suspend fun todayStaffCerts(): JsonObject = getJson("/api/app/today/staff-certs")
+
+    suspend fun todayRegisters(clientId: Int? = null): JsonObject {
+        val path = if (clientId != null) "/api/app/today/registers?clientId=$clientId"
+        else "/api/app/today/registers"
+        return getJson(path)
+    }
+
+    suspend fun todayUrgent(): JsonObject = getJson("/api/app/today/urgent")
+
+    /** Global search (G-D4): web globalsearch, role-scoped server-side. */
+    suspend fun search(q: String): SearchResponse =
+        json.decodeFromString(
+            ensureOk(call("GET", "/api/app/search?q=${urlEncode(q)}")).body
+        )
+
     private fun urlEncode(value: String): String =
         java.net.URLEncoder.encode(value, "UTF-8")
 
@@ -537,3 +869,53 @@ data class TicketFullEdit(
 
 @Serializable
 private data class StageRequest(val stage: String)
+
+/** The full-edit case body (Phase 2) — see [SentinelApi.patchCase]. */
+data class CaseFullEdit(
+    val clientId: Int?,
+    val assignedUserId: Int?,
+    val title: String,
+    val status: String,
+    val priority: String,
+    val category: String,
+    val dueDate: String?,
+    val notes: String,
+    val adMaterial: Boolean,
+)
+
+/** The full job body (Phase 2, web savejob field set). */
+data class JobFullEdit(
+    val title: String,
+    val clientId: Int?,
+    val caseId: Int?,
+    val location: String,
+    val workDate: String,
+    val startTime: String,
+    val endTime: String,
+    val allDay: Boolean,
+    val status: String,
+    val notes: String,
+    val assigneeIds: List<Int>,
+)
+
+/** A schedule-entry save (Phase 2, web savescheduleentry fields). */
+data class ScheduleEntryRequest(
+    val id: Int? = null,
+    val userId: Int,
+    val entryType: String,
+    val workDate: String,
+    val startTime: String = "",
+    val endTime: String = "",
+    val notes: String = "",
+)
+
+/** The engagement save body (Phase 2, web savecfengagement fields). */
+data class EngagementEdit(
+    val clientId: Int?,
+    val title: String,
+    val scope: String,
+    val rulesOfEngagement: String,
+    val status: String,
+    val startDate: String?,
+    val endDate: String?,
+)

@@ -59,6 +59,7 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
             val d = today!!
             LazyColumn {
                 item { MirrorHeader("Today") }
+                item { UrgentBanner(viewModel, nav) }
                 item {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                         StatCard("Follow-ups due", d.followUps.total.toString(), Modifier.weight(1f))
@@ -176,13 +177,13 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
                     MirrorCard(
                         "Overdue cases", d.overdueCases.total,
                         footerLabel = "Show all → Cases",
-                        onFooter = { nav.navigate("view/cases") },
+                        onFooter = { nav.navigate("cases") },
                     ) {
                         if (d.overdueCases.items.isEmpty()) {
                             Text("No cases are overdue.", color = SentinelMuted)
                         }
                         d.overdueCases.items.forEach { case ->
-                            TodayCaseRow(case) { nav.navigate("view/cases") }
+                            TodayCaseRow(case) { nav.navigate("case/${case.id}") }
                         }
                     }
                 }
@@ -230,7 +231,7 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
                             style = MaterialTheme.typography.titleSmall,
                         )
                         d.dueThisWeek.cases.items.forEach { case ->
-                            TodayCaseRow(case) { nav.navigate("view/cases") }
+                            TodayCaseRow(case) { nav.navigate("case/${case.id}") }
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
@@ -357,6 +358,8 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
                         }
                     }
                 }
+                // Phase 2: Today's injected panels, in web's order.
+                item { TodayPanels(viewModel, nav) }
                 item { Spacer(Modifier.height(16.dp)) }
             }
         }

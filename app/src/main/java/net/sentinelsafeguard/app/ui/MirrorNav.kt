@@ -40,10 +40,10 @@ object MirrorNav {
         MirrorGroup(
             "Work", listOf(
                 MirrorView("tickets", "Tickets"),
-                MirrorView("cases", "Cases", PHASE2),
+                MirrorView("cases", "Cases"),
                 MirrorView("schedule", "Schedule"),
-                MirrorView("engagements", "Engagements", PHASE2),
-                MirrorView("b4fdesk", "Runbooks & Sign-off", PHASE2),
+                MirrorView("engagements", "Engagements"),
+                MirrorView("b4fdesk", "Runbooks & Sign-off"),
             )
         ),
         MirrorGroup(

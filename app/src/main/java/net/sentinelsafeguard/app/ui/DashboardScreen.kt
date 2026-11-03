@@ -70,7 +70,7 @@ fun DashboardScreen(viewModel: AppViewModel, nav: NavController) {
                             attention.forEach { chip ->
                                 val (label, route) = when (chip.kind) {
                                     "followups" -> "Follow-ups due" to "clients"
-                                    "overdueCases" -> "Overdue cases" to "view/cases"
+                                    "overdueCases" -> "Overdue cases" to "cases"
                                     "unassignedTickets" -> "Unassigned tickets" to "tickets"
                                     "signinAlerts" -> "Sign-in alerts" to "view/activity"
                                     else -> chip.kind to "dashboard"
@@ -109,7 +109,7 @@ fun DashboardScreen(viewModel: AppViewModel, nav: NavController) {
                             }
                             if (cw.cases) {
                                 OutlinedButton(
-                                    onClick = { nav.navigate("view/cases") },
+                                    onClick = { nav.navigate("caseNew") },
                                     modifier = Modifier.padding(end = 8.dp),
                                 ) { Text("+ New case") }
                             }

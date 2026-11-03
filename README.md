@@ -16,6 +16,12 @@ front-end for Sentinel Safeguard's private command system and self-hosted mailbo
   the mirrored shell plus Today, Dashboard, Tickets, and Clients/Pipeline;
   unbuilt Command views appear under their exact names with a placeholder
   naming the phase they land in.
+- **Mirror Phase 2 (hunt6, 2026-11-03):** Cases, the full Schedule mirror
+  (Month / Week / People / Agenda, job writes, schedule entries), Engagements,
+  Runbooks & Sign-off (including the ticket-profile sign-off surface),
+  Today's injected panels, and global search land as native mirrors on the
+  Phase 2 backend; ticket rows now carry their case title. Remaining
+  placeholders name Phases 3–9.
 
 No credentials, keys, or secrets live in this repository. Signing material is custodied
 outside the repo and reaches CI only through GitHub Actions secrets.

@@ -178,6 +178,8 @@ data class CaseItem(
     val updatedAt: Long = 0,
     // Added by the Today builder only.
     val clientName: String? = null,
+    // Added by the Phase 2 app case builders (list / write rows).
+    val ticketCount: Int = 0,
 )
 
 /**
@@ -208,6 +210,10 @@ data class Ticket(
     val sourceRef: String? = null,
     val mergedIntoId: Int? = null,
     val clientName: String? = null,
+    /** Phase 2 backend (Addendum 12): list rows now carry the
+     *  linked case's title additively — the hunt5 deviation
+     *  (board cards showed "Case #<id>" with no title) closes. */
+    val caseTitle: String? = null,
 )
 
 /** pub_activity — the timeline rows inside a ticket profile. */
@@ -421,13 +427,33 @@ data class ScheduleRange(
     val endDate: String? = null,
 )
 
-/** The employees / entries arrays in the same body are not
- *  modeled; the schedule screen renders jobs only. */
+/** pub_schedule (+ userName from the schedule read): a personal
+ *  schedule entry riding the same window as the jobs. */
+@Serializable
+data class ScheduleEntry(
+    val id: Int,
+    val userId: Int? = null,
+    val entryType: String = "",
+    val workDate: String = "",
+    val startTime: String = "",
+    val endTime: String = "",
+    val notes: String = "",
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+    val userName: String = "",
+)
+
+/** Phase 2: the full schedule window body — jobs, the employee
+ *  roster the filters and the People mode render from, and the
+ *  personal schedule entries (the hunt-era model dropped the
+ *  last two; the full Schedule mirror needs them). */
 @Serializable
 data class ScheduleResponse(
     val ok: Boolean = true,
     val scope: String = "",
     val jobs: List<Job> = emptyList(),
+    val employees: List<User> = emptyList(),
+    val entries: List<ScheduleEntry> = emptyList(),
     val range: ScheduleRange? = null,
 )
 
@@ -788,4 +814,274 @@ data class ClientWriteRequest(
     val tags: String = "",
     val friends: Boolean = false,
     val notes: String = "",
+)
+
+// ---- Phase 2 (hunt6): Cases API ----
+
+@Serializable
+data class CaseListResponse(
+    val ok: Boolean = true,
+    val total: Int = 0,
+    val limit: Int = 0,
+    val offset: Int = 0,
+    val cases: List<CaseItem> = emptyList(),
+)
+
+/** GET /cases/{id}: the web getcaseprofile envelope verbatim. */
+@Serializable
+data class CaseDetailResponse(
+    val ok: Boolean = true,
+    val case: CaseItem,
+    val client: Client? = null,
+    val tickets: List<Ticket> = emptyList(),
+    val activity: List<ActivityItem> = emptyList(),
+)
+
+@Serializable
+data class CaseWriteResponse(
+    val ok: Boolean = true,
+    val id: Int? = null,
+    val message: String? = null,
+    val case: CaseItem,
+)
+
+@Serializable
+data class CaseStatusResponse(
+    val ok: Boolean = true,
+    val status: String = "",
+    val case: CaseItem,
+)
+
+// ---- Phase 2 (hunt6): Schedule writes ----
+
+@Serializable
+data class JobWriteResponse(
+    val ok: Boolean = true,
+    val id: Int? = null,
+    val job: Job,
+)
+
+@Serializable
+data class JobStatusResponse(
+    val ok: Boolean = true,
+    val status: String = "",
+    val job: Job,
+)
+
+@Serializable
+data class EntrySaveResponse(
+    val ok: Boolean = true,
+    val id: Int? = null,
+    val message: String? = null,
+)
+
+// ---- Phase 2 (hunt6): Engagements API (pub_cf_engagement) ----
+
+@Serializable
+data class EngFinding(
+    val id: Int? = null,
+    val engagementId: Int? = null,
+    val title: String = "",
+    val severity: String = "",
+    val status: String = "",
+    val description: String = "",
+    val detail: String = "",
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+)
+
+@Serializable
+data class Engagement(
+    val id: Int,
+    val clientId: Int? = null,
+    val title: String = "",
+    val scope: String = "",
+    val rulesOfEngagement: String = "",
+    val status: String = "Planned",
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val reportPublished: Boolean = false,
+    val reportGeneratedAt: Long? = null,
+    val hasSignedAuthorization: Boolean = false,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+    val findings: List<EngFinding> = emptyList(),
+)
+
+@Serializable
+data class EngagementsListResponse(
+    val ok: Boolean = true,
+    val engagements: List<Engagement> = emptyList(),
+    val severities: List<String> = emptyList(),
+    val findingStatuses: List<String> = emptyList(),
+    val engagementStatuses: List<String> = emptyList(),
+)
+
+@Serializable
+data class EngagementDetailResponse(
+    val ok: Boolean = true,
+    val engagement: Engagement,
+)
+
+@Serializable
+data class EngagementWriteResponse(
+    val ok: Boolean = true,
+    val id: Int? = null,
+    val message: String? = null,
+    val engagement: Engagement,
+)
+
+// ---- Phase 2 (hunt6): Runbooks & Sign-off (b4fdesk) ----
+
+@Serializable
+data class RbStep(
+    val title: String = "",
+    val detail: String = "",
+)
+
+@Serializable
+data class RbStepState(
+    val state: String = "pending",
+    val by: Int? = null,
+    val byName: String = "",
+    val at: Long? = null,
+    val note: String = "",
+)
+
+@Serializable
+data class RbProcedure(
+    val id: Int,
+    val title: String = "",
+    val category: String = "",
+    val isProcedure: Boolean = false,
+    val steps: List<RbStep> = emptyList(),
+    val stepCount: Int = 0,
+    val clientVisible: Boolean = false,
+    val updatedAt: Long = 0,
+)
+
+@Serializable
+data class RbProceduresResponse(
+    val ok: Boolean = true,
+    val procedures: List<RbProcedure> = emptyList(),
+)
+
+@Serializable
+data class RbProcedureSetResponse(
+    val ok: Boolean = true,
+    val message: String? = null,
+    val procedure: RbProcedure? = null,
+)
+
+@Serializable
+data class RbRun(
+    val id: Int,
+    val kbId: Int? = null,
+    val ticketId: Int? = null,
+    val clientId: Int? = null,
+    val title: String = "",
+    val steps: List<RbStep> = emptyList(),
+    val stepStates: List<RbStepState> = emptyList(),
+    val status: String = "active",
+    val doneCount: Int = 0,
+    val totalSteps: Int = 0,
+    val startedBy: Int? = null,
+    val startedByName: String = "",
+    val startedAt: Long = 0,
+    val finishedAt: Long? = null,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+)
+
+@Serializable
+data class RbRunsResponse(
+    val ok: Boolean = true,
+    val runs: List<RbRun> = emptyList(),
+    val run: RbRun? = null,
+)
+
+@Serializable
+data class RbRunResponse(
+    val ok: Boolean = true,
+    val message: String? = null,
+    val id: Int? = null,
+    val completed: Boolean? = null,
+    val run: RbRun? = null,
+)
+
+/** Attachment text extraction status: summary + attachment rows
+ *  ride as open objects (their shape is the extractor's own). */
+@Serializable
+data class RbExtractionResponse(
+    val ok: Boolean = true,
+    val summary: List<kotlinx.serialization.json.JsonObject> = emptyList(),
+    val attachments: List<kotlinx.serialization.json.JsonObject> = emptyList(),
+)
+
+@Serializable
+data class SignOff(
+    val contractId: Int? = null,
+    val ticketId: Int? = null,
+    val clientId: Int? = null,
+    val title: String = "",
+    val summary: String = "",
+    val documentHash: String = "",
+    val status: String = "",
+    val signerName: String = "",
+    val signedAt: Long = 0,
+    val signatureId: Int? = null,
+    val signerIp: String = "",
+)
+
+@Serializable
+data class SignOffResponse(
+    val ok: Boolean = true,
+    val message: String? = null,
+    val ticketId: Int = 0,
+    val ticketStatus: String = "",
+    val completedWithSignOff: Boolean = false,
+    val signOff: SignOff? = null,
+)
+
+// ---- Phase 2 (hunt6): Today ask + calendar sync + search ----
+
+/** POST /api/app/today/ask (web b3fask): a deterministic answer. */
+@Serializable
+data class AskResponse(
+    val ok: Boolean = true,
+    val answered: Boolean = false,
+    val kind: String = "",
+    val entity: String = "",
+    val text: String = "",
+)
+
+/** GET /api/app/today/calendar-sync — the READ surface only. */
+@Serializable
+data class CalendarSyncResponse(
+    val ok: Boolean = true,
+    val enabled: Boolean = false,
+    val calendarId: String = "",
+    val prepared: Boolean = false,
+    val live: Boolean = false,
+    val helperLastSeen: Long? = null,
+    val lastRunMs: Long? = null,
+    val lastSummary: String = "",
+    val note: String = "",
+)
+
+@Serializable
+data class SearchResultItem(
+    val id: Int,
+    val title: String = "",
+    val subtitle: String = "",
+    val type: String = "",
+    val snippet: String = "",
+)
+
+/** GET /api/app/search (web globalsearch verbatim, role-scoped). */
+@Serializable
+data class SearchResponse(
+    val ok: Boolean = true,
+    val q: String = "",
+    val groups: Map<String, List<SearchResultItem>> = emptyMap(),
 )

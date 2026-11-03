@@ -1,6 +1,8 @@
 package net.sentinelsafeguard.app
 
+import net.sentinelsafeguard.app.data.api.CaseItem
 import net.sentinelsafeguard.app.data.api.Client
+import net.sentinelsafeguard.app.data.api.Job
 import net.sentinelsafeguard.app.data.api.Ticket
 import net.sentinelsafeguard.app.ui.MirrorVocab
 import org.junit.Assert.assertEquals
@@ -98,5 +100,79 @@ class MirrorLogicTest {
         assertEquals(listOf("Google" to 2, "Academy" to 1), MirrorVocab.topSources(clients))
         assertEquals("tier-a", MirrorVocab.tierOf(clients[0]))
         assertEquals("", MirrorVocab.tierOf(clients[1]))
+    }
+
+    // ---- Phase 2 (hunt6) ----
+
+    @Test
+    fun caseBoardGroupsAndSortsLikeWeb() {
+        val groups = MirrorVocab.groupCaseBoard(
+            listOf(
+                CaseItem(id = 1, status = "Open", priority = "Low", createdAt = 300),
+                CaseItem(id = 2, status = "Open", priority = "Critical", dueDate = "2026-11-05", createdAt = 100),
+                CaseItem(id = 3, status = "Open", priority = "Critical", dueDate = "2026-11-03", createdAt = 50),
+                CaseItem(id = 4, status = "Legacy stage"),
+            )
+        )
+        assertEquals(
+            MirrorVocab.TICKET_STAGES + "Legacy stage",
+            groups.map { it.first },
+        )
+        assertEquals(
+            listOf(3, 2, 1),
+            groups.first { it.first == "Open" }.second.map { it.id },
+        )
+    }
+
+    @Test
+    fun caseDirectoryParamsMapToB3Filters() {
+        val params = MirrorVocab.caseDirectoryParams(
+            q = "alpha", stage = null, priority = "High",
+            overdueOnly = false, unassignedOnly = true,
+            adOnly = true, sortLabel = "Stage order",
+        )
+        assertEquals("alpha", params["q"])
+        assertEquals("High", params["priority"])
+        assertEquals("1", params["unassigned"])
+        assertEquals("1", params["adMaterial"])
+        assertEquals("stage", params["sort"])
+        assertTrue("status" !in params)
+        assertTrue("overdue" !in params)
+    }
+
+    @Test
+    fun scheduleWindowsMatchWebSemantics() {
+        // 2026-11-03 is a Tuesday; the week starts Sunday 2026-11-01.
+        assertEquals(
+            "2026-11-01" to "2026-11-07",
+            MirrorVocab.weekWindow("2026-11-03"),
+        )
+        val (mStart, mEnd) = MirrorVocab.monthWindow("2026-11-15")
+        assertEquals("2026-11-01", mStart)
+        assertEquals("2026-12-12", mEnd)
+    }
+
+    @Test
+    fun jobsGroupByDateAscending() {
+        val grouped = MirrorVocab.groupJobsByDate(
+            listOf(
+                Job(id = 2, title = "B", workDate = "2026-11-10", startTime = "10:00"),
+                Job(id = 1, title = "A", workDate = "2026-11-09", startTime = "09:00"),
+                Job(id = 3, title = "C", workDate = "2026-11-10", startTime = "08:00"),
+            )
+        )
+        assertEquals(listOf("2026-11-09", "2026-11-10"), grouped.map { it.first })
+        assertEquals(listOf(3, 2), grouped[1].second.map { it.id })
+    }
+
+    @Test
+    fun searchGroupsKeepWebOrder() {
+        assertEquals(
+            listOf(
+                "clients", "cases", "tickets", "assets", "invoices",
+                "quotes", "engagements", "knowledge", "law", "attachments",
+            ),
+            MirrorVocab.SEARCH_GROUPS.map { it.first },
+        )
     }
 }

@@ -191,6 +191,14 @@ private fun AppShell(viewModel: AppViewModel) {
         route == "ticketNew" -> "New ticket"
         route.startsWith("client/") || route.startsWith("clientEdit") -> "Clients"
         route == "clientNew" -> "New client"
+        route.startsWith("case/") || route.startsWith("caseEdit") -> "Cases"
+        route == "caseNew" -> "New case"
+        route.startsWith("engagement/") || route.startsWith("engagementEdit") -> "Engagements"
+        route == "engagementNew" -> "New engagement"
+        route == "b4fdesk" -> "Runbooks & Sign-off"
+        route.startsWith("job/") || route.startsWith("jobEdit") -> "Schedule"
+        route == "jobNew" -> "New job"
+        route == "search" -> "Search"
         route == "mail" -> "Mail"
         route == "settings" -> "Settings"
         route == "admin" -> "Admin"
@@ -229,6 +237,12 @@ private fun AppShell(viewModel: AppViewModel) {
                         )
                     }
                     Spacer(Modifier.height(8.dp))
+                    NavigationDrawerItem(
+                        label = { Text("Search") },
+                        selected = currentKey == "search",
+                        onClick = { go("search") },
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
                     MirrorNav.visibleGroups(role, flags, taxOnly).forEach { group ->
                         Text(
                             group.label,
@@ -283,6 +297,12 @@ private fun AppShell(viewModel: AppViewModel) {
                         }
                     },
                     actions = {
+                        IconButton(onClick = { go("search") }) {
+                            Icon(
+                                androidx.compose.material.icons.Icons.Filled.Search,
+                                contentDescription = "Search",
+                            )
+                        }
                         IconButton(onClick = { go("settings") }) {
                             Icon(Icons.Filled.Settings, contentDescription = "Settings")
                         }
@@ -334,7 +354,77 @@ private fun AppShell(viewModel: AppViewModel) {
                             entry.arguments?.getInt("id"),
                         )
                     }
-                    composable("schedule") { ScheduleScreen(viewModel) }
+                    composable("cases") { CasesScreen(viewModel, nav) }
+                    composable(
+                        "case/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        CaseProfileScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
+                    composable("caseNew") { CaseFormScreen(viewModel, nav, null) }
+                    composable(
+                        "caseEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        CaseFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"),
+                        )
+                    }
+                    composable("schedule") { ScheduleScreen(viewModel, nav) }
+                    composable(
+                        "job/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        JobProfileScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
+                    composable("jobNew") { JobFormScreen(viewModel, nav, null, null) }
+                    composable(
+                        "jobNew/{date}",
+                        arguments = listOf(navArgument("date") { type = NavType.StringType }),
+                    ) { entry ->
+                        JobFormScreen(
+                            viewModel, nav, null,
+                            entry.arguments?.getString("date"),
+                        )
+                    }
+                    composable(
+                        "jobEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        JobFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"), null,
+                        )
+                    }
+                    composable("engagements") { EngagementsScreen(viewModel, nav) }
+                    composable(
+                        "engagement/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        EngagementProfileScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
+                    composable("engagementNew") { EngagementFormScreen(viewModel, nav, null) }
+                    composable(
+                        "engagementEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        EngagementFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"),
+                        )
+                    }
+                    composable("b4fdesk") { RunbooksScreen(viewModel, nav) }
+                    composable("search") { SearchScreen(viewModel, nav) }
                     composable("mail") { MailScreen(viewModel) }
                     composable("settings") {
                         SettingsScreen(viewModel, onSignedOut = { go(startRoute) })

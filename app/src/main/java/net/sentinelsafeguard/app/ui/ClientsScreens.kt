@@ -656,7 +656,9 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
                                 )
                             }
                             if (entry.view != null && entry.refId != null) {
-                                TextButton(onClick = { nav.navigate("view/${entry.view}") }) {
+                                TextButton(onClick = {
+                                    nav.navigate(timelineRoute(entry.view!!, entry.refId!!))
+                                }) {
                                     Text("Open")
                                 }
                             }
@@ -671,7 +673,7 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
                             case.title,
                             listOf(case.status, case.priority, case.openedDate)
                                 .filter { it.isNotBlank() }.joinToString(" · "),
-                        ) { nav.navigate("view/cases") }
+                        ) { nav.navigate("case/${case.id}") }
                     }
                 }
                 MirrorCard("Tickets", d.tickets.size) {
@@ -956,4 +958,13 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
             }
         }
     }
+}
+
+/** Timeline Open targets: built record views route to the
+ *  record; anything else keeps its named placeholder route. */
+private fun timelineRoute(view: String, refId: Int): String = when (view) {
+    "cases" -> "case/$refId"
+    "tickets" -> "ticket/$refId"
+    "clients" -> "client/$refId"
+    else -> "view/$view"
 }

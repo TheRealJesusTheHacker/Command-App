@@ -172,6 +172,7 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
                         roster = roster,
                         todayStr = todayStr,
                         onOpen = { nav.navigate("ticket/${it.id}") },
+                        onCase = { cid -> nav.navigate("case/$cid") },
                         onNew = { nav.navigate("ticketNew") },
                     )
                 } else {
@@ -196,6 +197,9 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
                                     todayStr = todayStr,
                                     onOpen = { nav.navigate("ticket/${ticket.id}") },
                                     onStage = { moveStage(ticket, it) },
+                                    onCase = ticket.caseId?.let { cid ->
+                                        { nav.navigate("case/$cid") }
+                                    },
                                 )
                             }
                         }
@@ -214,6 +218,7 @@ private fun TicketCard(
     todayStr: String,
     onOpen: () -> Unit,
     onStage: (String) -> Unit,
+    onCase: (() -> Unit)? = null,
 ) {
     androidx.compose.material3.Card(
         colors = androidx.compose.material3.CardDefaults.cardColors(
@@ -251,11 +256,24 @@ private fun TicketCard(
             if (ticket.category.isNotBlank()) {
                 Text(ticket.category, style = MaterialTheme.typography.bodyMedium)
             }
-            Text(
-                ticket.caseId?.let { "Case #$it" } ?: "No case",
-                color = SentinelMuted,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            if (ticket.caseId != null && onCase != null) {
+                TextButton(onClick = onCase) {
+                    Text(
+                        "Case #${ticket.caseId}" +
+                            (ticket.caseTitle?.takeIf { it.isNotBlank() }
+                                ?.let { " \u00b7 $it" } ?: ""),
+                    )
+                }
+            } else {
+                Text(
+                    ticket.caseId?.let { cid ->
+                        "Case #$cid" + (ticket.caseTitle?.takeIf { it.isNotBlank() }
+                            ?.let { " \u00b7 $it" } ?: "")
+                    } ?: "No case",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             Text(
                 "Assignee ${assigneeName(ticket, roster)}",
                 color = SentinelMuted,
@@ -285,6 +303,7 @@ private fun TicketDirectory(
     roster: List<User>,
     todayStr: String,
     onOpen: (Ticket) -> Unit,
+    onCase: (Int) -> Unit,
     onNew: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -430,6 +449,9 @@ private fun TicketDirectory(
                     roster = roster,
                     todayStr = todayStr,
                     onOpen = { onOpen(ticket) },
+                    onCase = ticket.caseId?.let { cid ->
+                        { onCase(cid) }
+                    },
                     onStage = { stageName ->
                         scope.launch {
                             try {
@@ -699,11 +721,15 @@ fun TicketProfileScreen(viewModel: AppViewModel, nav: NavController, ticketId: I
                         DetailLine("Status", linked.status)
                         DetailLine("Priority", linked.priority)
                         Spacer(Modifier.height(8.dp))
-                        Button(onClick = { nav.navigate("view/cases") }) {
+                        Button(onClick = { nav.navigate("case/${linked.id}") }) {
                             Text("Open case profile")
                         }
                     }
                 }
+
+                TicketRunbookPanel(viewModel, t.id)
+
+                TicketSignOffCard(viewModel, t.id, t.clientId)
 
                 MirrorCard("Ticket activity", d.activity.size) {
                     if (d.activity.isEmpty()) {

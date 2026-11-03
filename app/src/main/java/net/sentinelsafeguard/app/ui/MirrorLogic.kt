@@ -1,6 +1,8 @@
 package net.sentinelsafeguard.app.ui
 
+import net.sentinelsafeguard.app.data.api.CaseItem
 import net.sentinelsafeguard.app.data.api.Client
+import net.sentinelsafeguard.app.data.api.Job
 import net.sentinelsafeguard.app.data.api.Ticket
 import java.text.NumberFormat
 import java.util.Locale
@@ -149,6 +151,104 @@ object MirrorVocab {
         if (adOnly) out["adMaterial"] = "1"
         out["sort"] = sort
         return out
+    }
+
+
+    // ---- Phase 2 (hunt6) ----
+
+    /** Job statuses (web JOB_STATUSES, shared with Cases' stage
+     *  vocabulary family — cases reuse TICKET_STAGES verbatim). */
+    val JOB_STATUSES = listOf("Scheduled", "In Progress", "Done", "Cancelled")
+
+    val ENGAGEMENT_STATUSES = listOf("Planned", "Active", "On Hold", "Complete", "Cancelled")
+
+    /** Case board columns: canonical stages + legacy extras,
+     *  exactly the ticket board rule (CASE_STAGES == TICKET_STAGES). */
+    fun caseBoardStages(cases: List<CaseItem>): List<String> {
+        val present = cases.map { it.status }.distinct()
+        val legacy = present.filter { it !in TICKET_STAGES }.sorted()
+        return TICKET_STAGES + legacy
+    }
+
+    /** Web board sort for cases: priority down, due up, newest. */
+    fun sortCaseBoardCards(cases: List<CaseItem>): List<CaseItem> =
+        cases.sortedWith(
+            compareByDescending<CaseItem> { priorityRank(it.priority) }
+                .thenBy { it.dueDate?.takeIf { d -> d.isNotBlank() } ?: "9999-12-31" }
+                .thenByDescending { it.createdAt }
+        )
+
+    fun groupCaseBoard(cases: List<CaseItem>): List<Pair<String, List<CaseItem>>> =
+        caseBoardStages(cases).map { stage ->
+            stage to sortCaseBoardCards(cases.filter { it.status == stage })
+        }
+
+    /** The B3-style query-parameter mapping for the case directory
+     *  (same vocabulary as the ticket directory, minus No case). */
+    fun caseDirectoryParams(
+        q: String,
+        stage: String?,
+        priority: String?,
+        overdueOnly: Boolean,
+        unassignedOnly: Boolean,
+        adOnly: Boolean,
+        sortLabel: String,
+    ): Map<String, String> {
+        val sort = when (sortLabel) {
+            "Priority high → low" -> "priority"
+            "Due soonest" -> "due"
+            "Stage order" -> "stage"
+            else -> "id_desc"
+        }
+        val out = linkedMapOf<String, String>()
+        if (q.isNotBlank()) out["q"] = q
+        if (stage != null) out["status"] = stage
+        if (priority != null) out["priority"] = priority
+        if (overdueOnly) out["overdue"] = "1"
+        if (unassignedOnly) out["unassigned"] = "1"
+        if (adOnly) out["adMaterial"] = "1"
+        out["sort"] = sort
+        return out
+    }
+
+    val CASE_SORTS = TICKET_SORTS
+
+    /** Global search groups in web's order, with web's labels. */
+    val SEARCH_GROUPS: List<Pair<String, String>> = listOf(
+        "clients" to "Clients",
+        "cases" to "Cases",
+        "tickets" to "Tickets",
+        "assets" to "Assets",
+        "invoices" to "Invoices",
+        "quotes" to "Quotes",
+        "engagements" to "Engagements",
+        "knowledge" to "Knowledge",
+        "law" to "Law",
+        "attachments" to "Attachments",
+    )
+
+    /** Jobs in a window grouped by work date, dates ascending —
+     *  the Agenda / Week composition. */
+    fun groupJobsByDate(jobs: List<Job>): List<Pair<String, List<Job>>> =
+        jobs.groupBy { it.workDate }
+            .entries.sortedBy { it.key }
+            .map { it.key to it.value.sortedWith(
+                compareBy<Job> { if (it.allDay) "" else it.startTime }.thenBy { it.title.lowercase() }
+            ) }
+
+    /** The 42-day month grid window (web Month mode): the Sunday
+     *  on/before the 1st through 42 days. Dates are yyyy-MM-dd. */
+    fun monthWindow(anyDay: String): Pair<String, String> {
+        val first = java.time.LocalDate.parse(anyDay).withDayOfMonth(1)
+        val start = first.minusDays((first.dayOfWeek.value % 7).toLong())
+        return start.toString() to start.plusDays(41).toString()
+    }
+
+    /** The week window (Sunday..Saturday) containing [day]. */
+    fun weekWindow(day: String): Pair<String, String> {
+        val d = java.time.LocalDate.parse(day)
+        val start = d.minusDays((d.dayOfWeek.value % 7).toLong())
+        return start.toString() to start.plusDays(6).toString()
     }
 
     val TICKET_SORTS = listOf("Newest", "Priority high → low", "Due soonest", "Stage order")
