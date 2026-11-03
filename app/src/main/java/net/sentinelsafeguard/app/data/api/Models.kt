@@ -106,6 +106,17 @@ data class MeResponse(
     val user: User,
     val serverTime: Long = 0,
     val device: DeviceInfo? = null,
+    // B0 (hunt5): the boot access-flag set, mirroring the web
+    // workspace payload so the mirrored shell gates exactly
+    // like web Command.
+    val lawAccess: Boolean = false,
+    val newsAccess: Boolean = false,
+    val osintAccess: Boolean = false,
+    val breachAccess: Boolean = false,
+    val threatAccess: Boolean = false,
+    val reviewsAccess: Boolean = false,
+    val taxAccess: Boolean = false,
+    val taxOnly: Boolean = false,
 )
 
 // ---- Clients, cases, tickets (pub_client / pub_case / pub_ticket) ----
@@ -141,6 +152,9 @@ data class Client(
     // Added by the app-surface builders (list / detail / Today).
     val tier: String = "",
     val familyLinked: Boolean = false,
+    /** Friends tier (migration 0143, live in production): 20% off;
+     *  Family-linked records are never charged and take precedence. */
+    val friends: Boolean = false,
 )
 
 /** pub_case — also the shape of Today's overdue-case rows. */
@@ -253,6 +267,11 @@ data class TodayResponse(
     val dueThisWeek: DueThisWeek = DueThisWeek(),
     val websiteTickets: Section<Ticket> = Section(),
     val briefing: String = "",
+    // hunt5 mirror: the sections the hunt-era screen dropped.
+    val assetsFlagged: Section<AssetItem> = Section(),
+    val assetRenewals: AssetRenewals = AssetRenewals(),
+    val planRenewals: PlanRenewals = PlanRenewals(),
+    val platformDigest: PlatformDigest? = null,
 )
 
 // ---- Tickets API ----
@@ -292,6 +311,7 @@ data class TicketPatchRequest(
     val status: String? = null,
     val priority: String? = null,
     val assignedUserId: Int? = null,
+    val adMaterial: Boolean? = null,
     /** UI-level only: SentinelApi resolves this to the signed-in
      *  account's id and sends assignedUserId. Never on the wire. */
     val assignToMe: Boolean? = null,
@@ -325,31 +345,32 @@ data class ClientListResponse(
     val clients: List<Client> = emptyList(),
 )
 
-/** GET /clients/{id}: the profile envelope. The app renders the
- *  client record; the cases/tickets/assets/invoices/forms and
- *  register sections in the same body are not modeled (unknown
- *  keys, ignored by the parser). */
+/** GET /clients/{id}: the profile envelope (web getclientprofile
+ *  verbatim). hunt5 renders the client record plus the linked
+ *  registers, contacts/notification prefs, and verifications;
+ *  the remaining register sections (roadmap/risks/breach/
+ *  compliance/security score/site profiles) stay unparsed —
+ *  they are Phase 3 surfaces. */
 @Serializable
 data class ClientDetailResponse(
     val ok: Boolean = true,
     val client: Client,
-)
-
-@Serializable
-data class PipelineCard(
-    val id: Int,
-    val legalName: String = "",
-    val stage: String = "",
-    val value: Double? = null,
-    val nextFollowUp: String? = null,
-    val tier: String = "",
+    val cases: List<CaseItem> = emptyList(),
+    val tickets: List<Ticket> = emptyList(),
+    val assets: List<AssetItem> = emptyList(),
+    val invoices: List<InvoiceLite> = emptyList(),
+    val forms: List<FormLite> = emptyList(),
+    val verifications: List<Verification> = emptyList(),
+    val contacts: List<ClientContact> = emptyList(),
+    val notificationPrefs: NotificationPrefs? = null,
 )
 
 @Serializable
 data class PipelineStage(
     val stage: String,
     val count: Int = 0,
-    val clients: List<PipelineCard> = emptyList(),
+    /** B7 (hunt5): full pub_client cards (+ familyLinked/friends/tier). */
+    val clients: List<Client> = emptyList(),
 )
 
 @Serializable
@@ -439,4 +460,332 @@ data class VersionResponse(
     val sha256: String? = null,
     val downloadPath: String? = null,
     val message: String? = null,
+)
+
+// ---- hunt5: assets (Today cards + client linked grid) ----
+
+@Serializable
+data class AssetFlag(
+    val field: String = "",
+    val date: String = "",
+    val state: String = "",
+)
+
+@Serializable
+data class AssetRenewal(
+    val field: String = "",
+    val date: String = "",
+    val daysLeft: Int = 0,
+    val bucket: String = "",
+    val state: String = "",
+)
+
+/** pub_asset as Today's flagged/renewal sections carry it. */
+@Serializable
+data class AssetItem(
+    val id: Int,
+    val clientId: Int? = null,
+    val assignedUserId: Int? = null,
+    val name: String = "",
+    val type: String = "",
+    val identifier: String? = null,
+    val reviewDueDate: String? = null,
+    val scope: String = "",
+    val status: String = "",
+    val warrantyUntil: String? = null,
+    val warrantyExpires: String? = null,
+    val supportExpires: String? = null,
+    val notes: String = "",
+    val archivedAt: Long? = null,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+    val flags: List<AssetFlag> = emptyList(),
+    val renewals: List<AssetRenewal> = emptyList(),
+    val earliest: AssetRenewal? = null,
+)
+
+@Serializable
+data class RenewalBucket(
+    val total: Int = 0,
+    val items: List<AssetItem> = emptyList(),
+)
+
+@Serializable
+data class AssetRenewals(
+    val total: Int = 0,
+    val within30: RenewalBucket = RenewalBucket(),
+    val within60: RenewalBucket = RenewalBucket(),
+    val within90: RenewalBucket = RenewalBucket(),
+    val items: List<AssetItem> = emptyList(),
+)
+
+@Serializable
+data class PlanRenewals(
+    val total: Int = 0,
+    val items: List<kotlinx.serialization.json.JsonObject> = emptyList(),
+)
+
+/** The platform digest block when the today payload carries one. */
+@Serializable
+data class PlatformDigest(
+    val day: String = "",
+    val title: String = "",
+    val lines: List<String> = emptyList(),
+    val emailed: Boolean? = null,
+    val demo: Boolean = false,
+)
+
+// ---- hunt5: client profile linked registers ----
+
+@Serializable
+data class InvoiceLite(
+    val id: Int,
+    val invoiceNumber: String = "",
+    val clientId: Int? = null,
+    val status: String = "",
+    val issueDate: String = "",
+    val dueDate: String = "",
+    val totalCents: Long = 0,
+    val overdue: Boolean = false,
+)
+
+@Serializable
+data class FormLite(
+    val id: Int,
+    val clientId: Int? = null,
+    val type: String = "",
+    val title: String = "",
+    val createdAt: Long = 0,
+)
+
+@Serializable
+data class Verification(
+    val id: Int? = null,
+    val category: String = "",
+    val status: String = "",
+    val issuedDate: String? = null,
+    val expiresDate: String? = null,
+    val notes: String = "",
+)
+
+@Serializable
+data class ClientContact(
+    val id: Int? = null,
+    val name: String = "",
+    val title: String = "",
+    val email: String = "",
+    val phone: String = "",
+    val role: String = "",
+)
+
+@Serializable
+data class NotificationPrefs(
+    val ticketUpdates: Boolean = false,
+    val invoiceEvents: Boolean = false,
+    val monitoringAlerts: Boolean = false,
+    val digest: Boolean = false,
+)
+
+// ---- hunt5: dashboard (B1, web getdashboard semantics) ----
+
+@Serializable
+data class DashPriorityCount(val priority: String = "", val count: Int = 0)
+
+@Serializable
+data class DashStatusCount(val status: String = "", val count: Int = 0)
+
+@Serializable
+data class DashTickets(
+    val openTotal: Int = 0,
+    val byPriority: List<DashPriorityCount> = emptyList(),
+    val byStatus: List<DashStatusCount> = emptyList(),
+    val unassigned: Int = 0,
+)
+
+@Serializable
+data class DashCases(
+    val total: Int = 0,
+    val byStage: List<DashStatusCount> = emptyList(),
+    val overdue: Int = 0,
+    val unassigned: Int = 0,
+)
+
+@Serializable
+data class DashStageValue(
+    val stage: String = "",
+    val count: Int = 0,
+    val valueCents: Long = 0,
+    val valuedCount: Int = 0,
+)
+
+@Serializable
+data class DashClients(
+    val total: Int = 0,
+    val byTier: Map<String, Int> = emptyMap(),
+    val byStage: List<DashStageValue> = emptyList(),
+    val pipelineValueCents: Long = 0,
+)
+
+@Serializable
+data class DashInvoices(
+    val count: Int = 0,
+    val outstanding: MoneyBucket = MoneyBucket(),
+    val overdue: MoneyBucket = MoneyBucket(),
+    val draftCount: Int = 0,
+    val paidTotalCents: Long = 0,
+)
+
+@Serializable
+data class DashAssets(
+    val total: Int = 0,
+    val byStatus: List<DashStatusCount> = emptyList(),
+    val byScope: Map<String, Int> = emptyMap(),
+)
+
+@Serializable
+data class DashTeamMember(
+    val id: Int = 0,
+    val displayName: String = "",
+    val role: String = "",
+    val sessions: Int = 0,
+    val lastExpiresAt: Long = 0,
+)
+
+@Serializable
+data class DashPresence(
+    val activeSessionCount: Int = 0,
+    val team: List<DashTeamMember> = emptyList(),
+)
+
+@Serializable
+data class DashAttention(val kind: String = "", val count: Int = 0)
+
+@Serializable
+data class DashCanWrite(
+    val clients: Boolean = false,
+    val cases: Boolean = false,
+    val tickets: Boolean = false,
+    val invoices: Boolean = false,
+)
+
+/** GET /api/app/dashboard. Module blocks are present only when
+ *  the role can read the module (web getdashboard scoping). */
+@Serializable
+data class DashboardResponse(
+    val ok: Boolean = true,
+    val today: String = "",
+    val tickets: DashTickets? = null,
+    val cases: DashCases? = null,
+    val clients: DashClients? = null,
+    val invoices: DashInvoices? = null,
+    val assets: DashAssets? = null,
+    val presence: DashPresence? = null,
+    val attention: List<DashAttention> = emptyList(),
+    val recentActivity: List<ActivityItem> = emptyList(),
+    val canWrite: DashCanWrite = DashCanWrite(),
+)
+
+// ---- hunt5: roster (B2), portal thread (B6), timeline (B8), writes ----
+
+@Serializable
+data class RosterResponse(
+    val ok: Boolean = true,
+    val users: List<User> = emptyList(),
+)
+
+@Serializable
+data class PortalMessage(
+    val id: Int,
+    val ticketId: Int = 0,
+    val clientId: Int? = null,
+    val senderKind: String = "",
+    val senderUserId: Int? = null,
+    val senderName: String = "",
+    val body: String = "",
+    val createdAt: Long = 0,
+    val readByStaffAt: Long? = null,
+    val readByClientAt: Long? = null,
+)
+
+@Serializable
+data class PortalMessagesResponse(
+    val ok: Boolean = true,
+    val ticketId: Int = 0,
+    val clientId: Int? = null,
+    val messages: List<PortalMessage> = emptyList(),
+    val unreadForStaff: Int = 0,
+    val unreadForClient: Int = 0,
+)
+
+@Serializable
+data class PortalMessagePostRequest(val body: String)
+
+@Serializable
+data class PortalMessagePostResponse(
+    val ok: Boolean = true,
+    val id: Int? = null,
+    val message: PortalMessage? = null,
+)
+
+@Serializable
+data class TimelineEntry(
+    val type: String = "",
+    val at: Long = 0,
+    val date: String = "",
+    val title: String = "",
+    val detail: String = "",
+    val view: String? = null,
+    val refId: Int? = null,
+)
+
+@Serializable
+data class ClientTimelineResponse(
+    val ok: Boolean = true,
+    val clientId: Int = 0,
+    val timeline: List<TimelineEntry> = emptyList(),
+    val total: Int = 0,
+    val truncated: Boolean = false,
+)
+
+/** Create / patch / archive / follow-up responses carry the record. */
+@Serializable
+data class ClientWriteResponse(
+    val ok: Boolean = true,
+    val id: Int? = null,
+    val message: String? = null,
+    val client: Client,
+)
+
+@Serializable
+data class ClientStageResponse(
+    val ok: Boolean = true,
+    val stage: String = "",
+    val client: Client,
+)
+
+/** The full web saveclient field set (B7). PATCH seeds from the
+ *  stored record server-side, so the form's full state is safe. */
+@Serializable
+data class ClientWriteRequest(
+    val legalName: String,
+    val dba: String = "",
+    val type: String = "",
+    val status: String = "",
+    val stage: String = "Lead",
+    val value: Double? = null,
+    val nextFollowUp: String? = null,
+    val source: String = "",
+    val sourceDetail: String = "",
+    val industry: String = "",
+    val contactName: String = "",
+    val contactTitle: String = "",
+    val email: String = "",
+    val phone: String = "",
+    val street: String = "",
+    val city: String = "",
+    val state: String = "",
+    val zip: String = "",
+    val tags: String = "",
+    val friends: Boolean = false,
+    val notes: String = "",
 )

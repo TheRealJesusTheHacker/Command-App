@@ -3,6 +3,9 @@ package net.sentinelsafeguard.app.data.api
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import net.sentinelsafeguard.app.config.ApiConfig
 import net.sentinelsafeguard.app.config.AppConfig
 
@@ -39,6 +42,7 @@ private data class TicketPatchWire(
     val status: String? = null,
     val priority: String? = null,
     val assignedUserId: Int? = null,
+    val adMaterial: Boolean? = null,
 )
 
 /**
@@ -249,6 +253,7 @@ class SentinelApi(
         val wire = TicketPatchWire(
             status = patch.status,
             priority = patch.priority,
+            adMaterial = patch.adMaterial,
             assignedUserId = patch.assignedUserId
                 ?: if (patch.assignToMe == true) myUserId() else null,
         )
@@ -334,6 +339,167 @@ class SentinelApi(
         return response.status
     }
 
+
+    // ---- hunt5 mirror endpoints (B1–B8) ----
+
+    suspend fun dashboard(): DashboardResponse =
+        json.decodeFromString(ensureOk(call("GET", "/api/app/dashboard")).body)
+
+    /** Active accounts for assignee pickers (B2). */
+    suspend fun roster(): List<User> =
+        json.decodeFromString<RosterResponse>(ensureOk(call("GET", "/api/app/roster")).body).users
+
+    /**
+     * The ticket list with the B3 filter/search/sort surface.
+     * Null/blank parameters are omitted; the full filtered set is
+     * paged through completely, never capped.
+     */
+    suspend fun ticketsFiltered(
+        q: String? = null,
+        status: String? = null,
+        priority: String? = null,
+        category: String? = null,
+        clientId: Int? = null,
+        caseId: Int? = null,
+        overdue: Boolean = false,
+        unassigned: Boolean = false,
+        noCase: Boolean = false,
+        adMaterial: Boolean = false,
+        sort: String? = null,
+    ): Page<Ticket> {
+        val params = mutableListOf<String>()
+        if (!q.isNullOrBlank()) params += "q=${urlEncode(q)}"
+        if (!status.isNullOrBlank()) params += "status=${urlEncode(status)}"
+        if (!priority.isNullOrBlank()) params += "priority=${urlEncode(priority)}"
+        if (!category.isNullOrBlank()) params += "category=${urlEncode(category)}"
+        if (clientId != null) params += "clientId=$clientId"
+        if (caseId != null) params += "caseId=$caseId"
+        if (overdue) params += "overdue=1"
+        if (unassigned) params += "unassigned=1"
+        if (noCase) params += "noCase=1"
+        if (adMaterial) params += "adMaterial=1"
+        if (!sort.isNullOrBlank()) params += "sort=${urlEncode(sort)}"
+        return fetchAllPages(
+            "/api/app/tickets", params,
+            decode = { json.decodeFromString<TicketListResponse>(it) },
+            itemsOf = { it.tickets },
+            totalOf = { it.total },
+        )
+    }
+
+    /** The full profile envelope: ticket + client + case + activity. */
+    suspend fun ticketDetail(id: Int): TicketDetailResponse =
+        json.decodeFromString(ensureOk(call("GET", "/api/app/tickets/$id")).body)
+
+    /**
+     * Full edit (B3): rides the web saveticket path server-side;
+     * a status in the same body then rides setticketstatus, so
+     * the closure follow-up pair and the other web side effects
+     * fire exactly once, server-side. clientId / caseId /
+     * assignedUserId / dueDate are sent as explicit JSON nulls
+     * when cleared — saveticket semantics need the key present.
+     */
+    suspend fun patchTicketFull(id: Int, edit: TicketFullEdit): Ticket {
+        val body = buildJsonObject {
+            put("title", edit.title)
+            put("status", edit.status)
+            put("priority", edit.priority)
+            if (edit.assignedUserId != null) put("assignedUserId", edit.assignedUserId)
+            else put("assignedUserId", JsonNull)
+            put("category", edit.category)
+            if (edit.dueDate != null) put("dueDate", edit.dueDate) else put("dueDate", JsonNull)
+            if (edit.clientId != null) put("clientId", edit.clientId) else put("clientId", JsonNull)
+            if (edit.caseId != null) put("caseId", edit.caseId) else put("caseId", JsonNull)
+            put("adMaterial", edit.adMaterial)
+            put("notes", edit.notes)
+        }
+        return json.decodeFromString<TicketWriteResponse>(
+            ensureOk(call("PATCH", "/api/app/tickets/$id", body.toString())).body
+        ).ticket
+    }
+
+    suspend fun archiveTicket(id: Int): Ticket =
+        json.decodeFromString<TicketWriteResponse>(
+            ensureOk(call("POST", "/api/app/tickets/$id/archive", "{}")).body
+        ).ticket
+
+    suspend fun restoreTicket(id: Int): Ticket =
+        json.decodeFromString<TicketWriteResponse>(
+            ensureOk(call("POST", "/api/app/tickets/$id/restore", "{}")).body
+        ).ticket
+
+    /** B6: Closed + OWNER gate lives server-side (web requestreview). */
+    suspend fun requestReview(id: Int) {
+        ensureOk(call("POST", "/api/app/tickets/$id/request-review", "{}"))
+    }
+
+    suspend fun portalMessages(id: Int): PortalMessagesResponse =
+        json.decodeFromString(ensureOk(call("GET", "/api/app/tickets/$id/portal-messages")).body)
+
+    suspend fun postPortalMessage(id: Int, text: String): PortalMessage? =
+        json.decodeFromString<PortalMessagePostResponse>(
+            ensureOk(
+                call(
+                    "POST", "/api/app/tickets/$id/portal-messages",
+                    json.encodeToString(PortalMessagePostRequest(text)),
+                )
+            ).body
+        ).message
+
+    /** The full profile envelope (linked registers included). */
+    suspend fun clientDetail(id: Int): ClientDetailResponse =
+        json.decodeFromString(ensureOk(call("GET", "/api/app/clients/$id")).body)
+
+    suspend fun createClient(request: ClientWriteRequest): Client =
+        json.decodeFromString<ClientWriteResponse>(
+            ensureOk(call("POST", "/api/app/clients", json.encodeToString(request))).body
+        ).client
+
+    suspend fun patchClient(id: Int, request: ClientWriteRequest): Client =
+        json.decodeFromString<ClientWriteResponse>(
+            ensureOk(call("PATCH", "/api/app/clients/$id", json.encodeToString(request))).body
+        ).client
+
+    /** B7 stage move — web setclientstage semantics + logging. */
+    suspend fun setClientStage(id: Int, stage: String): Client =
+        json.decodeFromString<ClientStageResponse>(
+            ensureOk(
+                call(
+                    "POST", "/api/app/clients/$id/stage",
+                    json.encodeToString(StageRequest(stage)),
+                )
+            ).body
+        ).client
+
+    suspend fun archiveClient(id: Int): Client =
+        json.decodeFromString<ClientWriteResponse>(
+            ensureOk(call("POST", "/api/app/clients/$id/archive", "{}")).body
+        ).client
+
+    suspend fun restoreClient(id: Int): Client =
+        json.decodeFromString<ClientWriteResponse>(
+            ensureOk(call("POST", "/api/app/clients/$id/restore", "{}")).body
+        ).client
+
+    /**
+     * B5 follow-up: [days] snoozes from today (Today's +7 days);
+     * otherwise [nextFollowUp] sets the date, or clears it when null.
+     */
+    suspend fun clientFollowup(id: Int, days: Int? = null, nextFollowUp: String? = null): Client {
+        val body = buildJsonObject {
+            if (days != null) put("days", days)
+            else if (nextFollowUp != null) put("nextFollowUp", nextFollowUp)
+            else put("nextFollowUp", JsonNull)
+        }
+        return json.decodeFromString<ClientWriteResponse>(
+            ensureOk(call("POST", "/api/app/clients/$id/followup", body.toString())).body
+        ).client
+    }
+
+    /** B8: the profile Timeline card. */
+    suspend fun clientTimeline(id: Int): ClientTimelineResponse =
+        json.decodeFromString(ensureOk(call("GET", "/api/app/clients/$id/timeline")).body)
+
     private fun urlEncode(value: String): String =
         java.net.URLEncoder.encode(value, "UTF-8")
 
@@ -354,3 +520,20 @@ class SentinelApi(
         }
     }
 }
+
+/** The full-edit ticket body (B3) — see [SentinelApi.patchTicketFull]. */
+data class TicketFullEdit(
+    val title: String,
+    val status: String,
+    val priority: String,
+    val assignedUserId: Int?,
+    val category: String,
+    val dueDate: String?,
+    val clientId: Int?,
+    val caseId: Int?,
+    val adMaterial: Boolean,
+    val notes: String,
+)
+
+@Serializable
+private data class StageRequest(val stage: String)

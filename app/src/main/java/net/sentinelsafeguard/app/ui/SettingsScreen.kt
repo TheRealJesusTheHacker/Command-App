@@ -44,20 +44,19 @@ import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import net.sentinelsafeguard.app.ui.theme.SentinelOutline
 import net.sentinelsafeguard.app.ui.theme.SentinelSurface
 import net.sentinelsafeguard.app.update.UpdateState
-import net.sentinelsafeguard.app.web.WebDestination
 import java.security.MessageDigest
 
 /**
  * Settings (spec §2.1): fingerprint unlock, quiet hours, notification
  * switches, this-device info, sign out (revokes this device), and the
- * app version + update check. Hunt4 adds the Full Access entries —
- * the complete Command and Webmail in the embedded browser.
+ * app version + update check. App-only by design (spec §2.2):
+ * Command has no equivalent view; hunt5 removed the hunt4
+ * embedded-browser entries — the app IS Command now.
  */
 @Composable
 fun SettingsScreen(
     viewModel: AppViewModel,
     onSignedOut: () -> Unit,
-    onOpenWeb: (WebDestination) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -186,25 +185,6 @@ fun SettingsScreen(
             color = SentinelMuted,
             style = MaterialTheme.typography.bodyMedium,
         )
-
-        SectionHeader("Full Access")
-        Text(
-            "The complete Sentinel Command and the full webmail, inside the app — " +
-                "everything the browser shows. The first time, Cloudflare asks for an " +
-                "email sign-in code; after that it stays signed in on this phone.",
-            color = SentinelMuted,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Spacer(Modifier.height(10.dp))
-        Button(
-            onClick = { onOpenWeb(WebDestination.COMMAND) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Open full Command") }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(
-            onClick = { onOpenWeb(WebDestination.WEBMAIL) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Open full Webmail") }
 
         SectionHeader("Mail")
         Text(

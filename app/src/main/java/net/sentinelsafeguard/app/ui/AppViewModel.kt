@@ -12,6 +12,7 @@ import net.sentinelsafeguard.app.config.AppConfig
 import net.sentinelsafeguard.app.data.SecureStore
 import net.sentinelsafeguard.app.data.SettingsStore
 import net.sentinelsafeguard.app.data.api.LoginResult
+import net.sentinelsafeguard.app.data.api.MeResponse
 import net.sentinelsafeguard.app.data.api.OkHttpTransport
 import net.sentinelsafeguard.app.data.api.SentinelApi
 import net.sentinelsafeguard.app.data.mail.MailService
@@ -38,6 +39,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     var locked by mutableStateOf(false)
+
+    /** The /api/app/me payload (B0 flags ride it) — the mirrored
+     *  shell gates its groups on these flags, exactly like web. */
+    var me by mutableStateOf<MeResponse?>(null)
+        private set
+
+    /** True once a /me attempt has finished either way, so the
+     *  shell can build even if the fetch failed (flags default
+     *  off — fail-closed, like web without the flags). */
+    var meLoaded by mutableStateOf(false)
+        private set
+
+    fun refreshMe() {
+        viewModelScope.launch {
+            try {
+                me = api.me()
+            } catch (e: Exception) {
+                // Flags stay off; the shell still builds.
+            } finally {
+                meLoaded = true
+            }
+        }
+    }
 
     var updateAvailable by mutableStateOf<UpdateState.Available?>(null)
         private set
@@ -153,6 +177,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             api.logout()
             secure.clearAll()
             mail.clearCache()
+            me = null
+            meLoaded = false
             signedIn = false
             mailConnected = false
             locked = false

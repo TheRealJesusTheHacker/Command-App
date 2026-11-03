@@ -2,19 +2,23 @@ package net.sentinelsafeguard.app.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -26,237 +30,930 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 import net.sentinelsafeguard.app.data.api.Client
+import net.sentinelsafeguard.app.data.api.ClientDetailResponse
+import net.sentinelsafeguard.app.data.api.ClientTimelineResponse
+import net.sentinelsafeguard.app.data.api.ClientWriteRequest
 import net.sentinelsafeguard.app.data.api.PipelineResponse
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
-
-private enum class ClientsView { LIST, PIPELINE }
+import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceHigh
 
 /**
- * Clients (spec §2.1): search, profiles with one-tap call / text /
- * email, the follow-ups-due list, and the read-only Pipeline board
- * (moving cards is a later version — the board lives here, inside
- * the Clients area, so the five bottom tabs stay exactly as spec'd).
+ * Clients / Pipeline (mirror spec §3.4): web's shell (header,
+ * subtitle, stat cards, Directory | Pipeline | Duplicates),
+ * server-side phone-book search over the complete set, the
+ * 8-stage pipeline board on the B7 full-card payload, the full
+ * profile (B8 timeline + linked grid), and the full form.
  */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ClientsScreen(viewModel: AppViewModel) {
-    var selectedId by remember { mutableStateOf<Int?>(null) }
-    if (selectedId != null) {
-        ClientProfileScreen(viewModel, selectedId!!) { selectedId = null }
-        return
-    }
-    var view by remember { mutableStateOf(ClientsView.LIST) }
 
+private fun followUpLabel(client: Client, today: String): String? {
+    val due = client.nextFollowUp?.takeIf { it.isNotBlank() } ?: return null
+    return if (due < today) "Follow-up overdue · $due" else "Follow-up $due"
+}
+
+@Composable
+fun ClientsScreen(viewModel: AppViewModel, nav: NavController) {
+    var mode by remember { mutableStateOf("Directory") }
+    val isOwner = viewModel.me?.user?.role == "OWNER"
     Column {
+        MirrorHeader(
+            "Clients",
+            "A working phone book, client profiles, and a live sales pipeline — all in one place.",
+        ) {
+            OutlinedButton(onClick = { nav.navigate("view/verified") }) {
+                Text("Sentinel Verified")
+            }
+            Button(
+                onClick = { nav.navigate("clientNew") },
+                modifier = Modifier.padding(start = 8.dp),
+            ) { Text("+ New client") }
+        }
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            FilterChip(
-                selected = view == ClientsView.LIST,
-                onClick = { view = ClientsView.LIST },
-                label = { Text("Clients") },
-            )
-            FilterChip(
-                selected = view == ClientsView.PIPELINE,
-                onClick = { view = ClientsView.PIPELINE },
-                label = { Text("Pipeline") },
-            )
+            FilterChip(selected = mode == "Directory", onClick = { mode = "Directory" }, label = { Text("Directory") })
+            FilterChip(selected = mode == "Pipeline", onClick = { mode = "Pipeline" }, label = { Text("Pipeline") })
+            if (isOwner) {
+                FilterChip(
+                    selected = mode == "Duplicates",
+                    onClick = { mode = "Duplicates" },
+                    label = { Text("Duplicates") },
+                )
+            }
         }
-        when (view) {
-            ClientsView.LIST -> ClientList(viewModel) { selectedId = it }
-            ClientsView.PIPELINE -> PipelineBoard(viewModel)
+        when (mode) {
+            "Pipeline" -> PipelineBoard(viewModel, nav)
+            "Duplicates" -> PlaceholderScreen("Duplicates", MirrorNav.PHASE3)
+            else -> ClientDirectory(viewModel, nav)
         }
     }
 }
 
 @Composable
-private fun ClientList(viewModel: AppViewModel, onOpen: (Int) -> Unit) {
+private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var query by remember { mutableStateOf("") }
-    var result by remember { mutableStateOf<net.sentinelsafeguard.app.data.api.Page<Client>?>(null) }
+    var all by remember { mutableStateOf<List<Client>?>(null) }
+    var total by remember { mutableStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
+    var sort by remember { mutableStateOf(MirrorVocab.CLIENT_SORTS[0]) }
+    var stage by remember { mutableStateOf<String?>(null) }
+    var tier by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
+    val todayStr = remember { java.time.LocalDate.now().toString() }
 
     LaunchedEffect(query, reloadKey) {
         error = null
         try {
-            result = viewModel.api.clients(query.ifBlank { null })
+            val page = viewModel.api.clients(query.ifBlank { null })
+            all = page.items
+            total = page.total
         } catch (e: Exception) {
             error = plainError(e, "Clients could not be loaded. Check your connection and try again.")
         }
     }
 
-    Column {
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            label = { Text("Search by name, phone, or business") },
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-        )
-        when {
-            error != null -> ErrorBox(error!!) { reloadKey++ }
-            result == null -> SkeletonList()
-            result!!.items.isEmpty() -> EmptyBox(
-                "No clients found",
-                if (query.isBlank()) "No clients are saved yet."
-                else "No client matches \"$query\". Try a different search.",
+    fun reset() {
+        query = ""; sort = MirrorVocab.CLIENT_SORTS[0]; stage = null; tier = null
+    }
+
+    when {
+        error != null -> ErrorBox(error!!) { reloadKey++ }
+        all == null -> SkeletonList(6)
+        else -> {
+            val clients = all!!
+            val filtered = MirrorVocab.sortClients(
+                clients.filter {
+                    (stage == null || it.stage == stage) &&
+                        (tier == null || MirrorVocab.tierOf(it) == tier)
+                },
+                sort,
             )
-            else -> {
-                // The complete set (every page) with the backend's
-                // own total in the header — never a page size.
-                val clients = result!!.items
-                val due = clients.filter { !it.nextFollowUp.isNullOrBlank() }
-                LazyColumn {
-                    if (due.isNotEmpty()) {
-                        item { SectionHeader("Follow-ups due", due.size) }
-                        items(due) { client -> ClientRow(client) { onOpen(client.id) } }
-                    }
-                    item {
-                        SectionHeader(
-                            if (query.isBlank()) "All clients" else "Matching clients",
-                            result!!.total,
+            LazyColumn {
+                item {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                        StatCard("Total clients", total.toString(), Modifier.weight(1f))
+                        StatCard(
+                            "In pipeline",
+                            MirrorVocab.inPipelineCount(clients).toString(),
+                            Modifier.weight(1f),
+                        )
+                        StatCard(
+                            "Active clients",
+                            clients.count { it.stage == "Active Client" }.toString(),
+                            Modifier.weight(1f),
                         )
                     }
-                    items(clients) { client -> ClientRow(client) { onOpen(client.id) } }
-                    item { Spacer(Modifier.height(24.dp)) }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                        StatCard(
+                            "Pipeline value",
+                            MirrorVocab.formatDollars(MirrorVocab.pipelineValue(clients)),
+                            Modifier.weight(1f),
+                        )
+                        StatCard(
+                            "Top sources",
+                            MirrorVocab.topSources(clients)
+                                .joinToString("  ") { "${it.first} · ${it.second}" }
+                                .ifBlank { "—" },
+                            Modifier.weight(2f),
+                        )
+                    }
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("Search the phone book") },
+                        placeholder = { Text("Name, company, email, or phone") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ChoiceMenu("Sort clients", sort, MirrorVocab.CLIENT_SORTS) { sort = it }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { reset() }) { Text("Reset filters") }
+                    }
+                    ChipRow(
+                        options = listOf("all" to "All ${clients.size}") +
+                            MirrorVocab.stageChipCounts(clients)
+                                .map { (s, n) -> s to "$s $n" },
+                        selected = stage ?: "all",
+                        onPick = { stage = it },
+                    )
+                    Text(
+                        "Triage tier",
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp),
+                    )
+                    ChipRow(
+                        options = listOf("all" to "All ${clients.size}") +
+                            MirrorVocab.tierChipCounts(clients)
+                                .map { (t, n) -> t to "${MirrorVocab.TIER_LABELS[t]} $n" },
+                        selected = tier ?: "all",
+                        onPick = { tier = it },
+                    )
                 }
+                when {
+                    clients.isEmpty() && query.isBlank() -> item {
+                        EmptyBox(
+                            "Your phone book is ready",
+                            "No clients yet. Add the first one with + New client.",
+                        )
+                    }
+                    filtered.isEmpty() -> item {
+                        EmptyBox("No matches", "No clients match the current search and filters.")
+                        OutlinedButton(
+                            onClick = { reset() },
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        ) { Text("Reset search & filters") }
+                    }
+                    else -> items(filtered) { client ->
+                        ClientCard(
+                            client = client,
+                            todayStr = todayStr,
+                            onOpen = { nav.navigate("client/${client.id}") },
+                            onEdit = { nav.navigate("clientEdit/${client.id}") },
+                            onCall = {
+                                if (client.phone.isNotBlank()) {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_DIAL, Uri.parse("tel:${client.phone}"))
+                                    )
+                                }
+                            },
+                            onEmail = {
+                                if (client.email.isNotBlank()) {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${client.email}"))
+                                    )
+                                }
+                            },
+                            onArchive = {
+                                scope.launch {
+                                    try {
+                                        viewModel.api.archiveClient(client.id)
+                                        reloadKey++
+                                    } catch (e: Exception) {
+                                        error = plainError(e, "The client could not be archived. Try again.")
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+                item { Spacer(Modifier.height(16.dp)) }
             }
         }
     }
 }
 
-/** The backend's tier token is "tier-a"…"tier-d" (or ""); the
- *  badge shows the letter, the way the web UI presents it. */
-fun tierLabel(tier: String): String? =
-    tier.takeIf { it.isNotBlank() }?.let {
-        "Tier " + it.removePrefix("tier-").removePrefix("Tier-").uppercase()
-    }
-
 @Composable
-private fun ClientRow(client: Client, onClick: () -> Unit) {
-    ItemRow(
-        title = client.legalName,
-        subtitle = listOfNotNull(
-            client.dba.takeIf { it.isNotBlank() },
-            client.phone.takeIf { it.isNotBlank() },
-            client.stage.takeIf { it.isNotBlank() },
-        ).joinToString(" · "),
-        badge = tierLabel(client.tier),
-        onClick = onClick,
-    )
+private fun ClientCard(
+    client: Client,
+    todayStr: String,
+    onOpen: () -> Unit,
+    onEdit: () -> Unit,
+    onCall: (() -> Unit)? = null,
+    onEmail: (() -> Unit)? = null,
+    onArchive: (() -> Unit)? = null,
+) {
+    androidx.compose.material3.Card(
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = net.sentinelsafeguard.app.ui.theme.SentinelSurface
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp, net.sentinelsafeguard.app.ui.theme.SentinelOutline
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(client.legalName, style = MaterialTheme.typography.bodyLarge)
+            if (client.dba.isNotBlank()) {
+                Text(client.dba, color = SentinelMuted)
+            }
+            Row(
+                Modifier.padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                MirrorChip(client.stage)
+                if (client.familyLinked) MirrorChip("Family")
+                else if (client.friends) MirrorChip("Friends — 20% off")
+                MirrorVocab.TIER_LABELS[MirrorVocab.tierOf(client)]?.let { MirrorChip(it) }
+            }
+            if (client.contactName.isNotBlank()) {
+                Text(
+                    listOfNotNull(
+                        client.contactName,
+                        client.contactTitle.takeIf { it.isNotBlank() },
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (client.phone.isNotBlank()) Text("Phone ${client.phone}", color = SentinelMuted)
+            if (client.email.isNotBlank()) Text("Email ${client.email}", color = SentinelMuted)
+            MirrorVocab.formatDollars(client.value).takeIf { it.isNotBlank() }?.let {
+                Text("Value $it")
+            }
+            followUpLabel(client, todayStr)?.let { Text(it, color = SentinelMuted) }
+            client.tags?.takeIf { it.isNotBlank() }?.let {
+                Text(it, color = SentinelMuted, style = MaterialTheme.typography.bodySmall)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (client.phone.isNotBlank() && onCall != null) {
+                    TextButton(onClick = onCall) { Text("Call") }
+                }
+                if (client.email.isNotBlank() && onEmail != null) {
+                    TextButton(onClick = onEmail) { Text("Email") }
+                }
+                TextButton(onClick = onEdit) { Text("Edit") }
+                if (onArchive != null) TextButton(onClick = onArchive) { Text("Archive") }
+                Button(onClick = onOpen) { Text("Open profile") }
+            }
+        }
+    }
 }
 
 @Composable
-fun ClientProfileScreen(viewModel: AppViewModel, clientId: Int, onBack: () -> Unit) {
-    val context = LocalContext.current
-    var client by remember { mutableStateOf<Client?>(null) }
+private fun PipelineBoard(viewModel: AppViewModel, nav: NavController) {
+    val scope = rememberCoroutineScope()
+    var pipeline by remember { mutableStateOf<PipelineResponse?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
+    val todayStr = remember { java.time.LocalDate.now().toString() }
+
+    LaunchedEffect(reloadKey) {
+        error = null
+        try {
+            pipeline = viewModel.api.pipeline()
+        } catch (e: Exception) {
+            error = plainError(e, "The pipeline could not be loaded. Try again.")
+        }
+    }
+
+    fun move(client: Client, stage: String) {
+        scope.launch {
+            try {
+                viewModel.api.setClientStage(client.id, stage)
+                reloadKey++
+            } catch (e: Exception) {
+                error = plainError(e, "That stage move could not be saved. Try again.")
+            }
+        }
+    }
+
+    when {
+        error != null -> ErrorBox(error!!) { reloadKey++ }
+        pipeline == null -> SkeletonList(6)
+        else -> {
+            val stages = pipeline!!.stages
+            LazyColumn {
+                MirrorVocab.CLIENT_STAGES.forEach { stageName ->
+                    val stageData = stages.firstOrNull { it.stage == stageName }
+                    val cards = MirrorVocab.sortPipelineCards(stageData?.clients ?: emptyList())
+                    val sum = cards.sumOf { it.value ?: 0.0 }
+                    item {
+                        SectionHeader(
+                            "$stageName · ${cards.size} client(s) · ${MirrorVocab.formatDollars(sum)}",
+                        )
+                    }
+                    if (cards.isEmpty()) {
+                        item {
+                            Text(
+                                "No clients in this stage",
+                                color = SentinelMuted,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                    items(cards) { client ->
+                        Column {
+                            ClientCard(
+                                client = client,
+                                todayStr = todayStr,
+                                onOpen = { nav.navigate("client/${client.id}") },
+                                onEdit = { nav.navigate("clientEdit/${client.id}") },
+                            )
+                            Row(
+                                Modifier.padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ChoiceMenu("Pipeline stage", client.stage, MirrorVocab.CLIENT_STAGES) {
+                                    move(client, it)
+                                }
+                                Spacer(Modifier.weight(1f))
+                                val stageIdx = MirrorVocab.CLIENT_STAGES.indexOf(client.stage)
+                                TextButton(
+                                    onClick = {
+                                        if (stageIdx > 0) {
+                                            move(client, MirrorVocab.CLIENT_STAGES[stageIdx - 1])
+                                        }
+                                    },
+                                    enabled = stageIdx > 0,
+                                ) { Text("‹") }
+                                TextButton(onClick = { nav.navigate("client/${client.id}") }) {
+                                    Text("Open profile")
+                                }
+                                TextButton(
+                                    onClick = {
+                                        if (stageIdx in 0 until MirrorVocab.CLIENT_STAGES.lastIndex) {
+                                            move(client, MirrorVocab.CLIENT_STAGES[stageIdx + 1])
+                                        }
+                                    },
+                                    enabled = stageIdx in 0 until MirrorVocab.CLIENT_STAGES.lastIndex,
+                                ) { Text("›") }
+                            }
+                        }
+                    }
+                }
+                item { Spacer(Modifier.height(16.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: Int) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var detail by remember { mutableStateOf<ClientDetailResponse?>(null) }
+    var timeline by remember { mutableStateOf<ClientTimelineResponse?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var actionError by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(clientId, reloadKey) {
+        error = null
         try {
-            client = viewModel.api.client(clientId)
+            detail = viewModel.api.clientDetail(clientId)
+            timeline = try {
+                viewModel.api.clientTimeline(clientId)
+            } catch (e: Exception) {
+                null
+            }
         } catch (e: Exception) {
             error = plainError(e, "This client could not be loaded. Go back and try again.")
         }
     }
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        TextButton(onClick = onBack) { Text("‹ Back to clients") }
+        TextButton(onClick = { nav.popBackStack() }) { Text("← Back to directory") }
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
-            client == null -> SkeletonList(3)
+            detail == null -> SkeletonList(4)
             else -> {
-                val c = client!!
+                val d = detail!!
+                val c = d.client
                 Column(Modifier.padding(horizontal = 16.dp)) {
-                    Text(c.legalName, style = MaterialTheme.typography.titleLarge)
-                    DetailLine("Business", c.dba)
-                    DetailLine("Phone", c.phone)
-                    DetailLine("Email", c.email)
-                    DetailLine("Tier", tierLabel(c.tier))
-                    DetailLine("Tags", c.tags)
-                    DetailLine("Stage", c.stage)
-                    DetailLine("Next follow-up", c.nextFollowUp)
-                    DetailLine("Notes", c.notes)
-
-                    Spacer(Modifier.height(20.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(48.dp)
+                                .background(SentinelSurfaceHigh, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                c.legalName.split(" ").mapNotNull { it.firstOrNull() }
+                                    .take(2).joinToString(""),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                        Column(Modifier.padding(start = 12.dp)) {
+                            Text(c.legalName, style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                listOfNotNull(
+                                    c.dba.takeIf { it.isNotBlank() },
+                                    c.contactName.takeIf { it.isNotBlank() } ?: "No contact named",
+                                ).joinToString(" · "),
+                                color = SentinelMuted,
+                            )
+                        }
+                    }
+                    Row(
+                        Modifier.padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        MirrorChip(c.stage)
+                        if (c.familyLinked) MirrorChip("Family")
+                        else if (c.friends) MirrorChip("Friends — 20% off")
+                        MirrorVocab.TIER_LABELS[MirrorVocab.tierOf(c)]?.let { MirrorChip(it) }
+                    }
+                    c.tags?.takeIf { it.isNotBlank() }?.let {
+                        Text(it, color = SentinelMuted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (actionError != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(actionError!!, color = MaterialTheme.colorScheme.error)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ChoiceMenu("Pipeline stage", c.stage, MirrorVocab.CLIENT_STAGES) { picked ->
+                            scope.launch {
+                                try {
+                                    viewModel.api.setClientStage(c.id, picked)
+                                    reloadKey++
+                                } catch (e: Exception) {
+                                    actionError = plainError(e, "That stage move could not be saved. Try again.")
+                                }
+                            }
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (!c.phone.isNullOrBlank()) {
+                        Button(onClick = { nav.navigate("clientEdit/${c.id}") }) { Text("Edit client") }
+                        OutlinedButton(onClick = {
+                            scope.launch {
+                                try {
+                                    viewModel.api.archiveClient(c.id)
+                                    nav.popBackStack()
+                                } catch (e: Exception) {
+                                    actionError = plainError(e, "The client could not be archived. Try again.")
+                                }
+                            }
+                        }) { Text("Archive") }
+                    }
+                }
+
+                MirrorCard("Contact") {
+                    DetailLine("Contact", c.contactName)
+                    DetailLine("Title", c.contactTitle)
+                    DetailLine("Email", c.email)
+                    DetailLine("Phone", c.phone)
+                    DetailLine(
+                        "Address",
+                        listOf(c.street, c.city, c.state, c.zip)
+                            .filter { it.isNotBlank() }.joinToString(", ").ifBlank { null },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (c.phone.isNotBlank()) {
                             Button(onClick = {
                                 context.startActivity(
                                     Intent(Intent.ACTION_DIAL, Uri.parse("tel:${c.phone}"))
                                 )
-                            }) { Text("Call") }
-                            OutlinedButton(onClick = {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${c.phone}"))
-                                )
-                            }) { Text("Text") }
+                            }) { Text("Call client") }
                         }
-                        if (!c.email.isNullOrBlank()) {
-                            OutlinedButton(onClick = {
+                        if (c.email.isNotBlank()) {
+                            Button(onClick = {
                                 context.startActivity(
                                     Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${c.email}"))
                                 )
-                            }) { Text("Email") }
+                            }) { Text("Email client") }
                         }
                     }
-                    Spacer(Modifier.height(32.dp))
+                    Text(
+                        "Permanent deletion is owner-only via Archive → Archive view.",
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
+
+                MirrorCard("Client details") {
+                    DetailLine("Legal name", c.legalName)
+                    DetailLine("DBA / company", c.dba)
+                    DetailLine("Type", c.type)
+                    DetailLine("Relationship status", c.status)
+                    DetailLine("Pipeline stage", c.stage)
+                    DetailLine("Industry", c.industry)
+                    DetailLine(
+                        "Pipeline / contract value",
+                        MirrorVocab.formatDollars(c.value).ifBlank { null },
+                    )
+                    DetailLine("Next follow-up", c.nextFollowUp)
+                    DetailLine(
+                        "Source",
+                        when {
+                            c.source.isBlank() && c.sourceDetail.isBlank() -> "Not recorded"
+                            c.sourceDetail.isNotBlank() -> "${c.source} — ${c.sourceDetail}"
+                            else -> c.source
+                        },
+                    )
+                    DetailLine("Tags", c.tags)
+                    DetailLine("Created", if (c.createdAt > 0) formatEpochMs(c.createdAt) else null)
+                    DetailLine("Last updated", if (c.updatedAt > 0) formatEpochMs(c.updatedAt) else null)
+                    DetailLine("Notes", c.notes)
+                }
+
+                MirrorCard("Contacts & notifications") {
+                    if (d.contacts.isEmpty()) {
+                        Text("No additional contacts on file.", color = SentinelMuted)
+                    }
+                    d.contacts.forEach { contact ->
+                        Text(
+                            listOfNotNull(
+                                contact.name.takeIf { it.isNotBlank() },
+                                contact.title.takeIf { it.isNotBlank() },
+                                contact.email.takeIf { it.isNotBlank() },
+                                contact.phone.takeIf { it.isNotBlank() },
+                            ).joinToString(" · "),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(vertical = 2.dp),
+                        )
+                    }
+                    d.notificationPrefs?.let { prefs ->
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Ticket updates ${if (prefs.ticketUpdates) "on" else "off"} · " +
+                                "Invoice events ${if (prefs.invoiceEvents) "on" else "off"} · " +
+                                "Monitoring alerts ${if (prefs.monitoringAlerts) "on" else "off"} · " +
+                                "Digest ${if (prefs.digest) "on" else "off"}",
+                            color = SentinelMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+
+                MirrorCard("Sentinel Verified", d.verifications.size) {
+                    if (d.verifications.isEmpty()) {
+                        Text("No verifications issued yet.", color = SentinelMuted)
+                    }
+                    d.verifications.forEach { v ->
+                        Text(
+                            listOfNotNull(
+                                v.category.takeIf { it.isNotBlank() },
+                                v.status.takeIf { it.isNotBlank() },
+                                v.issuedDate?.takeIf { it.isNotBlank() },
+                            ).joinToString(" · "),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(vertical = 2.dp),
+                        )
+                    }
+                }
+
+                MirrorCard("Timeline", timeline?.total) {
+                    val entries = timeline?.timeline ?: emptyList()
+                    if (entries.isEmpty()) {
+                        Text("No timeline entries yet.", color = SentinelMuted)
+                    }
+                    entries.forEach { entry ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(entry.title, style = MaterialTheme.typography.bodyMedium)
+                                if (entry.detail.isNotBlank()) {
+                                    Text(entry.detail, color = SentinelMuted)
+                                }
+                                Text(
+                                    if (entry.at > 0) formatEpochMs(entry.at) else entry.date,
+                                    color = SentinelMuted,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            if (entry.view != null && entry.refId != null) {
+                                TextButton(onClick = { nav.navigate("view/${entry.view}") }) {
+                                    Text("Open")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                MirrorCard("Cases", d.cases.size) {
+                    if (d.cases.isEmpty()) Text("No cases.", color = SentinelMuted)
+                    d.cases.forEach { case ->
+                        ItemRow(
+                            case.title,
+                            listOf(case.status, case.priority, case.openedDate)
+                                .filter { it.isNotBlank() }.joinToString(" · "),
+                        ) { nav.navigate("view/cases") }
+                    }
+                }
+                MirrorCard("Tickets", d.tickets.size) {
+                    if (d.tickets.isEmpty()) Text("No tickets.", color = SentinelMuted)
+                    d.tickets.forEach { ticket ->
+                        ItemRow(
+                            ticket.title,
+                            listOf(ticket.status, ticket.priority)
+                                .filter { it.isNotBlank() }.joinToString(" · "),
+                        ) { nav.navigate("ticket/${ticket.id}") }
+                    }
+                }
+                MirrorCard("Assets", d.assets.size) {
+                    if (d.assets.isEmpty()) Text("No assets.", color = SentinelMuted)
+                    d.assets.forEach { asset ->
+                        ItemRow(
+                            asset.name,
+                            listOfNotNull(
+                                asset.type.takeIf { it.isNotBlank() },
+                                asset.identifier?.takeIf { it.isNotBlank() },
+                                asset.reviewDueDate?.takeIf { it.isNotBlank() }
+                                    ?.let { "Review $it" },
+                            ).joinToString(" · "),
+                        ) { nav.navigate("view/assets") }
+                    }
+                }
+                MirrorCard("Invoices", d.invoices.size) {
+                    if (d.invoices.isEmpty()) Text("No invoices.", color = SentinelMuted)
+                    d.invoices.forEach { invoice ->
+                        ItemRow(
+                            invoice.invoiceNumber.ifBlank { "Invoice #${invoice.id}" },
+                            listOfNotNull(
+                                invoice.status.takeIf { it.isNotBlank() },
+                                if (invoice.overdue) "OVERDUE" else null,
+                                MirrorVocab.formatCents(invoice.totalCents),
+                                invoice.dueDate.takeIf { it.isNotBlank() }?.let { "Due $it" },
+                            ).joinToString(" · "),
+                        ) { nav.navigate("view/invoices") }
+                    }
+                }
+                MirrorCard("Forms", d.forms.size) {
+                    if (d.forms.isEmpty()) Text("No forms.", color = SentinelMuted)
+                    d.forms.forEach { form ->
+                        ItemRow(
+                            form.title,
+                            listOfNotNull(
+                                form.type.takeIf { it.isNotBlank() },
+                                if (form.createdAt > 0) formatEpochMs(form.createdAt) else null,
+                            ).joinToString(" · "),
+                        ) { nav.navigate("view/forms") }
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
             }
         }
     }
 }
 
-/** Read-only board (spec §2.1): stage columns with counts + names. */
 @Composable
-private fun PipelineBoard(viewModel: AppViewModel) {
-    var board by remember { mutableStateOf<PipelineResponse?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var reloadKey by remember { mutableStateOf(0) }
+fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?) {
+    val scope = rememberCoroutineScope()
+    var loaded by remember { mutableStateOf(false) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var legalName by remember { mutableStateOf("") }
+    var dba by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf("Corporate") }
+    var status by remember { mutableStateOf("Prospect") }
+    var stage by remember { mutableStateOf("Lead") }
+    var valueText by remember { mutableStateOf("") }
+    var nextFollowUp by remember { mutableStateOf("") }
+    var source by remember { mutableStateOf("") }
+    var sourceDetail by remember { mutableStateOf("") }
+    var industry by remember { mutableStateOf("") }
+    var contactName by remember { mutableStateOf("") }
+    var contactTitle by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var street by remember { mutableStateOf("") }
+    var city by remember { mutableStateOf("") }
+    var state by remember { mutableStateOf("") }
+    var zip by remember { mutableStateOf("") }
+    var tags by remember { mutableStateOf("") }
+    var friends by remember { mutableStateOf(false) }
+    var notes by remember { mutableStateOf("") }
+    var nameError by remember { mutableStateOf<String?>(null) }
+    var saveError by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
 
-    LaunchedEffect(reloadKey) {
-        error = null
+    LaunchedEffect(clientId) {
+        if (clientId == null) {
+            loaded = true
+            return@LaunchedEffect
+        }
         try {
-            board = viewModel.api.pipeline()
+            val c = viewModel.api.clientDetail(clientId).client
+            legalName = c.legalName; dba = c.dba
+            type = c.type.ifBlank { "Corporate" }
+            status = c.status.ifBlank { "Prospect" }
+            stage = c.stage
+            valueText = c.value?.toString() ?: ""
+            nextFollowUp = c.nextFollowUp ?: ""
+            source = c.source; sourceDetail = c.sourceDetail; industry = c.industry
+            contactName = c.contactName; contactTitle = c.contactTitle
+            email = c.email; phone = c.phone
+            street = c.street; city = c.city; state = c.state; zip = c.zip
+            tags = c.tags ?: ""; friends = c.friends; notes = c.notes
+            loaded = true
         } catch (e: Exception) {
-            error = plainError(e, "The pipeline could not be loaded. Check your connection and try again.")
+            loadError = plainError(e, "The form could not be loaded. Go back and try again.")
         }
     }
 
-    when {
-        error != null -> ErrorBox(error!!) { reloadKey++ }
-        board == null -> SkeletonList(6)
-        else -> LazyColumn {
-            item {
-                Text(
-                    "This board is for looking, not moving — move clients between stages in Sentinel Command on the web.",
-                    color = SentinelMuted,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        MirrorHeader(if (clientId == null) "New client" else "Edit client")
+        when {
+            loadError != null -> ErrorBox(loadError!!)
+            !loaded -> SkeletonList(4)
+            else -> Column(Modifier.padding(horizontal = 16.dp)) {
+                OutlinedTextField(
+                    value = legalName,
+                    onValueChange = { legalName = it; nameError = null },
+                    label = { Text("Legal name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-            }
-            board!!.stages.forEach { stage ->
-                item { SectionHeader(stage.stage, stage.count) }
-                if (stage.clients.isEmpty()) {
-                    item { ItemRow("No clients", "Nobody is at this stage right now.") }
-                } else {
-                    items(stage.clients) { card ->
-                        ItemRow(card.legalName)
-                    }
+                if (nameError != null) Text(nameError!!, color = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = dba, onValueChange = { dba = it },
+                    label = { Text("DBA") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    ChoiceMenu("Type", type, MirrorVocab.CLIENT_TYPES) { type = it }
+                    ChoiceMenu("Status", status, MirrorVocab.CLIENT_STATUSES) { status = it }
                 }
+                Spacer(Modifier.height(10.dp))
+                ChoiceMenu("Pipeline stage", stage, MirrorVocab.CLIENT_STAGES) { stage = it }
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = valueText, onValueChange = { valueText = it },
+                    label = { Text("Pipeline / contract value ($)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = nextFollowUp, onValueChange = { nextFollowUp = it },
+                    label = { Text("Next follow-up (yyyy-MM-dd)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                ChoiceMenu(
+                    "How did they find us?",
+                    source.ifBlank { "(blank)" },
+                    listOf("(blank)") + MirrorVocab.CLIENT_SOURCES,
+                ) { source = if (it == "(blank)") "" else it }
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = sourceDetail, onValueChange = { sourceDetail = it },
+                    label = { Text("Referred by (name / detail)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = industry, onValueChange = { industry = it },
+                    label = { Text("Industry") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = contactName, onValueChange = { contactName = it },
+                    label = { Text("Contact name") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = contactTitle, onValueChange = { contactTitle = it },
+                    label = { Text("Contact title") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = email, onValueChange = { email = it },
+                    label = { Text("Email") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = phone, onValueChange = { phone = it },
+                    label = { Text("Phone") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = street, onValueChange = { street = it },
+                    label = { Text("Street") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = city, onValueChange = { city = it },
+                        label = { Text("City") }, singleLine = true,
+                        modifier = Modifier.weight(2f),
+                    )
+                    OutlinedTextField(
+                        value = state, onValueChange = { state = it },
+                        label = { Text("State") }, singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = zip, onValueChange = { zip = it },
+                        label = { Text("ZIP") }, singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = tags, onValueChange = { tags = it },
+                    label = { Text("Tags (comma list)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = friends, onCheckedChange = { friends = it })
+                    Text(
+                        "Friends tier — 20% off all prices (Family records are never " +
+                            "charged and take precedence)"
+                    )
+                }
+                OutlinedTextField(
+                    value = notes, onValueChange = { notes = it },
+                    label = { Text("Notes") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                )
+                if (saveError != null) {
+                    Text(saveError!!, color = MaterialTheme.colorScheme.error)
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        enabled = !busy,
+                        onClick = {
+                            if (legalName.isBlank()) {
+                                nameError = "Legal name is required."
+                            } else {
+                                busy = true
+                                scope.launch {
+                                    try {
+                                        val request = ClientWriteRequest(
+                                            legalName = legalName.trim(),
+                                            dba = dba, type = type, status = status,
+                                            stage = stage,
+                                            value = valueText.toDoubleOrNull(),
+                                            nextFollowUp = nextFollowUp.ifBlank { null },
+                                            source = source, sourceDetail = sourceDetail,
+                                            industry = industry,
+                                            contactName = contactName, contactTitle = contactTitle,
+                                            email = email, phone = phone,
+                                            street = street, city = city, state = state, zip = zip,
+                                            tags = tags, friends = friends, notes = notes,
+                                        )
+                                        val saved = if (clientId == null) {
+                                            viewModel.api.createClient(request)
+                                        } else {
+                                            viewModel.api.patchClient(clientId, request)
+                                        }
+                                        nav.popBackStack()
+                                        if (clientId == null) nav.navigate("client/${saved.id}")
+                                    } catch (e: Exception) {
+                                        busy = false
+                                        saveError = plainError(e, "The client could not be saved. Try again.")
+                                    }
+                                }
+                            }
+                        },
+                    ) { Text(if (busy) "Saving…" else "Save client") }
+                    OutlinedButton(onClick = { nav.popBackStack() }) { Text("Cancel") }
+                }
+                Spacer(Modifier.height(24.dp))
             }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }

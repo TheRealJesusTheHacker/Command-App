@@ -10,6 +10,12 @@ front-end for Sentinel Safeguard's private command system and self-hosted mailbo
   This fingerprint is the app's permanent signer identity. Updates verify against it.
 - Design + scope: see the project spec held with the fleet records (Sentinel App SPEC,
   2026-10-25). v1 = Today · Tickets · Schedule · Mail · Clients.
+- **Mirror program (hunt5, 2026-11-02):** the app is being rebuilt as a native
+  view-for-view mirror of browser Sentinel Command (COMMAND-MIRROR-SPEC): same
+  navigation groups, views, data, and actions — no WebView surfaces. hunt5 lands
+  the mirrored shell plus Today, Dashboard, Tickets, and Clients/Pipeline;
+  unbuilt Command views appear under their exact names with a placeholder
+  naming the phase they land in.
 
 No credentials, keys, or secrets live in this repository. Signing material is custodied
 outside the repo and reaches CI only through GitHub Actions secrets.

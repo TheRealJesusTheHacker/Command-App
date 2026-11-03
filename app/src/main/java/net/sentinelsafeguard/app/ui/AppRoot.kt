@@ -1,62 +1,60 @@
 package net.sentinelsafeguard.app.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Button
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
-import net.sentinelsafeguard.app.ui.theme.SentinelGreen
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
-import net.sentinelsafeguard.app.web.WebDestination
-
-private enum class Tab(val label: String, val icon: ImageVector) {
-    TODAY("Today", Icons.Filled.Home),
-    TICKETS("Tickets", Icons.Filled.List),
-    SCHEDULE("Schedule", Icons.Filled.DateRange),
-    MAIL("Mail", Icons.Filled.Email),
-    CLIENTS("Clients", Icons.Filled.Person),
-}
 
 /**
- * The app shell (spec §8): Command's entry splash on cold start →
- * sign-in → lock gate → five bottom tabs, one thumb away. Settings
- * hangs off the top bar so the five tabs stay exactly the five
- * tabs; the hunt4 embedded browser (Full Command / Full Webmail)
- * takes over the content area the same way Settings does.
+ * The mirrored shell (COMMAND-MIRROR-SPEC §2): Command's grouped
+ * navigation as a drawer — exact groups, labels, and order —
+ * over a navigation-compose back stack. Landing is Today (the
+ * owner default in web Command). Unbuilt Command views appear
+ * under their exact names and open a placeholder naming their
+ * phase; they are never renamed, hidden, or silently cut.
+ * Mail + Settings live in the drawer's utility row: they are
+ * app-only entries, never presented as Command views (§2.2).
  */
 @Composable
 fun AppRoot(viewModel: AppViewModel) {
@@ -83,10 +81,10 @@ private fun AppShell(viewModel: AppViewModel) {
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val haptics = LocalHapticFeedback.current
-    var tab by remember { mutableStateOf(Tab.TODAY) }
-    var showSettings by remember { mutableStateOf(false) }
-    var webDestination by remember { mutableStateOf<WebDestination?>(null) }
+
+    LaunchedEffect(viewModel.signedIn) {
+        if (!viewModel.meLoaded) viewModel.refreshMe()
+    }
 
     // Launch update prompt (spec §7): plain words, owner decides.
     viewModel.updateAvailable?.let { available ->
@@ -121,85 +119,277 @@ private fun AppShell(viewModel: AppViewModel) {
         )
     }
 
-    Scaffold(
-        topBar = {
-            androidx.compose.material3.TopAppBar(
-                title = {
+    if (!viewModel.meLoaded) {
+        LoadingBox("Loading Command…")
+        return
+    }
+
+    val me = viewModel.me
+    val user = me?.user
+
+    // Forced flows resolve on web (spec §2.3): the app refuses
+    // with web's plain wording rather than improvising them.
+    if (user?.mustReset == true) {
+        ForcedFlowNotice(
+            "Passphrase change required",
+            "Your passphrase must be changed before Command opens. " +
+                "That step happens in Sentinel Command on the web — sign in there, " +
+                "change the passphrase, then come back here.",
+            viewModel,
+        )
+        return
+    }
+    if (user?.totpEnrollmentRequired == true) {
+        ForcedFlowNotice(
+            "Two-factor enrollment required",
+            "This account must finish two-factor enrollment before Command opens. " +
+                "That step happens in Sentinel Command on the web — sign in there, " +
+                "finish enrollment, then come back here.",
+            viewModel,
+        )
+        return
+    }
+
+    val role = user?.role ?: "OWNER"
+    if (role == "Client" || role == "Family" || role == "Tourist") {
+        // The portal shell is Phase 9 — an honest placeholder
+        // shell, never the staff shell with data it cannot show.
+        Column {
+            MirrorHeader("Sentinel Command")
+            PlaceholderScreen("Client portal", MirrorNav.PHASE9)
+            Button(
+                onClick = { viewModel.signOut {} },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            ) { Text("Sign out") }
+        }
+        return
+    }
+
+    val flags = mapOf(
+        "lawAccess" to (me?.lawAccess ?: false),
+        "newsAccess" to (me?.newsAccess ?: false),
+        "osintAccess" to (me?.osintAccess ?: false),
+        "breachAccess" to (me?.breachAccess ?: false),
+        "threatAccess" to (me?.threatAccess ?: false),
+        "reviewsAccess" to (me?.reviewsAccess ?: false),
+        "taxAccess" to (me?.taxAccess ?: false),
+    )
+    val taxOnly = me?.taxOnly ?: false
+    val landing = MirrorNav.landingKey(role, taxOnly)
+    // taxOnly's only view is a placeholder in hunt5 — its route is
+    // the placeholder route, not a built destination.
+    val startRoute = if (landing == "b4etax") "view/b4etax" else landing
+
+    val nav = rememberNavController()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val backStack by nav.currentBackStackEntryAsState()
+    val currentRoute = backStack?.destination?.route ?: landing
+    val currentKey = currentRoute.substringBefore("/")
+
+    fun titleFor(route: String): String = when {
+        route.startsWith("ticket/") || route.startsWith("ticketEdit") -> "Tickets"
+        route == "ticketNew" -> "New ticket"
+        route.startsWith("client/") || route.startsWith("clientEdit") -> "Clients"
+        route == "clientNew" -> "New client"
+        route == "mail" -> "Mail"
+        route == "settings" -> "Settings"
+        route == "admin" -> "Admin"
+        route.startsWith("view/") ->
+            MirrorNav.ALL_VIEWS[route.removePrefix("view/")]?.label ?: "Command"
+        else -> MirrorNav.ALL_VIEWS[route]?.label ?: "Command"
+    }
+
+    fun go(route: String) {
+        scope.launch { drawerState.close() }
+        if (currentRoute != route) {
+            nav.navigate(route) { launchSingleTop = true }
+        }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Column(
+                    Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 12.dp),
+                ) {
                     Text(
-                        webDestination?.title
-                            ?: if (showSettings) "Settings" else tab.label
+                        "SENTINEL SAFEGUARD",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp),
                     )
-                },
-                actions = {
-                    IconButton(onClick = {
-                        if (webDestination != null) {
-                            webDestination = null
-                        } else {
-                            showSettings = !showSettings
-                        }
-                    }) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    if (user != null) {
+                        Text(
+                            "${user.displayName} · ${user.role}",
+                            color = SentinelMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
                     }
-                },
-            )
-        },
-        bottomBar = {
-            NavigationBar {
-                Tab.entries.forEach { entry ->
-                    NavigationBarItem(
-                        selected = tab == entry && !showSettings && webDestination == null,
-                        onClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            tab = entry
-                            showSettings = false
-                            webDestination = null
-                        },
-                        icon = { Icon(entry.icon, contentDescription = entry.label) },
-                        label = { Text(entry.label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = SentinelGreen,
-                            selectedTextColor = SentinelGreen,
-                            indicatorColor = SentinelGreen.copy(alpha = 0.16f),
-                            unselectedIconColor = SentinelMuted,
-                            unselectedTextColor = SentinelMuted,
-                        ),
+                    Spacer(Modifier.height(8.dp))
+                    MirrorNav.visibleGroups(role, flags, taxOnly).forEach { group ->
+                        Text(
+                            group.label,
+                            color = SentinelMuted,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp),
+                        )
+                        group.views.forEach { view ->
+                            NavigationDrawerItem(
+                                label = { Text(view.label) },
+                                selected = currentKey == view.key,
+                                onClick = {
+                                    go(if (view.key == "admin") "admin" else viewRoute(view))
+                                },
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                            )
+                        }
+                    }
+                    MirrorNav.visibleInjected(role, flags, taxOnly).forEach { view ->
+                        NavigationDrawerItem(
+                            label = { Text(view.label) },
+                            selected = currentKey == view.key,
+                            onClick = { go(viewRoute(view)) },
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                    NavigationDrawerItem(
+                        label = { Text("Mail") },
+                        selected = currentKey == "mail",
+                        onClick = { go("mail") },
+                        modifier = Modifier.padding(horizontal = 8.dp),
                     )
+                    NavigationDrawerItem(
+                        label = { Text("Settings") },
+                        selected = currentKey == "settings",
+                        onClick = { go("settings") },
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
                 }
             }
         },
-    ) { padding ->
-        Box(Modifier.padding(padding)) {
-            when {
-                webDestination != null -> WebScreen(webDestination!!) {
-                    webDestination = null
-                }
-                showSettings -> SettingsScreen(
-                    viewModel,
-                    onSignedOut = { showSettings = false },
-                    onOpenWeb = { webDestination = it },
-                )
-                else -> AnimatedContent(
-                    targetState = tab,
-                    transitionSpec = {
-                        (fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 10 })
-                            .togetherWith(fadeOut(tween(160)))
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(titleFor(currentRoute)) },
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Command menu")
+                        }
                     },
-                    label = "tabs",
-                ) { targetTab ->
-                    when (targetTab) {
-                        Tab.TODAY -> TodayScreen(
-                            viewModel,
-                            onOpenTickets = { tab = Tab.TICKETS },
-                            onOpenClients = { tab = Tab.CLIENTS },
-                            onOpenFullCommand = { webDestination = WebDestination.COMMAND },
+                    actions = {
+                        IconButton(onClick = { go("settings") }) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            Box(Modifier.padding(padding)) {
+                NavHost(navController = nav, startDestination = startRoute) {
+                    composable("today") { TodayScreen(viewModel, nav) }
+                    composable("dashboard") { DashboardScreen(viewModel, nav) }
+                    composable("tickets") { TicketsScreen(viewModel, nav) }
+                    composable(
+                        "ticket/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        TicketProfileScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
                         )
-                        Tab.TICKETS -> TicketsScreen(viewModel)
-                        Tab.SCHEDULE -> ScheduleScreen(viewModel)
-                        Tab.MAIL -> MailScreen(viewModel)
-                        Tab.CLIENTS -> ClientsScreen(viewModel)
+                    }
+                    composable("ticketNew") { TicketFormScreen(viewModel, nav, null) }
+                    composable(
+                        "ticketEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        TicketFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"),
+                        )
+                    }
+                    composable("clients") { ClientsScreen(viewModel, nav) }
+                    composable(
+                        "client/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        ClientProfileScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
+                    composable("clientNew") { ClientFormScreen(viewModel, nav, null) }
+                    composable(
+                        "clientEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        ClientFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"),
+                        )
+                    }
+                    composable("schedule") { ScheduleScreen(viewModel) }
+                    composable("mail") { MailScreen(viewModel) }
+                    composable("settings") {
+                        SettingsScreen(viewModel, onSignedOut = { go(startRoute) })
+                    }
+                    composable("admin") { AdminConsoleScreen(nav) }
+                    composable(
+                        "view/{key}",
+                        arguments = listOf(navArgument("key") { type = NavType.StringType }),
+                    ) { entry ->
+                        val view = MirrorNav.ALL_VIEWS[entry.arguments?.getString("key")]
+                        if (view != null) {
+                            PlaceholderScreen(view.label, view.phase ?: MirrorNav.PHASE8)
+                        } else {
+                            PlaceholderScreen("Command", MirrorNav.PHASE8)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/** Drawer route for a nav view: built views use their key as the
+ *  route; unbuilt views land on the named placeholder. */
+private fun viewRoute(view: MirrorView): String =
+    if (view.phase == null) view.key else "view/${view.key}"
+
+@Composable
+private fun ForcedFlowNotice(title: String, body: String, viewModel: AppViewModel) {
+    Column(Modifier.padding(16.dp)) {
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(8.dp))
+        Text(body, color = SentinelMuted)
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = { viewModel.signOut {} }) { Text("Sign out") }
+    }
+}
+
+/**
+ * The Admin console (spec §2.1): its own grouped structure —
+ * 6 groups / 13 sections + injected DMARC. The structure renders
+ * in hunt5; every section is a placeholder until Phase 8.
+ */
+@Composable
+fun AdminConsoleScreen(nav: androidx.navigation.NavController) {
+    androidx.compose.foundation.lazy.LazyColumn {
+        item { MirrorHeader("Admin") }
+        MirrorNav.ADMIN_GROUPS.forEach { group ->
+            item { SectionHeader(group.label) }
+            group.views.forEach { section ->
+                item {
+                    ItemRow(section.label) { nav.navigate("view/${section.key}") }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(16.dp)) }
     }
 }
