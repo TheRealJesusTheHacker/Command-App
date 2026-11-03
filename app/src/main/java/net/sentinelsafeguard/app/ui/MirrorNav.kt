@@ -54,9 +54,9 @@ object MirrorNav {
         ),
         MirrorGroup(
             "Money", listOf(
-                MirrorView("invoices", "Invoices", PHASE4),
-                MirrorView("b3money", "Money Desk", PHASE4),
-                MirrorView("b4etax", "Tax & Profit", PHASE4, flag = "taxAccess"),
+                MirrorView("invoices", "Invoices"),
+                MirrorView("b3money", "Money Desk"),
+                MirrorView("b4etax", "Tax & Profit", flag = "taxAccess"),
             )
         ),
         MirrorGroup(
@@ -184,7 +184,7 @@ object MirrorNav {
             return listOf(
                 MirrorGroup(
                     "Money",
-                    listOf(MirrorView("b4etax", "Tax & Profit", PHASE4)),
+                    listOf(MirrorView("b4etax", "Tax & Profit")),
                 )
             )
         }

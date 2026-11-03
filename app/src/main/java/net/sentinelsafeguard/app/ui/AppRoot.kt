@@ -176,9 +176,9 @@ private fun AppShell(viewModel: AppViewModel) {
     )
     val taxOnly = me?.taxOnly ?: false
     val landing = MirrorNav.landingKey(role, taxOnly)
-    // taxOnly's only view is a placeholder in hunt5 — its route is
-    // the placeholder route, not a built destination.
-    val startRoute = if (landing == "b4etax") "view/b4etax" else landing
+    // taxOnly's only view is Tax & Profit (b4etax) — built in
+    // hunt8 (Phase 4), so its route is the built destination.
+    val startRoute = landing
 
     val nav = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -196,6 +196,12 @@ private fun AppShell(viewModel: AppViewModel) {
         route.startsWith("engagement/") || route.startsWith("engagementEdit") -> "Engagements"
         route == "engagementNew" -> "New engagement"
         route.startsWith("contract/") -> "Contracts"
+        route.startsWith("invoice/") || route.startsWith("invoiceEdit") -> "Invoices"
+        route == "invoiceNew" -> "New invoice"
+        route.startsWith("quote/") || route.startsWith("quoteEdit") -> "Quotes"
+        route == "quoteNew" -> "New quote"
+        route == "b3money" -> "Money Desk"
+        route == "b4etax" -> "Tax & Profit"
         route == "b4fdesk" -> "Runbooks & Sign-off"
         route.startsWith("job/") || route.startsWith("jobEdit") -> "Schedule"
         route == "jobNew" -> "New job"
@@ -422,6 +428,47 @@ private fun AppShell(viewModel: AppViewModel) {
                         )
                     }
                     composable("b4fdesk") { RunbooksScreen(viewModel, nav) }
+                    composable("invoices") { InvoicesScreen(viewModel, nav) }
+                    composable(
+                        "invoice/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        InvoiceProfileScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
+                    composable("invoiceNew") { InvoiceFormScreen(viewModel, nav, null) }
+                    composable(
+                        "invoiceEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        InvoiceFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"),
+                        )
+                    }
+                    composable(
+                        "quote/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        QuoteProfileScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
+                    composable("quoteNew") { QuoteFormScreen(viewModel, nav, null) }
+                    composable(
+                        "quoteEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        QuoteFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"),
+                        )
+                    }
+                    composable("b3money") { MoneyDeskScreen(viewModel, nav) }
+                    composable("b4etax") { TaxProfitScreen(viewModel, nav) }
                     composable("verified") { VerifiedScreen(viewModel, nav) }
                     composable("firmpulse") { FirmPulseScreen(viewModel, nav) }
                     composable("cf2assurance") { AssuranceScreen(viewModel, nav) }
