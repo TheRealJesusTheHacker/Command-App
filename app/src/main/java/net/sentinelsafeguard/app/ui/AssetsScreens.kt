@@ -668,19 +668,19 @@ fun AssetFormScreen(viewModel: AppViewModel, nav: NavController, assetId: Int?) 
                                 clientIdText = clients.firstOrNull { it.legalName == picked }?.id?.toString() ?: ""
                             }
                         }
-                        TextFieldRow("Client ID", clientIdText) { clientIdText = it }
+                        TextFieldRow("Client ID", clientIdText, onChange = { clientIdText = it })
                     }
-                    TextFieldRow("Asset name", name) { name = it }
+                    TextFieldRow("Asset name", name, onChange = { name = it })
                     Text("Status", color = SentinelMuted, style = MaterialTheme.typography.labelLarge)
                     ChoiceMenu("Status", status, Phase5Logic.ASSET_STATUSES) { status = it }
-                    TextFieldRow("Assigned to (user ID)", assignedText) { assignedText = it }
-                    TextFieldRow("Type", type) { type = it }
-                    TextFieldRow("Identifier / serial", identifier) { identifier = it }
-                    TextFieldRow("Review due date", reviewDue) { reviewDue = it }
-                    TextFieldRow("Warranty until", warrantyUntil) { warrantyUntil = it }
-                    TextFieldRow("Warranty expires (renewal watch)", warrantyExpires) { warrantyExpires = it }
-                    TextFieldRow("Support expires (renewal watch)", supportExpires) { supportExpires = it }
-                    TextFieldRow("Notes", notes, singleLine = false, minLines = 3) { notes = it }
+                    TextFieldRow("Assigned to (user ID)", assignedText, onChange = { assignedText = it })
+                    TextFieldRow("Type", type, onChange = { type = it })
+                    TextFieldRow("Identifier / serial", identifier, onChange = { identifier = it })
+                    TextFieldRow("Review due date", reviewDue, onChange = { reviewDue = it })
+                    TextFieldRow("Warranty until", warrantyUntil, onChange = { warrantyUntil = it })
+                    TextFieldRow("Warranty expires (renewal watch)", warrantyExpires, onChange = { warrantyExpires = it })
+                    TextFieldRow("Support expires (renewal watch)", supportExpires, onChange = { supportExpires = it })
+                    TextFieldRow("Notes", notes, onChange = { notes = it }, singleLine = false, minLines = 3)
                     ActionErrorText(error)
                     Spacer(Modifier.height(10.dp))
                     Button(onClick = {

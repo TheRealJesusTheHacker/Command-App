@@ -379,7 +379,7 @@ fun EmployeeProfileScreen(viewModel: AppViewModel, nav: NavController, employeeI
                                 }
                             }
                             MirrorCard("Moderation") {
-                                TextFieldRow("Moderator note — private, admins only", modNote ?: "") { modNote = it }
+                                TextFieldRow("Moderator note — private, admins only", modNote ?: "", onChange = { modNote = it })
                                 Button(onClick = {
                                     run { viewModel.api.setEmployeeModNote(uid, modNote ?: "") }
                                 }) { Text("Save note") }
@@ -547,12 +547,12 @@ fun EmployeeFormScreen(viewModel: AppViewModel, nav: NavController, employeeId: 
         } else {
             item {
                 Column(Modifier.padding(horizontal = 16.dp)) {
-                    TextFieldRow("Display name", displayName) { displayName = it }
-                    TextFieldRow("Job title", jobTitle) { jobTitle = it }
-                    TextFieldRow("Email", email) { email = it }
-                    TextFieldRow("Phone", phone) { phone = it }
+                    TextFieldRow("Display name", displayName, onChange = { displayName = it })
+                    TextFieldRow("Job title", jobTitle, onChange = { jobTitle = it })
+                    TextFieldRow("Email", email, onChange = { email = it })
+                    TextFieldRow("Phone", phone, onChange = { phone = it })
                     if (employeeId == null) {
-                        TextFieldRow("Passphrase", passphrase) { passphrase = it }
+                        TextFieldRow("Passphrase", passphrase, onChange = { passphrase = it })
                     }
                     ActionErrorText(error)
                     Spacer(Modifier.height(10.dp))

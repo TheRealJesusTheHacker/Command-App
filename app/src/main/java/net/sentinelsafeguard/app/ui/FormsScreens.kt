@@ -166,8 +166,8 @@ private fun FormDocumentsSection(viewModel: AppViewModel, onAnyChange: () -> Uni
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         )
         Column(Modifier.padding(horizontal = 16.dp)) {
-            TextFieldRow("Document name", uploadName) { uploadName = it }
-            TextFieldRow("Note", uploadNote) { uploadNote = it }
+            TextFieldRow("Document name", uploadName, onChange = { uploadName = it })
+            TextFieldRow("Note", uploadNote, onChange = { uploadNote = it })
             Text(
                 "PDF files only, up to 25 MB — the same rule as web Command.",
                 color = SentinelMuted,
@@ -258,8 +258,8 @@ private fun FormFileRow(viewModel: AppViewModel, file: JsonObject, onChanged: ()
         }
         if (editing) {
             Spacer(Modifier.height(6.dp))
-            TextFieldRow("Display name", displayName) { displayName = it }
-            TextFieldRow("Note", note) { note = it }
+            TextFieldRow("Display name", displayName, onChange = { displayName = it })
+            TextFieldRow("Note", note, onChange = { note = it })
             Button(onClick = {
                 run {
                     viewModel.api.updateFormFile(
@@ -331,10 +331,10 @@ fun FormRecordFormScreen(viewModel: AppViewModel, nav: NavController, formId: In
                     if (clientName.isNotBlank()) {
                         DetailLine("Client", clientName)
                     }
-                    TextFieldRow("Title", title) { title = it }
-                    TextFieldRow("Type", type) { type = it }
-                    TextFieldRow("Client ID (optional)", clientIdText) { clientIdText = it }
-                    TextFieldRow("Data (JSON)", dataJson, singleLine = false, minLines = 4) { dataJson = it }
+                    TextFieldRow("Title", title, onChange = { title = it })
+                    TextFieldRow("Type", type, onChange = { type = it })
+                    TextFieldRow("Client ID (optional)", clientIdText, onChange = { clientIdText = it })
+                    TextFieldRow("Data (JSON)", dataJson, onChange = { dataJson = it }, singleLine = false, minLines = 4)
                     ActionErrorText(error)
                     Spacer(Modifier.height(10.dp))
                     Row {
