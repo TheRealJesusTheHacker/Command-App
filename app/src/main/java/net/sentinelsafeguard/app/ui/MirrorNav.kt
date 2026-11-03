@@ -61,9 +61,9 @@ object MirrorNav {
         ),
         MirrorGroup(
             "Team & Assets", listOf(
-                MirrorView("employees", "Employees", PHASE5),
-                MirrorView("assets", "Assets", PHASE5),
-                MirrorView("forms", "Forms", PHASE5),
+                MirrorView("employees", "Employees"),
+                MirrorView("assets", "Assets"),
+                MirrorView("forms", "Forms"),
             )
         ),
         MirrorGroup(

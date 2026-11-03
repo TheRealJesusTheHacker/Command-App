@@ -200,6 +200,12 @@ private fun AppShell(viewModel: AppViewModel) {
         route == "invoiceNew" -> "New invoice"
         route.startsWith("quote/") || route.startsWith("quoteEdit") -> "Quotes"
         route == "quoteNew" -> "New quote"
+        route.startsWith("employee/") || route.startsWith("employeeEdit") -> "Employees"
+        route == "employeeNew" -> "New employee"
+        route.startsWith("asset/") || route.startsWith("assetEdit") -> "Assets"
+        route == "assetNew" -> "New asset"
+        route == "formNew" -> "New form record"
+        route.startsWith("formEdit") -> "Forms"
         route == "b3money" -> "Money Desk"
         route == "b4etax" -> "Tax & Profit"
         route == "b4fdesk" -> "Runbooks & Sign-off"
@@ -463,6 +469,57 @@ private fun AppShell(viewModel: AppViewModel) {
                         arguments = listOf(navArgument("id") { type = NavType.IntType }),
                     ) { entry ->
                         QuoteFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"),
+                        )
+                    }
+                    composable("employees") { EmployeesScreen(viewModel, nav) }
+                    composable(
+                        "employee/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        EmployeeProfileScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
+                    composable("employeeNew") { EmployeeFormScreen(viewModel, nav, null) }
+                    composable(
+                        "employeeEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        EmployeeFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"),
+                        )
+                    }
+                    composable("assets") { AssetsScreen(viewModel, nav) }
+                    composable(
+                        "asset/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        AssetProfileScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
+                    composable("assetNew") { AssetFormScreen(viewModel, nav, null) }
+                    composable(
+                        "assetEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        AssetFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"),
+                        )
+                    }
+                    composable("forms") { FormsScreen(viewModel, nav) }
+                    composable("formNew") { FormRecordFormScreen(viewModel, nav, null) }
+                    composable(
+                        "formEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        FormRecordFormScreen(
                             viewModel, nav,
                             entry.arguments?.getInt("id"),
                         )
