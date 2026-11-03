@@ -341,7 +341,7 @@ class ContractPhase3Test {
         val api = api(transport)
         val draft = api.clientOutreachDraft(1, "Email")
         assertTrue(draft.str("draft")!!.startsWith("Subject: A quick hello from Sentinel Safeguard"))
-        api.saveClientOutreachDraft(1, "Email", draft.str("draft")!!)
+        assertNotNull(api.saveClientOutreachDraft(1, "Email", draft.str("draft")!!))
     }
 
     @Test
@@ -392,7 +392,7 @@ class ContractPhase3Test {
         )
         api.addSiteDiagram(1, 1, "diagram.png", "image/png", "aGVsbG8=", 5)
         api.deleteSiteDiagram(1)
-        api.deleteSiteProfile(1, 1)
+        assertNotNull(api.deleteSiteProfile(1, 1))
     }
 
     @Test
@@ -421,7 +421,7 @@ class ContractPhase3Test {
         val items = hygiene.arr("items")
         val (yes, no, unknown) = Phase3Logic.hygieneCounts(items)
         assertEquals(items.size, yes + no + unknown)
-        api.setHygieneItem(1, "mfa", "yes", "")
+        assertNotNull(api.setHygieneItem(1, "mfa", "yes", ""))
     }
 
     @Test
@@ -634,7 +634,7 @@ class ContractPhase3Test {
             "Lead",
             Phase3Logic.criteriaStage(applied.obj("criteria")),
         )
-        api.deleteSavedView(1)
+        assertNotNull(api.deleteSavedView(1))
     }
 }
 
@@ -723,7 +723,7 @@ class ContractPhase3OpsTest {
             put("ticketId", 1); put("category", "parts")
             put("description", "Cable"); put("amountCents", 1299)
         })
-        api.deleteExpense(1)
+        assertNotNull(api.deleteExpense(1))
     }
 
     @Test
@@ -757,7 +757,7 @@ class ContractPhase3OpsTest {
         var received: ByteArray? = null
         api.downloadBytes("/api/app/photos/1/download") { received = it }
         assertNotNull(received)
-        api.deletePhoto(1)
+        assertNotNull(api.deletePhoto(1))
     }
 
     @Test
@@ -784,7 +784,7 @@ class ContractPhase3OpsTest {
         )
         val rendered = api.renderCannedResponse(1, 1)
         assertTrue(rendered.str("text")!!.isNotBlank())
-        api.deleteCannedResponse(1)
+        assertNotNull(api.deleteCannedResponse(1))
     }
 
     @Test
@@ -904,11 +904,13 @@ class ContractPhase3OpsTest {
         )
         api.issueAssurancePacket(1)
         assertTrue(api.assuranceFileRequests().containsKey("requests"))
-        api.saveAssuranceFileRequest(
-            1, "Docs please",
-            JsonArray(listOf(buildJsonObject {
-                put("label", "ID"); put("required", true)
-            })),
+        assertNotNull(
+            api.saveAssuranceFileRequest(
+                1, "Docs please",
+                JsonArray(listOf(buildJsonObject {
+                    put("label", "ID"); put("required", true)
+                })),
+            ),
         )
     }
 
@@ -928,7 +930,7 @@ class ContractPhase3OpsTest {
             put("assetId", 1); put("testedAt", "2026-11-03")
             put("method", "full_restore"); put("result", "pass"); put("notes", "")
         })
-        api.setBackupCadence(1, 30)
+        assertNotNull(api.setBackupCadence(1, 30))
     }
 
     @Test
@@ -1070,7 +1072,7 @@ class ContractPhase3OpsTest {
             put("name", "P3 Service"); put("durationMinutes", 60); put("active", true)
         }, null)
         api.deleteBookingAvailability(1)
-        api.deleteBookingService(1)
+        assertNotNull(api.deleteBookingService(1))
     }
 
     @Test
