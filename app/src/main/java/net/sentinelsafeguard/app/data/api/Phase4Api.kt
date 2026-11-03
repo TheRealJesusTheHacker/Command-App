@@ -39,11 +39,11 @@ suspend fun SentinelApi.invoices(
     if (clientId != null) parts += "clientId=$clientId"
     if (overdue) parts += "overdue=1"
     val suffix = if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
-    return getJson("/api/app/invoices$suffix")
+    return callJson("GET", "/api/app/invoices$suffix")
 }
 
 suspend fun SentinelApi.invoiceDetail(id: Int): JsonObject =
-    getJson("/api/app/invoices/$id")
+    callJson("GET", "/api/app/invoices/$id")
 
 suspend fun SentinelApi.createInvoice(invoice: JsonObject): JsonObject =
     callJson("POST", "/api/app/invoices", buildJsonObject { put("invoice", invoice) }.toBody4())
@@ -52,16 +52,16 @@ suspend fun SentinelApi.editInvoice(id: Int, body: JsonObject): JsonObject =
     callJson("PATCH", "/api/app/invoices/$id", body.toBody4())
 
 suspend fun SentinelApi.setInvoiceStatus(id: Int, status: String): JsonObject =
-    postJson("/api/app/invoices/$id/status", buildJsonObject { put("status", status) }.toBody4())
+    callJson("POST", "/api/app/invoices/$id/status", buildJsonObject { put("status", status) }.toBody4())
 
 suspend fun SentinelApi.deleteInvoice(id: Int): JsonObject =
     deleteJson("/api/app/invoices/$id")
 
 suspend fun SentinelApi.invoiceDocument(id: Int): JsonObject =
-    getJson("/api/app/invoices/$id/document")
+    callJson("GET", "/api/app/invoices/$id/document")
 
 suspend fun SentinelApi.invoicePayments(id: Int): JsonObject =
-    getJson("/api/app/invoices/$id/payments")
+    callJson("GET", "/api/app/invoices/$id/payments")
 
 suspend fun SentinelApi.recordInvoicePayment(
     id: Int,
@@ -77,14 +77,14 @@ suspend fun SentinelApi.recordInvoicePayment(
 )
 
 suspend fun SentinelApi.invoicePaymentPlan(id: Int): JsonObject =
-    getJson("/api/app/invoices/$id/payment-plan")
+    callJson("GET", "/api/app/invoices/$id/payment-plan")
 
 suspend fun SentinelApi.createInvoicePaymentPlan(
     id: Int,
     installments: kotlinx.serialization.json.JsonArray,
     notes: String,
-): JsonObject = postJson(
-    "/api/app/invoices/$id/payment-plan",
+): JsonObject = callJson(
+    "POST", "/api/app/invoices/$id/payment-plan",
     buildJsonObject { put("installments", installments); put("notes", notes) }.toBody4(),
 )
 
@@ -98,25 +98,25 @@ suspend fun SentinelApi.completeInvoicePayment(sessionId: String): JsonObject =
     )
 
 suspend fun SentinelApi.overdueInstallments(): JsonObject =
-    getJson("/api/app/overdue-installments")
+    callJson("GET", "/api/app/overdue-installments")
 
 suspend fun SentinelApi.reminderDrafts(): JsonObject =
-    getJson("/api/app/reminder-drafts")
+    callJson("GET", "/api/app/reminder-drafts")
 
 suspend fun SentinelApi.generateReminderDraft(installmentId: Int): JsonObject =
-    postJson(
-        "/api/app/reminder-drafts/generate",
+    callJson(
+        "POST", "/api/app/reminder-drafts/generate",
         buildJsonObject { put("installmentId", installmentId) }.toBody4(),
     )
 
 // ---- Quotes (Invoices sub-view) ----
 
-suspend fun SentinelApi.quotes(): JsonObject = getJson("/api/app/quotes")
+suspend fun SentinelApi.quotes(): JsonObject = callJson("GET", "/api/app/quotes")
 
-suspend fun SentinelApi.quoteDetail(id: Int): JsonObject = getJson("/api/app/quotes/$id")
+suspend fun SentinelApi.quoteDetail(id: Int): JsonObject = callJson("GET", "/api/app/quotes/$id")
 
 suspend fun SentinelApi.createQuote(quote: JsonObject): JsonObject =
-    postJson("/api/app/quotes", buildJsonObject { put("quote", quote) }.toBody4())
+    callJson("POST", "/api/app/quotes", buildJsonObject { put("quote", quote) }.toBody4())
 
 suspend fun SentinelApi.editQuote(id: Int, body: JsonObject): JsonObject =
     patchJson("/api/app/quotes/$id", body.toBody4())
@@ -129,11 +129,11 @@ suspend fun SentinelApi.setQuoteStatus(id: Int, status: String): JsonObject =
 
 // ---- Price Book (Invoices sub-view) ----
 
-suspend fun SentinelApi.priceBook(): JsonObject = getJson("/api/app/price-book")
+suspend fun SentinelApi.priceBook(): JsonObject = callJson("GET", "/api/app/price-book")
 
 suspend fun SentinelApi.savePriceItem(item: JsonObject, id: Int?): JsonObject {
     val body = buildJsonObject { put("item", item) }.toBody4()
-    return if (id == null) postJson("/api/app/price-book", body)
+    return if (id == null) callJson("POST", "/api/app/price-book", body)
     else patchJson("/api/app/price-book/$id", body)
 }
 
@@ -142,9 +142,9 @@ suspend fun SentinelApi.deletePriceItem(id: Int): JsonObject =
 
 // ---- Money Desk (b3money) ----
 
-suspend fun SentinelApi.moneyDesk(): JsonObject = getJson("/api/app/money-desk")
+suspend fun SentinelApi.moneyDesk(): JsonObject = callJson("GET", "/api/app/money-desk")
 
-suspend fun SentinelApi.moneyBuilder(): JsonObject = getJson("/api/app/money-desk/builder")
+suspend fun SentinelApi.moneyBuilder(): JsonObject = callJson("GET", "/api/app/money-desk/builder")
 
 suspend fun SentinelApi.moneyBuildQuote(clientId: Int, lines: kotlinx.serialization.json.JsonArray): JsonObject =
     callJson(
@@ -153,7 +153,7 @@ suspend fun SentinelApi.moneyBuildQuote(clientId: Int, lines: kotlinx.serializat
     )
 
 suspend fun SentinelApi.moneyUnbilled(clientId: Int): JsonObject =
-    getJson("/api/app/money-desk/unbilled?clientId=$clientId")
+    callJson("GET", "/api/app/money-desk/unbilled?clientId=$clientId")
 
 suspend fun SentinelApi.moneyConvertUnbilled(clientId: Int): JsonObject =
     callJson(
@@ -162,18 +162,18 @@ suspend fun SentinelApi.moneyConvertUnbilled(clientId: Int): JsonObject =
     )
 
 suspend fun SentinelApi.moneyScanLowStock(): JsonObject =
-    postJson("/api/app/money-desk/scan-low-stock", "{}")
+    callJson("POST", "/api/app/money-desk/scan-low-stock", "{}")
 
 suspend fun SentinelApi.moneyPurchaseDrafts(): JsonObject =
-    getJson("/api/app/money-desk/purchase-drafts")
+    callJson("GET", "/api/app/money-desk/purchase-drafts")
 
 suspend fun SentinelApi.moneySetPurchaseDraftState(draftId: Int, state: String): JsonObject =
-    postJson(
-        "/api/app/money-desk/purchase-drafts/$draftId/state",
+    callJson(
+        "POST", "/api/app/money-desk/purchase-drafts/$draftId/state",
         buildJsonObject { put("state", state) }.toBody4(),
     )
 
-suspend fun SentinelApi.moneyPayBoard(): JsonObject = getJson("/api/app/money-desk/pay-board")
+suspend fun SentinelApi.moneyPayBoard(): JsonObject = callJson("GET", "/api/app/money-desk/pay-board")
 
 suspend fun SentinelApi.moneySetPayState(invoiceId: Int, state: String, note: String): JsonObject =
     callJson(
@@ -182,16 +182,16 @@ suspend fun SentinelApi.moneySetPayState(invoiceId: Int, state: String, note: St
     )
 
 suspend fun SentinelApi.moneyQuoteFollowUpsScan(): JsonObject =
-    postJson("/api/app/money-desk/quote-followups/scan", "{}")
+    callJson("POST", "/api/app/money-desk/quote-followups/scan", "{}")
 
 suspend fun SentinelApi.moneyQuoteFollowUps(): JsonObject =
-    getJson("/api/app/money-desk/quote-followups")
+    callJson("GET", "/api/app/money-desk/quote-followups")
 
 suspend fun SentinelApi.moneyAgingScan(): JsonObject =
-    postJson("/api/app/money-desk/aging/scan", "{}")
+    callJson("POST", "/api/app/money-desk/aging/scan", "{}")
 
 suspend fun SentinelApi.moneyAgingDrafts(): JsonObject =
-    getJson("/api/app/money-desk/aging-drafts")
+    callJson("GET", "/api/app/money-desk/aging-drafts")
 
 // ---- Tax & Profit (b4etax) ----
 
