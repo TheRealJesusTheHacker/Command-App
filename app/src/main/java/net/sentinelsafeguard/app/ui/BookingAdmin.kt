@@ -17,6 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import net.sentinelsafeguard.app.data.api.bookingAdmin
 import net.sentinelsafeguard.app.data.api.deleteBookingAvailability
 import net.sentinelsafeguard.app.data.api.deleteBookingService
@@ -88,7 +90,7 @@ fun BookingAdminPanel(viewModel: AppViewModel) {
                 scope.launch {
                     try {
                         viewModel.api.saveBookingAvailability(
-                            kotlinx.serialization.json.buildJsonObject {
+                            buildJsonObject {
                                 put("weekday", weekday)
                                 put("startTime", startTime)
                                 put("endTime", endTime)
@@ -137,7 +139,7 @@ fun BookingAdminPanel(viewModel: AppViewModel) {
                 scope.launch {
                     try {
                         viewModel.api.saveBookingService(
-                            kotlinx.serialization.json.buildJsonObject {
+                            buildJsonObject {
                                 put("name", serviceName)
                                 put("durationMinutes", serviceMinutes.toIntOrNull() ?: 60)
                                 put("active", true)
