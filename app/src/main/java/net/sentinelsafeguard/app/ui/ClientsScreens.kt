@@ -38,11 +38,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import net.sentinelsafeguard.app.data.api.Client
 import net.sentinelsafeguard.app.data.api.ClientDetailResponse
 import net.sentinelsafeguard.app.data.api.ClientTimelineResponse
 import net.sentinelsafeguard.app.data.api.ClientWriteRequest
 import net.sentinelsafeguard.app.data.api.PipelineResponse
+import net.sentinelsafeguard.app.data.api.applySavedView
+import net.sentinelsafeguard.app.data.api.bulkClients
+import net.sentinelsafeguard.app.data.api.clientFilterPresets
+import net.sentinelsafeguard.app.data.api.deleteClientFilterPreset
+import net.sentinelsafeguard.app.data.api.deleteSavedView
+import net.sentinelsafeguard.app.data.api.saveClientFilterPreset
+import net.sentinelsafeguard.app.data.api.saveSavedView
+import net.sentinelsafeguard.app.data.api.savedViews
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceHigh
 
@@ -52,6 +63,9 @@ import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceHigh
  * server-side phone-book search over the complete set, the
  * 8-stage pipeline board on the B7 full-card payload, the full
  * profile (B8 timeline + linked grid), and the full form.
+ * Phase 3 adds the depth sections (ClientDepth.kt), the live
+ * Duplicates tab, saved views / filter presets, and the client
+ * bulk actions bar — all web's names and order.
  */
 
 private fun followUpLabel(client: Client, today: String): String? {
@@ -68,7 +82,7 @@ fun ClientsScreen(viewModel: AppViewModel, nav: NavController) {
             "Clients",
             "A working phone book, client profiles, and a live sales pipeline — all in one place.",
         ) {
-            OutlinedButton(onClick = { nav.navigate("view/verified") }) {
+            OutlinedButton(onClick = { nav.navigate("verified") }) {
                 Text("Sentinel Verified")
             }
             Button(
@@ -94,7 +108,7 @@ fun ClientsScreen(viewModel: AppViewModel, nav: NavController) {
         }
         when (mode) {
             "Pipeline" -> PipelineBoard(viewModel, nav)
-            "Duplicates" -> PlaceholderScreen("Duplicates", MirrorNav.PHASE3)
+            "Duplicates" -> DuplicatesMode(viewModel, nav)
             else -> ClientDirectory(viewModel, nav)
         }
     }
@@ -112,6 +126,11 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
     var stage by remember { mutableStateOf<String?>(null) }
     var tier by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
+    var selecting by remember { mutableStateOf(false) }
+    var selection by remember { mutableStateOf(setOf<Int>()) }
+    var bulkTag by remember { mutableStateOf("") }
+    var bulkFollowUp by remember { mutableStateOf("") }
+    var bulkNotice by remember { mutableStateOf<String?>(null) }
     val todayStr = remember { java.time.LocalDate.now().toString() }
 
     LaunchedEffect(query, reloadKey) {
@@ -127,6 +146,19 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
 
     fun reset() {
         query = ""; sort = MirrorVocab.CLIENT_SORTS[0]; stage = null; tier = null
+    }
+
+    fun bulk(operation: JsonObject) {
+        scope.launch {
+            try {
+                val out = viewModel.api.bulkClients(selection.toList(), operation)
+                bulkNotice = Phase3Logic.str(out, "message")
+                selection = emptySet()
+                reloadKey++
+            } catch (e: Exception) {
+                bulkNotice = plainError(e, "The bulk action could not be done. Try again.")
+            }
+        }
     }
 
     when {
@@ -210,6 +242,72 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
                         selected = tier ?: "all",
                         onPick = { tier = it },
                     )
+                    ClientViewsBar(viewModel, stage) { picked -> stage = picked }
+                    Row(
+                        Modifier.padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = {
+                            selecting = !selecting
+                            if (!selecting) selection = emptySet()
+                        }) {
+                            Text(if (selecting) "Done selecting" else "Select for bulk actions")
+                        }
+                        if (selecting && selection.isNotEmpty()) {
+                            Text("${selection.size} selected", color = SentinelMuted)
+                        }
+                    }
+                    if (selecting && selection.isNotEmpty()) {
+                        Column(Modifier.padding(horizontal = 16.dp)) {
+                            ChoiceMenu("Bulk — set stage", "Choose a stage", MirrorVocab.CLIENT_STAGES) { picked ->
+                                bulk(buildJsonObject {
+                                    put("kind", "stage"); put("stage", picked)
+                                })
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.weight(1f)) {
+                                    TextFieldRow("Bulk — apply tag", bulkTag, { bulkTag = it })
+                                }
+                                Button(
+                                    enabled = bulkTag.isNotBlank(),
+                                    onClick = {
+                                        bulk(buildJsonObject {
+                                            put("kind", "tag"); put("tag", bulkTag.trim())
+                                        })
+                                        bulkTag = ""
+                                    },
+                                ) { Text("Apply tag") }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.weight(1f)) {
+                                    TextFieldRow(
+                                        "Bulk — next follow-up (yyyy-MM-dd)",
+                                        bulkFollowUp, { bulkFollowUp = it },
+                                    )
+                                }
+                                Button(
+                                    enabled = bulkFollowUp.isNotBlank(),
+                                    onClick = {
+                                        bulk(buildJsonObject {
+                                            put("kind", "followup")
+                                            put("nextFollowUp", bulkFollowUp.trim())
+                                        })
+                                        bulkFollowUp = ""
+                                    },
+                                ) { Text("Set follow-up") }
+                            }
+                            TextButton(onClick = { selection = emptySet() }) {
+                                Text("Clear selection")
+                            }
+                        }
+                    }
+                    if (bulkNotice != null) {
+                        Text(
+                            bulkNotice!!,
+                            color = SentinelMuted,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
                 }
                 when {
                     clients.isEmpty() && query.isBlank() -> item {
@@ -255,12 +353,161 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
                                     }
                                 }
                             },
+                            selectChecked = if (selecting) client.id in selection else null,
+                            onSelectToggle = if (selecting) {
+                                {
+                                    selection = if (client.id in selection) {
+                                        selection - client.id
+                                    } else {
+                                        selection + client.id
+                                    }
+                                }
+                            } else {
+                                null
+                            },
                         )
                     }
                 }
                 item { Spacer(Modifier.height(16.dp)) }
             }
         }
+    }
+}
+
+/** Saved views + filter presets for the directory (web's bar). */
+@Composable
+private fun ClientViewsBar(
+    viewModel: AppViewModel,
+    currentStage: String?,
+    onApplyStage: (String?) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var presets by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
+    var views by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
+    var name by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var applied by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
+    var appliedLabel by remember { mutableStateOf<String?>(null) }
+
+    fun reload() {
+        scope.launch {
+            try {
+                presets = Phase3Logic.arr(viewModel.api.clientFilterPresets(), "presets")
+                views = Phase3Logic.arr(viewModel.api.savedViews("clients"), "views")
+            } catch (e: Exception) {
+                error = plainError(e, "Saved views could not be loaded. Try again.")
+            }
+        }
+    }
+    LaunchedEffect(Unit) { reload() }
+
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Text(
+            "Saved views & filter presets",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        presets.forEach { preset ->
+            val pid = Phase3Logic.int(preset, "id")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(Phase3Logic.str(preset, "name"), Modifier.weight(1f))
+                TextButton(onClick = {
+                    onApplyStage(
+                        Phase3Logic.criteriaStage(Phase3Logic.obj(preset, "criteria")),
+                    )
+                }) { Text("Apply") }
+                if (pid != null) {
+                    TextButton(onClick = {
+                        scope.launch {
+                            try {
+                                viewModel.api.deleteClientFilterPreset(pid); reload()
+                            } catch (e: Exception) {
+                                error = plainError(e, "The preset could not be deleted. Try again.")
+                            }
+                        }
+                    }) { Text("Delete") }
+                }
+            }
+        }
+        views.forEach { view ->
+            val vid = Phase3Logic.int(view, "id")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(Phase3Logic.str(view, "name"), Modifier.weight(1f))
+                TextButton(onClick = {
+                    if (vid != null) scope.launch {
+                        try {
+                            val out = viewModel.api.applySavedView(vid)
+                            applied = Phase3Logic.arr(out, "rows")
+                            appliedLabel = Phase3Logic.str(view, "name")
+                            onApplyStage(
+                                Phase3Logic.criteriaStage(Phase3Logic.obj(view, "criteria")),
+                            )
+                        } catch (e: Exception) {
+                            error = plainError(e, "The view could not be applied. Try again.")
+                        }
+                    }
+                }) { Text("Apply") }
+                if (vid != null) {
+                    TextButton(onClick = {
+                        scope.launch {
+                            try {
+                                viewModel.api.deleteSavedView(vid); reload()
+                            } catch (e: Exception) {
+                                error = plainError(e, "The view could not be deleted. Try again.")
+                            }
+                        }
+                    }) { Text("Delete") }
+                }
+            }
+        }
+        if (appliedLabel != null) {
+            Text(
+                "Applied “${appliedLabel}” — ${applied.size} matching client(s)",
+                color = SentinelMuted,
+            )
+            applied.take(10).forEach { row ->
+                Text(
+                    "· ${Phase3Logic.str(row, "name")}",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        TextFieldRow("Name for the current stage filter", name, { name = it })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                enabled = name.isNotBlank(),
+                onClick = {
+                    scope.launch {
+                        try {
+                            val criteria = buildJsonObject {
+                                put("stage", currentStage ?: "")
+                            }
+                            viewModel.api.saveClientFilterPreset(name.trim(), criteria)
+                            name = ""; reload()
+                        } catch (e: Exception) {
+                            error = plainError(e, "The preset could not be saved. Try again.")
+                        }
+                    }
+                },
+            ) { Text("Save preset") }
+            OutlinedButton(
+                enabled = name.isNotBlank(),
+                onClick = {
+                    scope.launch {
+                        try {
+                            val criteria = buildJsonObject {
+                                put("stage", currentStage ?: "")
+                            }
+                            viewModel.api.saveSavedView("clients", name.trim(), criteria)
+                            name = ""; reload()
+                        } catch (e: Exception) {
+                            error = plainError(e, "The view could not be saved. Try again.")
+                        }
+                    }
+                },
+            ) { Text("Save view") }
+        }
+        ActionErrorText(error)
     }
 }
 
@@ -273,6 +520,8 @@ private fun ClientCard(
     onCall: (() -> Unit)? = null,
     onEmail: (() -> Unit)? = null,
     onArchive: (() -> Unit)? = null,
+    selectChecked: Boolean? = null,
+    onSelectToggle: (() -> Unit)? = null,
 ) {
     androidx.compose.material3.Card(
         colors = androidx.compose.material3.CardDefaults.cardColors(
@@ -286,6 +535,12 @@ private fun ClientCard(
             .padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
         Column(Modifier.padding(14.dp)) {
+            if (selectChecked != null && onSelectToggle != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = selectChecked, onCheckedChange = { onSelectToggle() })
+                    Text("Select for bulk actions", color = SentinelMuted)
+                }
+            }
             Text(client.legalName, style = MaterialTheme.typography.bodyLarge)
             if (client.dba.isNotBlank()) {
                 Text(client.dba, color = SentinelMuted)
@@ -591,34 +846,7 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
                     DetailLine("Notes", c.notes)
                 }
 
-                MirrorCard("Contacts & notifications") {
-                    if (d.contacts.isEmpty()) {
-                        Text("No additional contacts on file.", color = SentinelMuted)
-                    }
-                    d.contacts.forEach { contact ->
-                        Text(
-                            listOfNotNull(
-                                contact.name.takeIf { it.isNotBlank() },
-                                contact.title.takeIf { it.isNotBlank() },
-                                contact.email.takeIf { it.isNotBlank() },
-                                contact.phone.takeIf { it.isNotBlank() },
-                            ).joinToString(" · "),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 2.dp),
-                        )
-                    }
-                    d.notificationPrefs?.let { prefs ->
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "Ticket updates ${if (prefs.ticketUpdates) "on" else "off"} · " +
-                                "Invoice events ${if (prefs.invoiceEvents) "on" else "off"} · " +
-                                "Monitoring alerts ${if (prefs.monitoringAlerts) "on" else "off"} · " +
-                                "Digest ${if (prefs.digest) "on" else "off"}",
-                            color = SentinelMuted,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
+                ClientDepthPart1(viewModel, c.id)
 
                 MirrorCard("Sentinel Verified", d.verifications.size) {
                     if (d.verifications.isEmpty()) {
@@ -635,7 +863,12 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
                             modifier = Modifier.padding(vertical = 2.dp),
                         )
                     }
+                    TextButton(onClick = { nav.navigate("verified") }) {
+                        Text("Issue verification")
+                    }
                 }
+
+                ClientDepthPart2(viewModel, nav, c.id)
 
                 MirrorCard("Timeline", timeline?.total) {
                     val entries = timeline?.timeline ?: emptyList()

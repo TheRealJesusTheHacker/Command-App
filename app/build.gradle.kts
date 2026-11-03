@@ -71,7 +71,7 @@ android {
         applicationId = "net.sentinelsafeguard.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
+        versionCode = 7
         versionName = "0.1.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
@@ -98,7 +98,7 @@ android {
         create("hunt") {
             dimension = "line"
             applicationId = "net.sentinelsafeguard.app.hunt"
-            versionNameSuffix = "-hunt6"
+            versionNameSuffix = "-hunt7"
         }
     }
 

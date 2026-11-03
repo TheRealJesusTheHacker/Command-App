@@ -14,7 +14,30 @@ data class HttpRequest(
     val path: String,
     val body: String? = null,
     val headers: Map<String, String> = emptyMap(),
-)
+    /** Raw-byte body (Phase 3 photo / voice uploads): when set it
+     *  rides instead of [body], with the Content-Type taken from
+     *  the Content-Type header (default application/octet-stream). */
+    val bodyBytes: ByteArray? = null,
+) {
+    // ByteArray in a data class: identity equality for that field is
+    // deliberate — requests are values to execute, never compared.
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is HttpRequest) return false
+        return method == other.method && path == other.path &&
+            body == other.body && headers == other.headers &&
+            (bodyBytes?.contentEquals(other.bodyBytes ?: ByteArray(0)) ?: (other.bodyBytes == null))
+    }
+
+    override fun hashCode(): Int {
+        var result = method.hashCode()
+        result = 31 * result + path.hashCode()
+        result = 31 * result + (body?.hashCode() ?: 0)
+        result = 31 * result + headers.hashCode()
+        result = 31 * result + (bodyBytes?.contentHashCode() ?: 0)
+        return result
+    }
+}
 
 data class HttpResponse(
     val status: Int,
@@ -48,12 +71,27 @@ class OkHttpTransport(
     private fun buildRequest(request: HttpRequest): Request {
         val builder = Request.Builder().url(baseUrl.trimEnd('/') + request.path)
         request.headers.forEach { (k, v) -> builder.header(k, v) }
+        val raw = request.bodyBytes
         when (request.method.uppercase()) {
             "GET" -> builder.get()
-            "DELETE" -> builder.delete()
-            "POST" -> builder.post((request.body ?: "").toRequestBody(JSON))
-            "PATCH" -> builder.patch((request.body ?: "").toRequestBody(JSON))
-            else -> builder.method(request.method, request.body?.toRequestBody(JSON))
+            "DELETE" -> if (raw != null) {
+                builder.delete(raw.toRequestBody(OCTET_STREAM))
+            } else {
+                builder.delete()
+            }
+            "POST" -> builder.post(
+                raw?.toRequestBody(OCTET_STREAM)
+                    ?: (request.body ?: "").toRequestBody(JSON)
+            )
+            "PATCH" -> builder.patch(
+                raw?.toRequestBody(OCTET_STREAM)
+                    ?: (request.body ?: "").toRequestBody(JSON)
+            )
+            else -> builder.method(
+                request.method,
+                raw?.toRequestBody(OCTET_STREAM)
+                    ?: request.body?.toRequestBody(JSON),
+            )
         }
         return builder.build()
     }
@@ -82,5 +120,6 @@ class OkHttpTransport(
 
     private companion object {
         val JSON = "application/json; charset=utf-8".toMediaType()
+        val OCTET_STREAM = "application/octet-stream".toMediaType()
     }
 }

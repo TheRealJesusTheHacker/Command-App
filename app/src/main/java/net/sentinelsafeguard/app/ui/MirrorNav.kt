@@ -49,7 +49,7 @@ object MirrorNav {
         MirrorGroup(
             "Clients", listOf(
                 MirrorView("clients", "Clients"),
-                MirrorView("cf2assurance", "Documents & Assurance", PHASE3),
+                MirrorView("cf2assurance", "Documents & Assurance"),
             )
         ),
         MirrorGroup(
@@ -161,7 +161,9 @@ object MirrorNav {
 
     /** Non-nav destinations reached from inside built views. */
     val EXTRA_VIEWS: List<MirrorView> = listOf(
-        MirrorView("verified", "Sentinel Verified", PHASE3),
+        MirrorView("verified", "Sentinel Verified"),
+        MirrorView("firmpulse", "Firm Pulse"),
+        MirrorView("contract", "Contract"),
     )
 
     val ALL_VIEWS: Map<String, MirrorView> =

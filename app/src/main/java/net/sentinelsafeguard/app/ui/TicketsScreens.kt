@@ -31,6 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import net.sentinelsafeguard.app.data.api.CaseItem
 import net.sentinelsafeguard.app.data.api.Client
 import net.sentinelsafeguard.app.data.api.PortalMessagesResponse
@@ -40,6 +43,10 @@ import net.sentinelsafeguard.app.data.api.TicketDetailResponse
 import net.sentinelsafeguard.app.data.api.TicketFullEdit
 import net.sentinelsafeguard.app.data.api.TicketPatchRequest
 import net.sentinelsafeguard.app.data.api.User
+import net.sentinelsafeguard.app.data.api.applySavedView
+import net.sentinelsafeguard.app.data.api.deleteSavedView
+import net.sentinelsafeguard.app.data.api.saveSavedView
+import net.sentinelsafeguard.app.data.api.savedViews
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 
 /**
@@ -47,7 +54,9 @@ import net.sentinelsafeguard.app.ui.theme.SentinelMuted
  * stat cards, Board | Directory), board columns with the web
  * card's own Status select + steppers, the B3-backed directory,
  * the full profile envelope (case + activity rendered, never
- * dropped), and the full create/edit form.
+ * dropped), and the full create/edit form. Phase 3 adds the
+ * Ticket Ops sections (TicketOps.kt), saved views for tickets,
+ * and merge / split inside the profile.
  */
 
 private fun assigneeName(ticket: Ticket, roster: List<User>): String =
@@ -296,6 +305,97 @@ private fun TicketCard(
     }
 }
 
+/** Saved views for tickets (web's bar, Phase 3 backend). */
+@Composable
+private fun TicketViewsBar(viewModel: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    var views by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
+    var name by remember { mutableStateOf("") }
+    var statusChoice by remember { mutableStateOf("Any status") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var applied by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
+    var appliedLabel by remember { mutableStateOf<String?>(null) }
+
+    fun reload() {
+        scope.launch {
+            try {
+                views = Phase3Logic.arr(viewModel.api.savedViews("tickets"), "views")
+            } catch (e: Exception) {
+                error = plainError(e, "Saved views could not be loaded. Try again.")
+            }
+        }
+    }
+    LaunchedEffect(Unit) { reload() }
+
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Text("Saved views", style = MaterialTheme.typography.titleSmall)
+        views.forEach { view ->
+            val vid = Phase3Logic.int(view, "id")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(Phase3Logic.str(view, "name"), Modifier.weight(1f))
+                TextButton(onClick = {
+                    if (vid != null) scope.launch {
+                        try {
+                            val out = viewModel.api.applySavedView(vid)
+                            applied = Phase3Logic.arr(out, "rows")
+                            appliedLabel = Phase3Logic.str(view, "name")
+                        } catch (e: Exception) {
+                            error = plainError(e, "The view could not be applied. Try again.")
+                        }
+                    }
+                }) { Text("Apply") }
+                if (vid != null) {
+                    TextButton(onClick = {
+                        scope.launch {
+                            try {
+                                viewModel.api.deleteSavedView(vid); reload()
+                            } catch (e: Exception) {
+                                error = plainError(e, "The view could not be deleted. Try again.")
+                            }
+                        }
+                    }) { Text("Delete") }
+                }
+            }
+        }
+        if (appliedLabel != null) {
+            Text(
+                "Applied “${appliedLabel}” — ${applied.size} matching ticket(s)",
+                color = SentinelMuted,
+            )
+            applied.take(10).forEach { row ->
+                Text(
+                    "· ${Phase3Logic.str(row, "title")} (${Phase3Logic.str(row, "status")})",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        TextFieldRow("Name for a new view", name, { name = it })
+        ChoiceMenu(
+            "Status in the view",
+            statusChoice,
+            listOf("Any status") + MirrorVocab.TICKET_STAGES,
+        ) { statusChoice = it }
+        Button(
+            enabled = name.isNotBlank(),
+            onClick = {
+                scope.launch {
+                    try {
+                        val criteria = buildJsonObject {
+                            put("status", if (statusChoice == "Any status") "" else statusChoice)
+                        }
+                        viewModel.api.saveSavedView("tickets", name.trim(), criteria)
+                        name = ""; reload()
+                    } catch (e: Exception) {
+                        error = plainError(e, "The view could not be saved. Try again.")
+                    }
+                }
+            },
+        ) { Text("Save view") }
+        ActionErrorText(error)
+    }
+}
+
 @Composable
 private fun TicketDirectory(
     viewModel: AppViewModel,
@@ -425,6 +525,7 @@ private fun TicketDirectory(
                     label = { Text("★ Ad material ${base.count { it.adMaterial }}") },
                 )
             }
+            TicketViewsBar(viewModel)
         }
         when {
             dirError != null -> item { ErrorBox(dirError!!) }
@@ -731,6 +832,8 @@ fun TicketProfileScreen(viewModel: AppViewModel, nav: NavController, ticketId: I
 
                 TicketSignOffCard(viewModel, t.id, t.clientId)
 
+                TicketOpsSections(viewModel, nav, t)
+
                 MirrorCard("Ticket activity", d.activity.size) {
                     if (d.activity.isEmpty()) {
                         Text("No activity recorded for this ticket yet.", color = SentinelMuted)
@@ -758,7 +861,6 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
     var cases by remember { mutableStateOf<List<CaseItem>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
-
     var clientId by remember { mutableStateOf<Int?>(null) }
     var title by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("New") }

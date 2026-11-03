@@ -425,6 +425,10 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
                 CountLine("Risk reviews due", p?.obj("cfRiskReviewDue")?.totalOf() ?: 0)
                 CountLine("Breach matches", p?.obj("cfBreachMatches")?.totalOf() ?: 0)
             }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { nav.navigate("firmpulse") }) {
+                Text("Firm Pulse")
+            }
         }
 
         // Staff certifications & equipment service (b11)

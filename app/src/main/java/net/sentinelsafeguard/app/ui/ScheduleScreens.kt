@@ -54,17 +54,24 @@ import java.time.LocalDate
  * semantics (GET /api/app/schedule?start&end), employee + status
  * filters, job profile with status moves, the full job form
  * (savejob field set), delete, and schedule entries (save/delete).
- * This replaces the hunt-era read-only screen, which was disclosed
- * as interim in the hunt5 record.
+ * Phase 3 (hunt7) adds web's Booking admin panels (availability,
+ * services, bookings manage) as the Booking admin mode
+ * (BookingAdmin.kt). This replaces the hunt-era read-only screen,
+ * which was disclosed as interim in the hunt5 record.
  */
 
-private enum class SchedMode { Month, Week, People, Agenda }
+private enum class SchedMode { Month, Week, People, Agenda, Booking }
+
+private fun SchedMode.label(): String = when (this) {
+    SchedMode.Booking -> "Booking admin"
+    else -> name
+}
 
 private fun windowFor(mode: SchedMode, anchor: LocalDate): Pair<String, String> = when (mode) {
     SchedMode.Month -> MirrorVocab.monthWindow(anchor.toString())
     SchedMode.Week -> MirrorVocab.weekWindow(anchor.toString())
     SchedMode.People -> anchor.toString() to anchor.plusDays(59).toString()
-    SchedMode.Agenda -> anchor.minusDays(7).toString() to anchor.plusDays(60).toString()
+    SchedMode.Agenda, SchedMode.Booking -> anchor.minusDays(7).toString() to anchor.plusDays(60).toString()
 }
 
 @Composable
@@ -110,10 +117,13 @@ fun ScheduleScreen(viewModel: AppViewModel, nav: NavController) {
                 FilterChip(
                     selected = mode == m,
                     onClick = { mode = m },
-                    label = { Text(m.name) },
+                    label = { Text(m.label()) },
                 )
             }
         }
+        if (mode == SchedMode.Booking) {
+            BookingAdminPanel(viewModel)
+        } else {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -279,6 +289,7 @@ fun ScheduleScreen(viewModel: AppViewModel, nav: NavController) {
                                 JobRow(unassigned[i]) { nav.navigate("job/${unassigned[i].id}") }
                             }
                         }
+                        SchedMode.Booking -> Unit
                     }
                     item {
                         Spacer(Modifier.height(8.dp))
@@ -300,6 +311,7 @@ fun ScheduleScreen(viewModel: AppViewModel, nav: NavController) {
                     }
                 }
             }
+        }
         }
     }
 }

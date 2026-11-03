@@ -832,6 +832,81 @@ class SentinelApi(
             ensureOk(call("GET", "/api/app/search?q=${urlEncode(q)}")).body
         )
 
+    // ---- Phase 3 (hunt7) generic verbs: the Phase 3 surface is
+    // web-handler payloads end to end, so its endpoints ride the
+    // open-JSON pattern the Today panels established, extended to
+    // the remaining verbs + binary up/downloads. Phase3Api.kt
+    // holds the named endpoint methods on top of these. ----
+
+    /** Open-JSON call for any verb. On refusal the server's own
+     *  `message` is surfaced when it sent one — web's confirm and
+     *  hard gates (merge, revoke, signed-authorization) explain
+     *  themselves in that message, and the mirror shows web's
+     *  words, not a paraphrase. Other refusals keep plainError. */
+    suspend fun callJson(method: String, path: String, body: String? = null): JsonObject {
+        val response = call(method, path, body)
+        if (response.status !in 200..299) {
+            val serverMessage = runCatching {
+                Json.parseToJsonElement(response.body).jsonObject["message"]
+                    ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+            }.getOrNull()
+            throw ApiException(
+                response.status,
+                serverMessage?.takeIf { it.isNotBlank() }
+                    ?: plainError(response.status, response.body),
+            )
+        }
+        if (response.body.isBlank()) return JsonObject(emptyMap())
+        return Json.parseToJsonElement(response.body).jsonObject
+    }
+
+    suspend fun patchJson(path: String, body: String): JsonObject =
+        callJson("PATCH", path, body)
+
+    suspend fun deleteJson(path: String): JsonObject = callJson("DELETE", path)
+
+    /** Raw-byte upload (photos / voice notes): web's X-* header
+     *  contract rides in [extraHeaders]; the response is the
+     *  endpoint's JSON body. */
+    suspend fun uploadBytes(
+        path: String,
+        bytes: ByteArray,
+        extraHeaders: Map<String, String>,
+    ): JsonObject {
+        val response = transport.execute(
+            HttpRequest(
+                "POST", path, null,
+                headers(authenticated = true) + extraHeaders,
+                bodyBytes = bytes,
+            )
+        )
+        if (response.status == 401) {
+            onSignedOut?.invoke()
+            throw SignedOutException()
+        }
+        val ok = ensureOk(response)
+        if (ok.body.isBlank()) return JsonObject(emptyMap())
+        return Json.parseToJsonElement(ok.body).jsonObject
+    }
+
+    /** Binary download to a sink (photo / diagram / voice bytes). */
+    suspend fun downloadBytes(path: String, sink: (ByteArray) -> Unit): Int {
+        val response = transport.download(
+            HttpRequest("GET", path, null, headers(authenticated = true)),
+            sink,
+        )
+        if (response.status == 401) {
+            onSignedOut?.invoke()
+            throw SignedOutException()
+        }
+        if (response.status !in 200..299) {
+            throw ApiException(response.status, plainError(response.status, ""))
+        }
+        return response.status
+    }
+
+    internal fun encodeQuery(value: String): String = urlEncode(value)
+
     private fun urlEncode(value: String): String =
         java.net.URLEncoder.encode(value, "UTF-8")
 

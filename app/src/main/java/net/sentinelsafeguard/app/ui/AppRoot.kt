@@ -195,6 +195,7 @@ private fun AppShell(viewModel: AppViewModel) {
         route == "caseNew" -> "New case"
         route.startsWith("engagement/") || route.startsWith("engagementEdit") -> "Engagements"
         route == "engagementNew" -> "New engagement"
+        route.startsWith("contract/") -> "Contracts"
         route == "b4fdesk" -> "Runbooks & Sign-off"
         route.startsWith("job/") || route.startsWith("jobEdit") -> "Schedule"
         route == "jobNew" -> "New job"
@@ -202,6 +203,8 @@ private fun AppShell(viewModel: AppViewModel) {
         route == "mail" -> "Mail"
         route == "settings" -> "Settings"
         route == "admin" -> "Admin"
+        route == "verified" -> "Sentinel Verified"
+        route == "firmpulse" -> "Firm Pulse"
         route.startsWith("view/") ->
             MirrorNav.ALL_VIEWS[route.removePrefix("view/")]?.label ?: "Command"
         else -> MirrorNav.ALL_VIEWS[route]?.label ?: "Command"
@@ -419,6 +422,18 @@ private fun AppShell(viewModel: AppViewModel) {
                         )
                     }
                     composable("b4fdesk") { RunbooksScreen(viewModel, nav) }
+                    composable("verified") { VerifiedScreen(viewModel, nav) }
+                    composable("firmpulse") { FirmPulseScreen(viewModel, nav) }
+                    composable("cf2assurance") { AssuranceScreen(viewModel, nav) }
+                    composable(
+                        "contract/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        ContractDetailScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
                     composable("search") { SearchScreen(viewModel, nav) }
                     composable("mail") { MailScreen(viewModel) }
                     composable("settings") {

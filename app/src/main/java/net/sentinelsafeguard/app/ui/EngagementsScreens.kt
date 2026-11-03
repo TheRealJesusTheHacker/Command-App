@@ -39,10 +39,10 @@ import net.sentinelsafeguard.app.ui.theme.SentinelMuted
  * edit ride the Phase 2 backend (getcfengagements /
  * savecfengagement semantics). Web's own rule rides along:
  * findings cannot open until a signed authorization is on file.
- * (The Contracts table, contract templates, and findings library
- * sections of the web view ride web-only actions the Phase 2
- * backend did not expose — flagged in the hunt6 record, not
- * silently cut.)
+ * Phase 3 (hunt7) adds the Contracts table + contract templates,
+ * the contract document surface, finding create / edit / status /
+ * evidence, and the findings library (EngagementsDepth.kt) on the
+ * Phase 3 backend.
  */
 
 @Composable
@@ -73,10 +73,13 @@ fun EngagementsScreen(viewModel: AppViewModel, nav: NavController) {
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
             engagements == null -> SkeletonList(5)
-            engagements!!.isEmpty() -> EmptyBox(
-                "No engagements yet",
-                "No engagements have been created yet.",
-            )
+            engagements!!.isEmpty() -> Column {
+                EmptyBox(
+                    "No engagements yet",
+                    "No engagements have been created yet.",
+                )
+                ContractsCard(viewModel, nav)
+            }
             else -> LazyColumn {
                 items(engagements!!) { eng ->
                     ItemRow(
@@ -92,6 +95,7 @@ fun EngagementsScreen(viewModel: AppViewModel, nav: NavController) {
                         ).joinToString(" · "),
                     ) { nav.navigate("engagement/${eng.id}") }
                 }
+                item { ContractsCard(viewModel, nav) }
                 item { Spacer(Modifier.height(16.dp)) }
             }
         }
@@ -193,6 +197,7 @@ fun EngagementProfileScreen(viewModel: AppViewModel, nav: NavController, engagem
                         )
                     }
                 }
+                FindingsDepth(viewModel, e) { reloadKey++ }
                 Spacer(Modifier.height(24.dp))
             }
         }
