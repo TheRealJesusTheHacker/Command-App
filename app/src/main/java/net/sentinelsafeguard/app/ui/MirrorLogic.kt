@@ -211,7 +211,7 @@ object MirrorVocab {
         return out
     }
 
-    val CASE_SORTS = TICKET_SORTS
+    val CASE_SORTS = listOf("Newest", "Priority high \u2192 low", "Due soonest", "Stage order")
 
     /** Global search groups in web's order, with web's labels. */
     val SEARCH_GROUPS: List<Pair<String, String>> = listOf(

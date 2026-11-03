@@ -297,12 +297,7 @@ private fun AppShell(viewModel: AppViewModel) {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { go("search") }) {
-                            Icon(
-                                androidx.compose.material.icons.Icons.Filled.Search,
-                                contentDescription = "Search",
-                            )
-                        }
+                        TextButton(onClick = { go("search") }) { Text("Search") }
                         IconButton(onClick = { go("settings") }) {
                             Icon(Icons.Filled.Settings, contentDescription = "Settings")
                         }

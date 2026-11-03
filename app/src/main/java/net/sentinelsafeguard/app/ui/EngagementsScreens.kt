@@ -187,8 +187,8 @@ fun EngagementProfileScreen(viewModel: AppViewModel, nav: NavController, engagem
                             listOfNotNull(
                                 finding.severity.takeIf { it.isNotBlank() },
                                 finding.status.takeIf { it.isNotBlank() },
-                                finding.description.takeIf { it.isNotBlank() }
-                                    .ifBlank { finding.detail },
+                                finding.description.ifBlank { finding.detail }
+                                    .takeIf { it.isNotBlank() },
                             ).joinToString(" · "),
                         )
                     }
