@@ -29,7 +29,11 @@ object InteractionLogic {
 
     // ---- Dates -------------------------------------------------------
 
-    private val YMD: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
+    // STRICT + uuuu: the default SMART resolver silently turns
+    // 2026-02-30 into 2026-02-28 — an impossible date must be
+    // rejected, never repaired into a different day.
+    private val YMD: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd", Locale.US)
+        .withResolverStyle(java.time.format.ResolverStyle.STRICT)
     private val PRETTY: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE, MMM d, yyyy", Locale.US)
 
     /** Strictly parse a wire date. Null for blank, malformed, or
