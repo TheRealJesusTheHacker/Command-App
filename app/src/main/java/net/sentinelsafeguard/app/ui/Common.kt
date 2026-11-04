@@ -8,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -227,17 +226,25 @@ fun ItemRow(
     title: String,
     subtitle: String? = null,
     badge: String? = null,
+    entranceIndex: Int? = null,
     onClick: (() -> Unit)? = null,
 ) {
+    // Motion pass (2026-11-04): a wired row gains the M-09
+    // capped stagger entrance (only LazyColumn call sites pass
+    // an index) and clickable rows gain the M-01 press-sink via
+    // sentinelClickable — the ripple, padding, and card shape
+    // are exactly as before; unwired rows are untouched.
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp, vertical = 4.dp)
+        .then(if (entranceIndex != null) Modifier.listEntrance(entranceIndex) else Modifier)
+        .then(if (onClick != null) Modifier.sentinelClickable { onClick() } else Modifier)
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         border = BorderStroke(1.dp, SentinelOutline),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+        modifier = rowModifier,
     ) {
         Box(Modifier.background(sentinelCardBrush())) {
             Row(

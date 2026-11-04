@@ -3,6 +3,7 @@ package net.sentinelsafeguard.app.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -253,15 +255,23 @@ fun GradientPrimaryButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    // Motion pass (2026-11-04): M-01 press-sink — the button
+    // sinks to 95% on press and springs back, riding its own
+    // interaction source; label, gradient, and action unchanged.
+    val pressInteraction = remember { MutableInteractionSource() }
+    val pressScale = rememberPressScale(pressInteraction, enabled)
     Button(
         onClick = onClick,
         enabled = enabled,
+        interactionSource = pressInteraction,
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Transparent,
             contentColor = Color(0xFF031007),
             disabledContainerColor = Color.Transparent,
         ),
-        modifier = modifier.background(
+        modifier = modifier
+            .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
+            .background(
             Brush.verticalGradient(
                 listOf(
                     net.sentinelsafeguard.app.ui.theme.SentinelGreen

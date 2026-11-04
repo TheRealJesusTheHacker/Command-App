@@ -107,6 +107,7 @@ fun SearchScreen(viewModel: AppViewModel, nav: NavController) {
                                                 it.isNotBlank() && it != row.subtitle
                                             },
                                         ).joinToString(" · "),
+                                        entranceIndex = i,
                                         onClick = if (route != null) {
                                             { nav.navigate(route) }
                                         } else {
@@ -125,7 +126,7 @@ fun SearchScreen(viewModel: AppViewModel, nav: NavController) {
                                 item { SectionHeader(key, rows.size) }
                                 items(rows.size) { i ->
                                     val row = rows[i]
-                                    ItemRow(row.title, row.subtitle)
+                                    ItemRow(row.title, row.subtitle, entranceIndex = i)
                                 }
                             }
                         }

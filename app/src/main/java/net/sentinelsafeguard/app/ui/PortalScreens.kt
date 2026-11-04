@@ -182,13 +182,16 @@ private fun NotificationPrefsCard(viewModel: AppViewModel) {
         var digest by remember(prefs) { mutableStateOf(Phase3Logic.bool(prefs, "digest") == true) }
         var error by remember { mutableStateOf<String?>(null) }
         var saved by remember { mutableStateOf(false) }
-        val run = rememberAction({ error = it }, { saved = true; reload() })
         SwitchRow("Ticket updates", ticketUpdates) { ticketUpdates = it }
         SwitchRow("Invoice events", invoiceEvents) { invoiceEvents = it }
         SwitchRow("Monitoring alerts", monitoringAlerts) { monitoringAlerts = it }
         SwitchRow("Digest", digest) { digest = it }
-        Button(onClick = {
-            run {
+        // Motion pass (2026-11-04): M-08 submit morph — the pill
+        // carries idle → spinner → drawn tick in one shape; the
+        // saved line below still confirms in words, and failures
+        // keep the same plain error the old button produced.
+        MorphSubmitButton(text = "Save preferences") {
+            try {
                 viewModel.api.portalNotificationPrefsSet(
                     buildJsonObject {
                         put("ticketUpdates", ticketUpdates)
@@ -197,8 +200,14 @@ private fun NotificationPrefsCard(viewModel: AppViewModel) {
                         put("digest", digest)
                     },
                 )
+                saved = true
+                reload()
+                true
+            } catch (e: Exception) {
+                error = plainError(e, "That could not be done. Try again.")
+                false
             }
-        }) { Text("Save preferences") }
+        }
         if (saved) Text("Notification preferences saved.", color = SentinelMuted)
         ActionErrorText(error)
     }

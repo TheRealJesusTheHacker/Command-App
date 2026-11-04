@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -352,8 +353,9 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
                             modifier = Modifier.padding(horizontal = 16.dp),
                         ) { Text("Reset search & filters") }
                     }
-                    else -> items(filtered) { client ->
+                    else -> itemsIndexed(filtered) { index, client ->
                         ClientCard(
+                            entranceIndex = index,
                             client = client,
                             todayStr = todayStr,
                             onOpen = { nav.navigate("client/${client.id}") },
@@ -552,6 +554,7 @@ private fun ClientCard(
     onArchive: (() -> Unit)? = null,
     selectChecked: Boolean? = null,
     onSelectToggle: (() -> Unit)? = null,
+    entranceIndex: Int? = null,
 ) {
     androidx.compose.material3.Card(
         colors = androidx.compose.material3.CardDefaults.cardColors(
@@ -564,6 +567,7 @@ private fun ClientCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
+            .then(if (entranceIndex != null) Modifier.listEntrance(entranceIndex) else Modifier)
             .background(sentinelCardBrush(), RoundedCornerShape(16.dp)),
     ) {
         Column(Modifier.padding(16.dp)) {
@@ -723,9 +727,10 @@ private fun PipelineBoard(viewModel: AppViewModel, nav: NavController) {
                             )
                         }
                     }
-                    items(cards) { client ->
+                    itemsIndexed(cards) { index, client ->
                         Column {
                             ClientCard(
+                                entranceIndex = index,
                                 client = client,
                                 todayStr = todayStr,
                                 onOpen = { nav.navigate("client/${client.id}") },

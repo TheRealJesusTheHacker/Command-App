@@ -71,14 +71,15 @@ android {
         applicationId = "net.sentinelsafeguard.app"
         minSdk = 26
         targetSdk = 35
-        // 1.1.0 RELEASE (owner green-light 2026-11-04 02:35 CST:
-        // "I already approve"): the hunt18 Emerald Depth GUI
-        // elevation, cut exactly as proven in the signed hunt18
-        // build (run 41803880967) — version fields only.
-        // versionCode 101 steps over 1.0.0's 100 (and matches the
-        // hunt flavor's own 101 step).
-        versionCode = 101
-        versionName = "1.1.0"
+        // 1.2.0 RELEASE (Motion & Quality Design Program,
+        // 2026-11-04): the motion layer over the 1.1.0 Emerald
+        // Depth tree — M-01 press-sink, M-13 error shake, M-09
+        // capped list stagger, M-06/M-08 drawn-tick submit morph,
+        // reduced-motion nav fades, X-Request-ID correlation —
+        // no structure, label, or data changes. versionCode 102
+        // steps over 1.1.0's 101 so it upgrades in place.
+        versionCode = 102
+        versionName = "1.2.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")

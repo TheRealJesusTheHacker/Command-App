@@ -71,6 +71,18 @@ class OkHttpTransport(
     private fun buildRequest(request: HttpRequest): Request {
         val builder = Request.Builder().url(baseUrl.trimEnd('/') + request.path)
         request.headers.forEach { (k, v) -> builder.header(k, v) }
+        // Correlation ID (Motion & Quality Program, Reel 5,
+        // 2026-11-04): every HTTP request this client makes —
+        // execute and download alike, since both pass through
+        // here — carries a fresh X-Request-ID unless the caller
+        // already set one. Additive only: no endpoint requires
+        // it, no contract test can see it (the tested layer is
+        // SentinelApi over a fake transport; this is the real
+        // transport below it), and a server that ignores the
+        // header is unaffected.
+        if (request.headers.keys.none { it.equals("X-Request-ID", ignoreCase = true) }) {
+            builder.header("X-Request-ID", java.util.UUID.randomUUID().toString())
+        }
         val raw = request.bodyBytes
         when (request.method.uppercase()) {
             "GET" -> builder.get()

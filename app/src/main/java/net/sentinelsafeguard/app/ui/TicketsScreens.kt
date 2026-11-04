@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -271,6 +272,7 @@ private fun TicketCard(
     onOpen: () -> Unit,
     onStage: (String) -> Unit,
     onCase: (() -> Unit)? = null,
+    entranceIndex: Int? = null,
 ) {
     androidx.compose.material3.Card(
         colors = androidx.compose.material3.CardDefaults.cardColors(
@@ -283,6 +285,7 @@ private fun TicketCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
+            .then(if (entranceIndex != null) Modifier.listEntrance(entranceIndex) else Modifier)
             .background(sentinelCardBrush(), RoundedCornerShape(16.dp)),
     ) {
         // hunt18: a 3dp left spine colored by the priority the card
@@ -618,8 +621,9 @@ private fun TicketDirectory(
                     modifier = Modifier.padding(horizontal = 16.dp),
                 ) { Text("Reset search & filters") }
             }
-            else -> items(results!!) { ticket ->
+            else -> itemsIndexed(results!!) { index, ticket ->
                 TicketCard(
+                    entranceIndex = index,
                     ticket = ticket,
                     roster = roster,
                     todayStr = todayStr,

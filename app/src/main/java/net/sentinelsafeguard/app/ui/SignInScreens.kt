@@ -52,6 +52,10 @@ fun SignInScreen(viewModel: AppViewModel) {
     var needsTotp by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Motion pass (2026-11-04): M-13 — each failed leg bumps the
+    // shake key; the form shakes, the error text stays exactly
+    // as generic as it was.
+    var shakeKey by remember { mutableStateOf(0) }
     val totpFocus = remember { FocusRequester() }
     // hunt16: when the second leg appears, the keyboard lands on
     // the code field — no hunting for the field mid-sign-in.
@@ -68,7 +72,8 @@ fun SignInScreen(viewModel: AppViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(24.dp)
+            .errorShake(shakeKey),
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
@@ -179,6 +184,7 @@ fun SignInScreen(viewModel: AppViewModel) {
                             error = null
                         }
                         is LoginResult.Failed -> {
+                            shakeKey++
                             error = when {
                                 needsTotp -> {
                                     // hunt16: a failed code clears
@@ -236,6 +242,8 @@ fun SignInScreen(viewModel: AppViewModel) {
 fun LockScreen(viewModel: AppViewModel) {
     val context = LocalContext.current
     var error by remember { mutableStateOf<String?>(null) }
+    // Motion pass (2026-11-04): M-13 shake on unlock failure too.
+    var shakeKey by remember { mutableStateOf(0) }
 
     fun promptBiometric() {
         val activity = context as? FragmentActivity ?: return
@@ -245,6 +253,7 @@ fun LockScreen(viewModel: AppViewModel) {
                 BiometricManager.Authenticators.DEVICE_CREDENTIAL
         )
         if (can != BiometricManager.BIOMETRIC_SUCCESS) {
+            shakeKey++
             error = "Fingerprint unlock is not set up on this phone. Use the passphrase instead."
             return
         }
@@ -260,6 +269,7 @@ fun LockScreen(viewModel: AppViewModel) {
                     if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
                         errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON
                     ) {
+                        shakeKey++
                         error = "Unlock did not work: $errString Try again, or use the passphrase."
                     }
                 }
@@ -281,7 +291,8 @@ fun LockScreen(viewModel: AppViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(24.dp)
+            .errorShake(shakeKey),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
