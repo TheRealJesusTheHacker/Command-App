@@ -338,7 +338,7 @@ suspend fun SentinelApi.activityAll(
         total = (page["total"] as? kotlinx.serialization.json.JsonPrimitive)
             ?.content?.toIntOrNull() ?: rows.size
         if (rows.isEmpty()) break
-        all += rows
+        all.addAll(rows)
         offset += rows.size
         pages++
     }
