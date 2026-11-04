@@ -6,7 +6,7 @@ import kotlinx.serialization.json.put
 
 /**
  * Phase 9 (hunt14) endpoint methods: the Client/Family PORTAL
- * shell surface under /api/app/portal/* plus the STAFF shell's
+ * shell surface under /api/app/portal/ plus the STAFF shell's
  * My Schedule surface, riding the deployed Phase 9 backend
  * (Addendum 28; production server.py sha256 b267d652…). Every
  * portal endpoint rides the actual web portal handler — the

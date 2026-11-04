@@ -68,7 +68,7 @@ import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 /**
  * The portal shell (COMMAND-MIRROR-SPEC §2.1, Phase 9): the
  * twelve web portal views for Client/Family sign-ins, in web's
- * names and order, wired to the /api/app/portal/* endpoints
+ * names and order, wired to the /api/app/portal/ endpoints
  * (Addendum 28). Every payload is the web portal handler's own;
  * the client identity comes from the token server-side — no
  * screen here names a client. Signing / deciding / answering
