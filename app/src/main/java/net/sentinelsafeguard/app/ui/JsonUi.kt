@@ -232,11 +232,8 @@ fun DateFieldRow(
                         Text("Clear")
                     }
                 }
-                androidx.compose.material3.IconButton(onClick = { showPicker = true }) {
-                    androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Filled.DateRange,
-                        contentDescription = "Pick a date for $label",
-                    )
+                androidx.compose.material3.TextButton(onClick = { showPicker = true }) {
+                    Text("Pick")
                 }
             }
         },

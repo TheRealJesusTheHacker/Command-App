@@ -587,6 +587,7 @@ private fun ClientCard(
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun PipelineBoard(viewModel: AppViewModel, nav: NavController) {
     val scope = rememberCoroutineScope()
@@ -595,6 +596,8 @@ private fun PipelineBoard(viewModel: AppViewModel, nav: NavController) {
     var reloadKey by remember { mutableStateOf(0) }
     val todayStr = remember { java.time.LocalDate.now().toString() }
 
+    var banner by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
     LaunchedEffect(reloadKey) {
         error = null
         try {
@@ -607,8 +610,6 @@ private fun PipelineBoard(viewModel: AppViewModel, nav: NavController) {
         }
     }
 
-    var banner by remember { mutableStateOf<String?>(null) }
-    var refreshing by remember { mutableStateOf(false) }
     fun move(client: Client, stage: String) {
         // hunt16: optimistic pipeline move — the card lands in
         // the new stage at once; on failure the board rolls back
