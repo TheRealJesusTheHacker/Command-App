@@ -12,6 +12,7 @@ import net.sentinelsafeguard.app.data.api.HttpRequest
 import net.sentinelsafeguard.app.data.api.HttpResponse
 import net.sentinelsafeguard.app.data.api.HttpTransport
 import net.sentinelsafeguard.app.data.api.SentinelApi
+import net.sentinelsafeguard.app.data.api.SignedOutException
 import net.sentinelsafeguard.app.data.api.breachCirculationCreate
 import net.sentinelsafeguard.app.data.api.breachCirculationDelete
 import net.sentinelsafeguard.app.data.api.breachCreate
@@ -141,12 +142,13 @@ class ContractPhase6Test {
 
     @Test
     fun unauthenticatedLiveIntelIs401() = runBlocking {
+        // A 401 is the client's sign-in-required path:
+        // SignedOutException carries the server's own words.
         try {
             api(QueueTransport(step("GET /api/app/live-intel/threat-data (unauthenticated)")))
                 .liveThreatData()
-            fail("expected an ApiException")
-        } catch (e: ApiException) {
-            assertEquals(401, e.status)
+            fail("expected a SignedOutException")
+        } catch (e: SignedOutException) {
             assertEquals("Sign-in required.", e.message)
         }
     }
