@@ -65,12 +65,25 @@ fun AsyncCard(
     }
     MirrorCard(title, count) {
         when {
+            // hunt16: a reload that fails mid-card keeps the
+            // already-loaded content visible and shows the
+            // failure as a line + Retry above it — never a
+            // full-card replacement for data already on screen.
+            data != null -> {
+                if (error != null) {
+                    Text(error!!, color = MaterialTheme.colorScheme.error)
+                    OutlinedButton(onClick = { reloadKey++ }) { Text("Retry") }
+                    Spacer(Modifier.height(6.dp))
+                }
+                content(data!!) { reloadKey++ }
+            }
             error != null -> {
                 Text(error!!, color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = { reloadKey++ }) { Text("Retry") }
             }
-            data == null -> Text("Loading…", color = SentinelMuted)
-            else -> content(data!!) { reloadKey++ }
+            // hunt16: the established skeleton pattern, not a
+            // bare "Loading…" line (hunt4 premium standard).
+            else -> SkeletonLines(3)
         }
     }
 }
@@ -140,7 +153,11 @@ fun ConfirmGate(
     )
 }
 
-/** A labeled text field — the Phase 3 form row. */
+/** A labeled text field — the Phase 3 form row.
+ *  hunt16: the keyboard follows the field's meaning (email /
+ *  phone / number / decimal pads inferred from the label by
+ *  [InteractionLogic.fieldKindForLabel], overridable via
+ *  [kind]) and the IME action advances instead of dismissing. */
 @Composable
 fun TextFieldRow(
     label: String,
@@ -148,17 +165,107 @@ fun TextFieldRow(
     onChange: (String) -> Unit,
     singleLine: Boolean = true,
     minLines: Int = 1,
+    kind: InteractionLogic.FieldKind? = null,
 ) {
+    val effective = kind ?: InteractionLogic.fieldKindForLabel(label)
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
         label = { Text(label) },
         singleLine = singleLine,
         minLines = minLines,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = when (effective) {
+                InteractionLogic.FieldKind.EMAIL ->
+                    androidx.compose.ui.text.input.KeyboardType.Email
+                InteractionLogic.FieldKind.PHONE ->
+                    androidx.compose.ui.text.input.KeyboardType.Phone
+                InteractionLogic.FieldKind.NUMBER ->
+                    androidx.compose.ui.text.input.KeyboardType.Number
+                InteractionLogic.FieldKind.DECIMAL ->
+                    androidx.compose.ui.text.input.KeyboardType.Decimal
+                InteractionLogic.FieldKind.TEXT ->
+                    androidx.compose.ui.text.input.KeyboardType.Text
+            },
+            imeAction = androidx.compose.ui.text.input.ImeAction.Next,
+            capitalization = if ("name" in label.lowercase()) {
+                androidx.compose.ui.text.input.KeyboardCapitalization.Words
+            } else {
+                androidx.compose.ui.text.input.KeyboardCapitalization.Sentences
+            },
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
     )
+}
+
+/**
+ * A date field (hunt16, Polish Pass 2 item 6a): the owner picks
+ * the date — never types yyyy-MM-dd. The field shows the pretty
+ * date; tapping it (or its calendar button) opens the Material 3
+ * date picker that ships INSIDE the already-locked material3
+ * 1.3.1 artifact, so this needed no new dependency and no Gradle
+ * relock. The value on the wire stays the backend's exact
+ * yyyy-MM-dd ([InteractionLogic] converts both ways). A stored
+ * value that does not parse passes through visibly, untouched.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun DateFieldRow(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit,
+) {
+    var showPicker by remember { mutableStateOf(false) }
+    val tick = rememberHapticTick()
+    OutlinedTextField(
+        value = InteractionLogic.prettyYmd(value),
+        onValueChange = { },
+        label = { Text(label) },
+        singleLine = true,
+        readOnly = true,
+        trailingIcon = {
+            Row {
+                if (value.isNotBlank()) {
+                    androidx.compose.material3.TextButton(onClick = { onChange("") }) {
+                        Text("Clear")
+                    }
+                }
+                androidx.compose.material3.IconButton(onClick = { showPicker = true }) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Filled.DateRange,
+                        contentDescription = "Pick a date for $label",
+                    )
+                }
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+    )
+    if (showPicker) {
+        val pickerState = androidx.compose.material3.rememberDatePickerState(
+            initialSelectedDateMillis = InteractionLogic.pickerMillisFor(value),
+        )
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { millis ->
+                        onChange(InteractionLogic.pickerMillisToYmd(millis))
+                    }
+                    tick()
+                    showPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text("Cancel") }
+            },
+        ) {
+            androidx.compose.material3.DatePicker(state = pickerState)
+        }
+    }
 }
 
 /** A labeled switch row (notification prefs, active flags). */

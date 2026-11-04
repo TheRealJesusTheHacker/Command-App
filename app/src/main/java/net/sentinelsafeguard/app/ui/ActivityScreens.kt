@@ -87,7 +87,7 @@ fun ActivityScreen(viewModel: AppViewModel, nav: NavController) {
     Column {
         MirrorHeader("Activity", MirrorCopy.subtitle("activity"))
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null && sessionsState.data == null -> SkeletonList()
             else -> {
                 val data = state.data
@@ -229,9 +229,9 @@ fun ActivityScreen(viewModel: AppViewModel, nav: NavController) {
                             ?: emptyList()
                         MirrorCard("Active sessions", sessions.size) {
                             when {
-                                sessionsState.error != null ->
+                                sessionsState.error != null && sessionsState.data == null ->
                                     Text(sessionsState.error!!, color = MaterialTheme.colorScheme.error)
-                                sessionsState.data == null -> Text("Loading…", color = SentinelMuted)
+                                sessionsState.data == null -> SkeletonList(3)
                                 sessions.isEmpty() -> Text("No active sessions.", color = SentinelMuted)
                                 else -> sessions.forEach { s ->
                                     Text(
@@ -261,9 +261,9 @@ fun ActivityScreen(viewModel: AppViewModel, nav: NavController) {
                     item {
                         MirrorCard("Public site") {
                             when {
-                                visitorsState.error != null ->
+                                visitorsState.error != null && visitorsState.data == null ->
                                     Text(visitorsState.error!!, color = MaterialTheme.colorScheme.error)
-                                visitorsState.data == null -> Text("Loading…", color = SentinelMuted)
+                                visitorsState.data == null -> SkeletonList(3)
                                 else -> {
                                     val v = visitorsState.data!!
                                     if (Phase3Logic.bool(v, "connected") == true) {

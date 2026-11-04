@@ -296,21 +296,9 @@ fun EngagementFormScreen(viewModel: AppViewModel, nav: NavController, engagement
                 Spacer(Modifier.height(12.dp))
                 ChoiceMenu("Status", status, statuses) { status = it }
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = startDate,
-                    onValueChange = { startDate = it },
-                    label = { Text("Start date (yyyy-MM-dd)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                DateFieldRow("Start date", startDate) { startDate = it }
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = endDate,
-                    onValueChange = { endDate = it },
-                    label = { Text("End date (yyyy-MM-dd)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                DateFieldRow("End date", endDate) { endDate = it }
                 if (saveError != null) {
                     Text(saveError!!, color = MaterialTheme.colorScheme.error)
                 }

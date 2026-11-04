@@ -149,7 +149,7 @@ fun KnowledgeScreen(viewModel: AppViewModel, nav: NavController) {
             }
         }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val data = state.data!!
@@ -345,7 +345,7 @@ fun KnowledgeDetailScreen(viewModel: AppViewModel, nav: NavController, id: Int) 
     Column {
         TextButton(onClick = { nav.popBackStack() }) { Text("← Library") }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val entry = Phase3Logic.obj(state.data, "entry") ?: JsonObject(emptyMap())

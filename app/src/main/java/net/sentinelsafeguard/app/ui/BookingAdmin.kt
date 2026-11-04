@@ -184,7 +184,7 @@ fun BookingAdminPanel(viewModel: AppViewModel) {
             }
         }
         if (managingId != null) {
-            TextFieldRow("Reschedule to (yyyy-MM-dd)", rescheduleDate, { rescheduleDate = it })
+            DateFieldRow("Reschedule to", rescheduleDate, { rescheduleDate = it })
             Button(
                 enabled = rescheduleDate.isNotBlank(),
                 onClick = {

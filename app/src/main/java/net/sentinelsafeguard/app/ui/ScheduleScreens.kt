@@ -453,13 +453,7 @@ private fun EntryForm(
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = workDate,
-            onValueChange = { workDate = it },
-            label = { Text("Date (yyyy-MM-dd)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        DateFieldRow("Date", workDate) { workDate = it }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(
@@ -770,13 +764,7 @@ fun JobFormScreen(viewModel: AppViewModel, nav: NavController, jobId: Int?, pres
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = workDate,
-                    onValueChange = { workDate = it },
-                    label = { Text("Date (yyyy-MM-dd)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                DateFieldRow("Date", workDate) { workDate = it }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = allDay, onCheckedChange = { allDay = it })
                     Text("All-day job")

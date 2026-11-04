@@ -1038,7 +1038,7 @@ private fun TrainingDocsCard(viewModel: AppViewModel, clientId: Int) {
                 )
             }
             TextFieldRow("Document label", docLabel, { docLabel = it })
-            TextFieldRow("Expiry date (yyyy-MM-dd)", docExpiry, { docExpiry = it })
+            DateFieldRow("Expiry date", docExpiry, { docExpiry = it })
             Button(
                 enabled = docLabel.isNotBlank(),
                 onClick = {
@@ -1278,7 +1278,7 @@ fun DuplicatesMode(viewModel: AppViewModel, nav: NavController) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
         )
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList(4)
             else -> {
                 val pairs = Phase3Logic.arr(state.data!!, "pairs")
@@ -1390,7 +1390,7 @@ fun VerifiedScreen(viewModel: AppViewModel, nav: NavController) {
         TextButton(onClick = { nav.popBackStack() }) { Text("← Back to directory") }
         MirrorHeader("Sentinel Verified — register")
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList(4)
             else -> {
                 val data = state.data!!
@@ -1520,7 +1520,7 @@ fun FirmPulseScreen(viewModel: AppViewModel, nav: NavController) {
         TextButton(onClick = { nav.popBackStack() }) { Text("← Back") }
         MirrorHeader("Firm Pulse")
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList(4)
             else -> {
                 val pulse = state.data!!

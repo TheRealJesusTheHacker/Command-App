@@ -138,11 +138,11 @@ private fun SubAssignmentsCard(
     var subPick by remember { mutableStateOf<JsonObject?>(null) }
     MirrorCard("Subcontractor assignments") {
         when {
-            state.error != null -> {
+            state.error != null && state.data == null -> {
                 Text(state.error!!, color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = { state.reloadKey++ }) { Text("Retry") }
             }
-            state.data == null -> Text("Loading…", color = SentinelMuted)
+            state.data == null -> SkeletonList(3)
             else -> {
                 val data = state.data!!
                 val assignments = Phase3Logic.arr(data, "assignments")
@@ -245,11 +245,11 @@ private fun SecretsCard(
             clientId = clients.firstOrNull { it.second == picked }?.first
         }
         when {
-            state.error != null -> {
+            state.error != null && state.data == null -> {
                 Text(state.error!!, color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = { state.reloadKey++ }) { Text("Retry") }
             }
-            state.data == null -> Text("Loading…", color = SentinelMuted)
+            state.data == null -> SkeletonList(3)
             else -> {
                 val secrets = Phase3Logic.arr(state.data, "secrets")
                 if (secrets.isEmpty()) {
@@ -373,11 +373,11 @@ private fun TipsCard(
             Spacer(Modifier.height(4.dp))
         }
         when {
-            state.error != null -> {
+            state.error != null && state.data == null -> {
                 Text(state.error!!, color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = { state.reloadKey++ }) { Text("Retry") }
             }
-            state.data == null -> Text("Loading…", color = SentinelMuted)
+            state.data == null -> SkeletonList(3)
             else -> {
                 val data = state.data!!
                 val tips = Phase3Logic.arr(data, "tips")

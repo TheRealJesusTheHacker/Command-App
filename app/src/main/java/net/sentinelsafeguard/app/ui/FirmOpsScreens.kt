@@ -107,7 +107,7 @@ private fun BookingWarningsCard(viewModel: AppViewModel) {
     if (data == null && state.error == null) return
     MirrorCard("Booking warnings") {
         when {
-            state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
+            state.error != null && state.data == null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
             data != null -> {
                 val warnings = Phase3Logic.arr(data, "warnings")
                 if (warnings.isEmpty()) {
@@ -135,11 +135,11 @@ private fun JobCostsCard(viewModel: AppViewModel, onError: (String) -> Unit) {
     var detail by remember { mutableStateOf<JsonObject?>(null) }
     MirrorCard("Job costing") {
         when {
-            state.error != null -> {
+            state.error != null && state.data == null -> {
                 Text(state.error!!, color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = { state.reloadKey++ }) { Text("Retry") }
             }
-            state.data == null -> Text("Loading…", color = SentinelMuted)
+            state.data == null -> SkeletonList(3)
             else -> {
                 val data = state.data!!
                 val note = Phase3Logic.str(data, "note")
@@ -236,11 +236,11 @@ private fun VendorsCard(
 
     MirrorCard("Vendor directory") {
         when {
-            state.error != null -> {
+            state.error != null && state.data == null -> {
                 Text(state.error!!, color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = { state.reloadKey++ }) { Text("Retry") }
             }
-            state.data == null -> Text("Loading…", color = SentinelMuted)
+            state.data == null -> SkeletonList(3)
             else -> {
                 val data = state.data!!
                 val note = Phase3Logic.str(data, "note")
@@ -275,8 +275,8 @@ private fun VendorsCard(
                     TextFieldRow("Contact email", contactEmail, { contactEmail = it })
                     TextFieldRow("Contact phone", contactPhone, { contactPhone = it })
                     TextFieldRow("Service", service, { service = it })
-                    TextFieldRow("Contract start", contractStart, { contractStart = it })
-                    TextFieldRow("Renewal date", renewalDate, { renewalDate = it })
+                    DateFieldRow("Contract start", contractStart, { contractStart = it })
+                    DateFieldRow("Renewal date", renewalDate, { renewalDate = it })
                     TextFieldRow("Cost note", costNote, { costNote = it })
                     TextFieldRow("Notes", notes, { notes = it }, singleLine = false, minLines = 2)
                     Row {
@@ -371,11 +371,11 @@ private fun OwnerTasksCard(
 
     MirrorCard("Owner tasks") {
         when {
-            state.error != null -> {
+            state.error != null && state.data == null -> {
                 Text(state.error!!, color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = { state.reloadKey++ }) { Text("Retry") }
             }
-            state.data == null -> Text("Loading…", color = SentinelMuted)
+            state.data == null -> SkeletonList(3)
             else -> {
                 val data = state.data!!
                 val note = Phase3Logic.str(data, "note")
@@ -469,7 +469,7 @@ private fun OwnerTasksCard(
                 if (showForm) {
                     TextFieldRow("Title", title, { title = it })
                     TextFieldRow("Detail", detail, { detail = it }, singleLine = false, minLines = 2)
-                    TextFieldRow("Due date", dueDate, { dueDate = it })
+                    DateFieldRow("Due date", dueDate, { dueDate = it })
                     ChoiceMenu("Priority", priority, MirrorVocab.PRIORITIES) { priority = it }
                     Row {
                         Button(onClick = {
@@ -551,11 +551,11 @@ private fun AvailabilityCard(
 
     MirrorCard("Staff availability") {
         when {
-            state.error != null -> {
+            state.error != null && state.data == null -> {
                 Text(state.error!!, color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = { state.reloadKey++ }) { Text("Retry") }
             }
-            state.data == null -> Text("Loading…", color = SentinelMuted)
+            state.data == null -> SkeletonList(3)
             else -> {
                 val data = state.data!!
                 val staff = Phase3Logic.arr(data, "staff")
@@ -610,8 +610,8 @@ private fun AvailabilityCard(
                             staffPick = staff.firstOrNull { Phase3Logic.str(it, "displayName") == picked }
                         }
                     }
-                    TextFieldRow("Date from", dateFrom, { dateFrom = it })
-                    TextFieldRow("Date to", dateTo, { dateTo = it })
+                    DateFieldRow("Date from", dateFrom, { dateFrom = it })
+                    DateFieldRow("Date to", dateTo, { dateTo = it })
                     ChoiceMenu(
                         "Status",
                         Phase8Logic.stateLabel(status),

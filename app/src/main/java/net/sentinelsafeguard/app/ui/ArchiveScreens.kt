@@ -85,7 +85,7 @@ fun ArchiveScreen(viewModel: AppViewModel, nav: NavController) {
     Column {
         MirrorHeader("Archive")
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val allRows = Phase3Logic.arr(state.data, "rows")

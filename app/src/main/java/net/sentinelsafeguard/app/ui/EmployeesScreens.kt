@@ -189,7 +189,7 @@ private fun EmployeesDirectory(viewModel: AppViewModel, nav: NavController) {
 private fun EmployeesWorkload(viewModel: AppViewModel, nav: NavController) {
     val state = rememberJsonScreen { viewModel.api.employeesWorkload() }
     when {
-        state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+        state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
         state.data == null -> SkeletonList()
         else -> {
             val data = state.data!!
@@ -255,7 +255,7 @@ fun EmployeeProfileScreen(viewModel: AppViewModel, nav: NavController, employeeI
             OutlinedButton(onClick = { nav.popBackStack() }) { Text("← Back") }
         }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val data = state.data!!
@@ -557,6 +557,10 @@ fun EmployeeFormScreen(viewModel: AppViewModel, nav: NavController, employeeId: 
                     ActionErrorText(error)
                     Spacer(Modifier.height(10.dp))
                     Button(onClick = {
+                        if (displayName.isBlank()) {
+                            error = "Display name is required."
+                            return@Button
+                        }
                         scope.launch {
                             try {
                                 val body = buildJsonObject {

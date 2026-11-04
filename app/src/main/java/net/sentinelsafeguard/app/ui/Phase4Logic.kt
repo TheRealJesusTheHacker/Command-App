@@ -36,14 +36,11 @@ object Phase4Logic {
     val PURCHASE_DRAFT_STATES: List<String> = listOf("ordered_offline", "dismissed")
 
     /** Parse a dollars text field ("500", "500.00", "$1,234.56")
-     *  into integer cents; null when the text is not a number. */
-    fun dollarsToCents(text: String): Long? {
-        val cleaned = text.trim().removePrefix("$").replace(",", "")
-        if (cleaned.isBlank()) return null
-        val value = cleaned.toDoubleOrNull() ?: return null
-        if (value < 0) return null
-        return Math.round(value * 100)
-    }
+     *  into integer cents; null when the text is not a number.
+     *  hunt16: delegates to the exact BigDecimal parser — a user
+     *  typing dollars gets exactly web's math, never a cent lost
+     *  to binary floating point. */
+    fun dollarsToCents(text: String): Long? = InteractionLogic.dollarsToCentsExact(text)
 
     fun centsToDollarsText(cents: Long): String {
         val dollars = cents / 100

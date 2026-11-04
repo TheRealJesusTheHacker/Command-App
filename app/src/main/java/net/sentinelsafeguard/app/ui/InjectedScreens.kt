@@ -428,7 +428,7 @@ private fun PartsScreen(viewModel: AppViewModel) {
                             buildJsonObject {
                                 put("name", name); put("sku", sku)
                                 put("qtyOnHand", qty.toIntOrNull() ?: 0)
-                                cost.toDoubleOrNull()?.let { put("unitCostCents", (it * 100).toInt()) }
+                                Phase4Logic.dollarsToCents(cost)?.let { put("unitCostCents", it) }
                                 put("lowStockThreshold", 1)
                             },
                             null,

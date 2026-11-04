@@ -23,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -46,6 +48,18 @@ fun SignInScreen(viewModel: AppViewModel) {
     var needsTotp by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val totpFocus = remember { FocusRequester() }
+    // hunt16: when the second leg appears, the keyboard lands on
+    // the code field — no hunting for the field mid-sign-in.
+    LaunchedEffect(needsTotp) {
+        if (needsTotp) {
+            try {
+                totpFocus.requestFocus()
+            } catch (ignored: Exception) {
+                // Focus is garnish; the field is on screen either way.
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -67,6 +81,14 @@ fun SignInScreen(viewModel: AppViewModel) {
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(24.dp))
+
+        // hunt16: an expired session returns here WITH its plain
+        // explanation (set by the shell when a 401 ended it).
+        val notice = viewModel.sessionNotice
+        if (notice != null && !needsTotp) {
+            Text(notice, color = SentinelDanger, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(12.dp))
+        }
 
         OutlinedTextField(
             value = displayName,
@@ -99,7 +121,7 @@ fun SignInScreen(viewModel: AppViewModel) {
                 label = { Text("6-digit code") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(totpFocus),
             )
         }
 
@@ -122,12 +144,20 @@ fun SignInScreen(viewModel: AppViewModel) {
                             error = null
                         }
                         is LoginResult.Failed -> {
-                            error = if (result.message.contains("passphrase", true) ||
-                                result.message.contains("401")
-                            ) {
-                                "That name and passphrase did not match. Check them and try again."
-                            } else {
-                                result.message
+                            error = when {
+                                needsTotp -> {
+                                    // hunt16: a failed code clears
+                                    // for a clean retype and says
+                                    // how to recover — the leg
+                                    // stays open, Start over below
+                                    // restarts the whole sign-in.
+                                    totpCode = ""
+                                    InteractionLogic.TOTP_RETRY_MESSAGE
+                                }
+                                result.message.contains("passphrase", true) ||
+                                    result.message.contains("401") ->
+                                    "That name and passphrase did not match. Check them and try again."
+                                else -> result.message
                             }
                         }
                     }
@@ -145,6 +175,16 @@ fun SignInScreen(viewModel: AppViewModel) {
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(if (busy) "Signing in…" else "Sign in")
+        }
+        if (needsTotp) {
+            TextButton(onClick = {
+                // Start over: drop the challenge and the typed
+                // secrets, back to a fresh first leg.
+                needsTotp = false
+                totpCode = ""
+                passphrase = ""
+                error = null
+            }) { Text("Start over") }
         }
         Spacer(Modifier.height(12.dp))
         Text(

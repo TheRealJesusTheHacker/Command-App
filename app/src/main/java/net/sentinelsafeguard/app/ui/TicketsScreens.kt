@@ -68,6 +68,7 @@ private fun dueLabel(ticket: Ticket, today: String): String? {
     return "Due $due" + if (overdue) " · OVERDUE" else ""
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
     val scope = rememberCoroutineScope()
@@ -75,33 +76,46 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
     var total by remember { mutableStateOf(0) }
     var roster by remember { mutableStateOf<List<User>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
+    var banner by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
     var directoryMode by remember { mutableStateOf(false) }
     val todayStr = remember { java.time.LocalDate.now().toString() }
 
     LaunchedEffect(reloadKey) {
-        error = null
+        // hunt16: a failed RELOAD keeps the loaded list on screen
+        // and reports as a banner; only a failed FIRST load is a
+        // full-screen error.
         try {
             val page = viewModel.api.ticketsFiltered()
             all = page.items
             total = page.total
+            error = null
             roster = try {
                 viewModel.api.roster()
             } catch (e: Exception) {
                 emptyList()
             }
         } catch (e: Exception) {
-            error = plainError(e, "Tickets could not be loaded. Check your connection and try again.")
+            val msg = plainError(e, "Tickets could not be loaded. Check your connection and try again.")
+            if (all == null) error = msg else banner = msg
+        } finally {
+            refreshing = false
         }
     }
 
     fun moveStage(ticket: Ticket, stage: String) {
+        // hunt16: optimistic move — the card steps immediately;
+        // on failure it rolls back and the banner says so plainly.
+        val previous = all
+        all = previous?.map { if (it.id == ticket.id) it.copy(status = stage) else it }
         scope.launch {
             try {
                 viewModel.api.patchTicket(ticket.id, TicketPatchRequest(status = stage))
                 reloadKey++
             } catch (e: Exception) {
-                error = plainError(e, "That stage move could not be saved. Try again.")
+                all = previous
+                banner = plainError(e, "That stage move could not be saved — the ticket was put back. Try again.")
             }
         }
     }
@@ -114,10 +128,13 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
             Button(onClick = { nav.navigate("ticketNew") }) { Text("+ New ticket") }
         }
         when {
-            error != null -> ErrorBox(error!!) { reloadKey++ }
+            error != null && all == null -> ErrorBox(error!!) { reloadKey++ }
             all == null -> SkeletonList(6)
             else -> {
                 val tickets = all!!
+                if (banner != null) {
+                    ErrorBanner(banner!!, onRetry = { banner = null; reloadKey++ }, onDismiss = { banner = null })
+                }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                     StatCard(
                         "Open tickets",
@@ -185,6 +202,12 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
                         onNew = { nav.navigate("ticketNew") },
                     )
                 } else {
+                    // hunt16: pull-to-refresh on the board list —
+                    // web's mental model for a work queue.
+                    androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                        isRefreshing = refreshing,
+                        onRefresh = { refreshing = true; reloadKey++ },
+                    ) {
                     LazyColumn {
                         MirrorVocab.groupBoard(tickets).forEach { (stage, cards) ->
                             item {
@@ -213,6 +236,7 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
                             }
                         }
                         item { Spacer(Modifier.height(16.dp)) }
+                    }
                     }
                 }
             }
@@ -994,13 +1018,7 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = dueDate,
-                    onValueChange = { dueDate = it },
-                    label = { Text("Due date (yyyy-MM-dd)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                DateFieldRow("Due date", dueDate) { dueDate = it }
                 Spacer(Modifier.height(12.dp))
                 val caseOptions = listOf("No case") + cases.map { "#${it.id} · ${it.title}" }
                 ChoiceMenu(

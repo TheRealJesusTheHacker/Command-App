@@ -83,7 +83,7 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
     Column {
         MirrorHeader(MirrorCopy.title("osint", "OSINT"), MirrorCopy.subtitle("osint"))
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val data = state.data!!
@@ -237,8 +237,8 @@ private fun OsintReportSheet(viewModel: AppViewModel, id: Int, onClose: () -> Un
         text = {
             Column {
                 when {
-                    state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
-                    state.data == null -> Text("Loading…", color = SentinelMuted)
+                    state.error != null && state.data == null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
+                    state.data == null -> SkeletonList(3)
                     else -> {
                         val report = Phase3Logic.obj(state.data, "report") ?: state.data!!
                         Text(Phase3Logic.str(report, "title"), style = MaterialTheme.typography.titleSmall)
@@ -281,7 +281,7 @@ fun BreachIntelScreen(viewModel: AppViewModel, nav: NavController) {
             )
         }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val data = state.data!!
@@ -377,8 +377,8 @@ private fun BreachDetailSheet(
         text = {
             Column {
                 when {
-                    state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
-                    state.data == null -> Text("Loading…", color = SentinelMuted)
+                    state.error != null && state.data == null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
+                    state.data == null -> SkeletonList(3)
                     else -> {
                         val data = state.data!!
                         val detail = Phase3Logic.obj(data, "detail")
@@ -521,8 +521,8 @@ private fun BreachFormSheet(
                     TextFieldRow("Sector", sector, onChange = { sector = it })
                 }
                 TextFieldRow("Organization", org, onChange = { org = it })
-                TextFieldRow("Incident date", incidentDate, onChange = { incidentDate = it })
-                TextFieldRow("Disclosure date", disclosureDate, onChange = { disclosureDate = it })
+                DateFieldRow("Incident date", incidentDate, onChange = { incidentDate = it })
+                DateFieldRow("Disclosure date", disclosureDate, onChange = { disclosureDate = it })
                 TextFieldRow("Records affected", records, onChange = { records = it })
                 TextFieldRow("Data classes (comma list)", dataClasses, onChange = { dataClasses = it })
                 TextFieldRow("Attack vector", attackVector, onChange = { attackVector = it })

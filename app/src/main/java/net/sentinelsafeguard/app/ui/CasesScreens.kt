@@ -67,6 +67,7 @@ private fun caseDueLabel(case: CaseItem, today: String): String? {
     return "Due $due" + if (overdue) " · OVERDUE" else ""
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun CasesScreen(viewModel: AppViewModel, nav: NavController) {
     val scope = rememberCoroutineScope()
@@ -78,29 +79,38 @@ fun CasesScreen(viewModel: AppViewModel, nav: NavController) {
     var directoryMode by remember { mutableStateOf(false) }
     val todayStr = remember { java.time.LocalDate.now().toString() }
 
+    var banner by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
     LaunchedEffect(reloadKey) {
-        error = null
         try {
             val page = viewModel.api.casesFiltered()
             all = page.items
             total = page.total
+            error = null
             roster = try {
                 viewModel.api.roster()
             } catch (e: Exception) {
                 emptyList()
             }
         } catch (e: Exception) {
-            error = plainError(e, "Cases could not be loaded. Check your connection and try again.")
+            val msg = plainError(e, "Cases could not be loaded. Check your connection and try again.")
+            if (all == null) error = msg else banner = msg
+        } finally {
+            refreshing = false
         }
     }
 
     fun moveStage(case: CaseItem, stage: String) {
+        // hunt16: optimistic move + plain rollback (as Tickets).
+        val previous = all
+        all = previous?.map { if (it.id == case.id) it.copy(status = stage) else it }
         scope.launch {
             try {
                 viewModel.api.setCaseStatus(case.id, stage)
                 reloadKey++
             } catch (e: Exception) {
-                error = plainError(e, "That stage move could not be saved. Try again.")
+                all = previous
+                banner = plainError(e, "That stage move could not be saved — the case was put back. Try again.")
             }
         }
     }
@@ -110,10 +120,13 @@ fun CasesScreen(viewModel: AppViewModel, nav: NavController) {
             Button(onClick = { nav.navigate("caseNew") }) { Text("+ New case") }
         }
         when {
-            error != null -> ErrorBox(error!!) { reloadKey++ }
+            error != null && all == null -> ErrorBox(error!!) { reloadKey++ }
             all == null -> SkeletonList(6)
             else -> {
                 val cases = all!!
+                if (banner != null) {
+                    ErrorBanner(banner!!, onRetry = { banner = null; reloadKey++ }, onDismiss = { banner = null })
+                }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                     StatCard(
                         "Open cases",
@@ -179,6 +192,10 @@ fun CasesScreen(viewModel: AppViewModel, nav: NavController) {
                         onNew = { nav.navigate("caseNew") },
                     )
                 } else {
+                    androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                        isRefreshing = refreshing,
+                        onRefresh = { refreshing = true; reloadKey++ },
+                    ) {
                     LazyColumn {
                         MirrorVocab.groupCaseBoard(cases).forEach { (stage, cards) ->
                             item { SectionHeader(stage, cards.size) }
@@ -205,6 +222,7 @@ fun CasesScreen(viewModel: AppViewModel, nav: NavController) {
                             }
                         }
                         item { Spacer(Modifier.height(16.dp)) }
+                    }
                     }
                 }
             }
@@ -743,13 +761,7 @@ fun CaseFormScreen(viewModel: AppViewModel, nav: NavController, caseId: Int?) {
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = dueDate,
-                    onValueChange = { dueDate = it },
-                    label = { Text("Due date (yyyy-MM-dd)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                DateFieldRow("Due date", dueDate) { dueDate = it }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = notes,

@@ -83,7 +83,7 @@ fun LawScreen(viewModel: AppViewModel, nav: NavController) {
             ActionErrorText(error)
         }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val data = state.data!!

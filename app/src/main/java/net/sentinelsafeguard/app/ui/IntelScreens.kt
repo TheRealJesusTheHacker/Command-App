@@ -70,7 +70,7 @@ private fun LiveFeedCard(viewModel: AppViewModel, title: String, loader: suspend
             OutlinedButton(onClick = { state.reloadKey++ }) { Text("Reload") }
         }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList(3)
             else -> {
                 val data = state.data!!
@@ -172,7 +172,7 @@ fun ThreatIntelScreen(viewModel: AppViewModel, nav: NavController) {
             }
         }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val data = state.data!!
@@ -227,8 +227,8 @@ private fun ThreatDetailSheet(viewModel: AppViewModel, itemId: Int, onClose: () 
         text = {
             Column {
                 when {
-                    state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
-                    state.data == null -> Text("Loading…", color = SentinelMuted)
+                    state.error != null && state.data == null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
+                    state.data == null -> SkeletonList(3)
                     else -> {
                         val detail = Phase3Logic.obj(state.data, "detail") ?: state.data!!
                         Text(Phase3Logic.str(detail, "title"), style = MaterialTheme.typography.titleSmall)

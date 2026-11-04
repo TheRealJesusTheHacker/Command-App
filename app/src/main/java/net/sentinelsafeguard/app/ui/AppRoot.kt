@@ -47,6 +47,36 @@ import kotlinx.coroutines.launch
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 
 /**
+ * One transition pattern app-wide (hunt16, Polish Pass 2): a
+ * short fade + a small horizontal settle for forward moves, the
+ * mirror image on pop, plain fade out. Every NavHost (Command
+ * shell + portal shell) uses exactly these, so no screen cuts
+ * while a sibling animates.
+ */
+private fun navEnter(): androidx.compose.animation.EnterTransition =
+    androidx.compose.animation.fadeIn(
+        androidx.compose.animation.core.tween(180),
+    ) + androidx.compose.animation.slideInHorizontally(
+        androidx.compose.animation.core.tween(180),
+    ) { it / 14 }
+
+private fun navExit(): androidx.compose.animation.ExitTransition =
+    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(140))
+
+private fun navPopEnter(): androidx.compose.animation.EnterTransition =
+    androidx.compose.animation.fadeIn(
+        androidx.compose.animation.core.tween(180),
+    ) + androidx.compose.animation.slideInHorizontally(
+        androidx.compose.animation.core.tween(180),
+    ) { -it / 14 }
+
+private fun navPopExit(): androidx.compose.animation.ExitTransition =
+    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(140)) +
+        androidx.compose.animation.slideOutHorizontally(
+            androidx.compose.animation.core.tween(160),
+        ) { it / 14 }
+
+/**
  * The mirrored shell (COMMAND-MIRROR-SPEC §2): Command's grouped
  * navigation as a drawer — exact groups, labels, and order —
  * over a navigation-compose back stack. Landing is Today (the
@@ -82,6 +112,7 @@ private fun AppShell(viewModel: AppViewModel) {
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val drawerTick = rememberHapticTick()
 
     LaunchedEffect(viewModel.signedIn) {
         if (!viewModel.meLoaded) viewModel.refreshMe()
@@ -245,6 +276,7 @@ private fun AppShell(viewModel: AppViewModel) {
     }
 
     fun go(route: String) {
+        drawerTick()
         scope.launch { drawerState.close() }
         if (currentRoute != route) {
             nav.navigate(route) { launchSingleTop = true }
@@ -350,7 +382,7 @@ private fun AppShell(viewModel: AppViewModel) {
             },
         ) { padding ->
             Box(Modifier.padding(padding)) {
-                NavHost(navController = nav, startDestination = startRoute) {
+                NavHost(navController = nav, startDestination = startRoute, enterTransition = { navEnter() }, exitTransition = { navExit() }, popEnterTransition = { navPopEnter() }, popExitTransition = { navPopExit() }) {
                     composable("today") { TodayScreen(viewModel, nav) }
                     composable("dashboard") { DashboardScreen(viewModel, nav) }
                     composable("tickets") { TicketsScreen(viewModel, nav) }
@@ -688,6 +720,7 @@ fun AdminConsoleScreen(nav: androidx.navigation.NavController) {
 @Composable
 fun PortalShell(viewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
+    val drawerTick = rememberHapticTick()
     val nav = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val backStack by nav.currentBackStackEntryAsState()
@@ -695,6 +728,7 @@ fun PortalShell(viewModel: AppViewModel) {
     val user = viewModel.me?.user
 
     fun go(route: String) {
+        drawerTick()
         scope.launch { drawerState.close() }
         if (currentRoute != route) {
             nav.navigate(route) { launchSingleTop = true }
@@ -764,6 +798,10 @@ fun PortalShell(viewModel: AppViewModel) {
                 NavHost(
                     navController = nav,
                     startDestination = MirrorNav.portalLandingKey(),
+                    enterTransition = { navEnter() },
+                    exitTransition = { navExit() },
+                    popEnterTransition = { navPopEnter() },
+                    popExitTransition = { navPopExit() },
                 ) {
                     composable("portal_profile") { PortalProfileScreen(viewModel, nav) }
                     composable("portal_progress") { PortalProgressScreen(viewModel, nav) }

@@ -273,7 +273,7 @@ private fun BackupTestsCard(viewModel: AppViewModel) {
         Spacer(Modifier.height(8.dp))
         Text("Log test", style = MaterialTheme.typography.titleSmall)
         TextFieldRow("Asset id", assetId, { assetId = it })
-        TextFieldRow("Tested at (yyyy-MM-dd)", testedAt, { testedAt = it })
+        DateFieldRow("Tested at", testedAt, { testedAt = it })
         if (methods.isNotEmpty()) ChoiceMenu("Method", method, methods) { method = it }
         if (results.isNotEmpty()) ChoiceMenu("Result", result, results) { result = it }
         TextFieldRow("Notes", notes, { notes = it })
@@ -387,7 +387,7 @@ private fun ScansCard(
         Text("Record scan", style = MaterialTheme.typography.titleSmall)
         ClientPicker(clients, clientId) { clientId = it }
         TextFieldRow("Target", target, { target = it })
-        TextFieldRow("Scan date (yyyy-MM-dd)", scanDate, { scanDate = it })
+        DateFieldRow("Scan date", scanDate, { scanDate = it })
         TextFieldRow("Tool", tool, { tool = it })
         TextFieldRow("Summary", summary, { summary = it })
         Button(

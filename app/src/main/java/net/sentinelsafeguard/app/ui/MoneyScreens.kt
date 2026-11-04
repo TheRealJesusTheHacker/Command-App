@@ -164,11 +164,11 @@ private fun InvoiceDirectory(viewModel: AppViewModel, nav: NavController) {
             status ?: "all",
         ) { picked -> status = picked }
         when {
-            state.error != null -> Text(
+            state.error != null && state.data == null -> Text(
                 state.error!!, color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(16.dp),
             )
-            state.data == null -> Text("Loading…", color = SentinelMuted, modifier = Modifier.padding(16.dp))
+            state.data == null -> SkeletonList(3)
             else -> {
                 val rows = Phase3Logic.arr(state.data!!, "invoices")
                 val total = Phase3Logic.int(state.data!!, "total") ?: rows.size
@@ -222,8 +222,8 @@ private fun InvoiceBoard(viewModel: AppViewModel, nav: NavController) {
         InvoiceStats(state.data?.let { Phase3Logic.obj(it, "stats") })
         ActionErrorText(error)
         when {
-            state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
-            state.data == null -> Text("Loading…", color = SentinelMuted, modifier = Modifier.padding(16.dp))
+            state.error != null && state.data == null -> Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+            state.data == null -> SkeletonList(3)
             else -> {
                 val rows = Phase3Logic.arr(state.data!!, "invoices")
                 LazyColumn {
@@ -276,8 +276,8 @@ fun InvoiceProfileScreen(viewModel: AppViewModel, nav: NavController, invoiceId:
     Column(Modifier.padding(bottom = 24.dp)) {
         OutlinedButton(onClick = { nav.popBackStack() }, modifier = Modifier.padding(16.dp)) { Text("← Back to invoices") }
         when {
-            state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
-            state.data == null -> Text("Loading…", color = SentinelMuted, modifier = Modifier.padding(16.dp))
+            state.error != null && state.data == null -> Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+            state.data == null -> SkeletonList(3)
             else -> {
                 val data = state.data!!
                 val inv = Phase3Logic.obj(data, "invoice") ?: JsonObject(emptyMap())
@@ -415,7 +415,7 @@ private fun PaymentsCard(
         }
         TextFieldRow("Amount ($)", amount, { amount = it })
         ChoiceMenu("Method", method, Phase4Logic.PAYMENT_METHODS) { method = it }
-        TextFieldRow("Payment date", date, { date = it })
+        DateFieldRow("Payment date", date, { date = it })
         Button(onClick = {
             val cents = Phase4Logic.dollarsToCents(amount)
             if (cents == null) onError("Enter the payment amount as dollars, for example 50.00.")
@@ -441,7 +441,7 @@ private fun PaymentPlanCard(
                 TextFieldRow("Installment ${idx + 1} amount ($)", amt, { v ->
                     rows = rows.toMutableList().also { it[idx] = v to due }
                 })
-                TextFieldRow("Installment ${idx + 1} due date", due, { v ->
+                DateFieldRow("Installment ${idx + 1} due date", due, { v ->
                     rows = rows.toMutableList().also { it[idx] = amt to v }
                 })
             }
@@ -523,8 +523,8 @@ fun InvoiceFormScreen(viewModel: AppViewModel, nav: NavController, invoiceId: In
                     clients.firstOrNull { it.legalName == picked }?.let { clientId = it.id }
                 }
             }
-            TextFieldRow("Issue date", issueDate, { issueDate = it })
-            TextFieldRow("Due date", dueDate, { dueDate = it })
+            DateFieldRow("Issue date", issueDate, { issueDate = it })
+            DateFieldRow("Due date", dueDate, { dueDate = it })
             TextFieldRow("Recipient email", recipientEmail, { recipientEmail = it })
             TextFieldRow("Tax rate (%)", taxRate, { taxRate = it })
             Text("Line items", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
@@ -603,8 +603,8 @@ private fun QuotesSection(viewModel: AppViewModel, nav: NavController) {
             Button(onClick = { nav.navigate("quoteNew") }) { Text("+ New quote") }
         }
         when {
-            state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
-            state.data == null -> Text("Loading…", color = SentinelMuted, modifier = Modifier.padding(16.dp))
+            state.error != null && state.data == null -> Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+            state.data == null -> SkeletonList(3)
             else -> {
                 val rows = Phase3Logic.arr(state.data!!, "quotes")
                 if (rows.isEmpty()) Text("No quotes yet.", color = SentinelMuted, modifier = Modifier.padding(16.dp))
@@ -640,8 +640,8 @@ fun QuoteProfileScreen(viewModel: AppViewModel, nav: NavController, quoteId: Int
     Column {
         OutlinedButton(onClick = { nav.popBackStack() }, modifier = Modifier.padding(16.dp)) { Text("← Back to Quotes") }
         when {
-            state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
-            state.data == null -> Text("Loading…", color = SentinelMuted, modifier = Modifier.padding(16.dp))
+            state.error != null && state.data == null -> Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+            state.data == null -> SkeletonList(3)
             else -> {
                 val q = Phase3Logic.obj(state.data!!, "quote") ?: JsonObject(emptyMap())
                 MirrorHeader(Phase3Logic.str(q, "quoteNumber")) {
@@ -747,7 +747,7 @@ fun QuoteFormScreen(viewModel: AppViewModel, nav: NavController, quoteId: Int?) 
             TextFieldRow("Title", title, { title = it })
             ChoiceMenu("Convert to", convertTo, Phase4Logic.QUOTE_CONVERT_TO) { convertTo = it }
             TextFieldRow("Tax rate (%)", taxRate, { taxRate = it })
-            TextFieldRow("Expires date", expiresDate, { expiresDate = it })
+            DateFieldRow("Expires date", expiresDate, { expiresDate = it })
             Text("Price book lines", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
             priceItems.forEach { item ->
                 val id = Phase3Logic.int(item, "id") ?: return@forEach
@@ -839,8 +839,8 @@ private fun PriceBookSection(viewModel: AppViewModel) {
             }
         }
         when {
-            state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
-            state.data == null -> Text("Loading…", color = SentinelMuted, modifier = Modifier.padding(16.dp))
+            state.error != null && state.data == null -> Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+            state.data == null -> SkeletonList(3)
             else -> {
                 val rows = Phase3Logic.arr(state.data!!, "items")
                 if (rows.isEmpty()) Text("No price items yet.", color = SentinelMuted, modifier = Modifier.padding(16.dp))
@@ -887,8 +887,8 @@ private fun PlansSection(viewModel: AppViewModel, nav: NavController) {
             if (notice != null) Text(notice!!, color = SentinelMuted, modifier = Modifier.padding(16.dp))
             MirrorCard("Overdue installments", overdueState.data?.let { Phase3Logic.int(it, "count") }) {
                 when {
-                    overdueState.error != null -> Text(overdueState.error!!, color = MaterialTheme.colorScheme.error)
-                    overdueState.data == null -> Text("Loading…", color = SentinelMuted)
+                    overdueState.error != null && overdueState.data == null -> Text(overdueState.error!!, color = MaterialTheme.colorScheme.error)
+                    overdueState.data == null -> SkeletonList(3)
                     else -> {
                         val rows = Phase3Logic.arr(overdueState.data!!, "overdue")
                         if (rows.isEmpty()) Text("No overdue installments.", color = SentinelMuted)
@@ -916,8 +916,8 @@ private fun PlansSection(viewModel: AppViewModel, nav: NavController) {
                     color = SentinelMuted, style = MaterialTheme.typography.bodySmall,
                 )
                 when {
-                    draftsState.error != null -> Text(draftsState.error!!, color = MaterialTheme.colorScheme.error)
-                    draftsState.data == null -> Text("Loading…", color = SentinelMuted)
+                    draftsState.error != null && draftsState.data == null -> Text(draftsState.error!!, color = MaterialTheme.colorScheme.error)
+                    draftsState.data == null -> SkeletonList(3)
                     else -> {
                         val rows = Phase3Logic.arr(draftsState.data!!, "drafts")
                         if (rows.isEmpty()) Text("No reminder drafts.", color = SentinelMuted)

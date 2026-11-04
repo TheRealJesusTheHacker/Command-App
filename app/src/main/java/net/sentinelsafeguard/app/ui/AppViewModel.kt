@@ -94,11 +94,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         passphrase: String,
         onResult: (LoginResult) -> Unit,
     ) {
+        sessionNotice = null
         viewModelScope.launch {
             val result = try {
                 api.login(displayName, passphrase, deviceName())
             } catch (e: Exception) {
-                LoginResult.Failed("No connection. Check your internet and try again.")
+                LoginResult.Failed(InteractionLogic.NO_CONNECTION_MESSAGE)
             }
             if (result is LoginResult.TotpRequired) {
                 pendingTotpChallenge = result.challenge
@@ -125,7 +126,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val result = try {
                 api.completeTotp(challenge, code, deviceName())
             } catch (e: Exception) {
-                LoginResult.Failed("No connection. Check your internet and try again.")
+                LoginResult.Failed(InteractionLogic.NO_CONNECTION_MESSAGE)
             }
             if (result is LoginResult.Success) {
                 completeSignIn(result, pendingDisplayName)
@@ -159,8 +160,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (signedIn && settings.biometricEnabled) locked = true
     }
 
+    /** Plain explanation waiting on the sign-in screen after a
+     *  401 ended the session (hunt16): a clean return to sign-in
+     *  WITH the reason, never a silent ejection. */
+    var sessionNotice by mutableStateOf<String?>(null)
+
+    fun clearSessionNotice() {
+        sessionNotice = null
+    }
+
     /** A 401 from anywhere lands here: the token is dead, back to sign-in. */
     private fun handleTokenDead() {
+        sessionNotice = InteractionLogic.SESSION_ENDED_NOTICE
         viewModelScope.launch {
             secure.clearAll()
             mail.clearCache()

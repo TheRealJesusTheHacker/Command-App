@@ -64,7 +64,7 @@ fun SentinelNewsScreen(viewModel: AppViewModel, nav: NavController) {
     Column {
         MirrorHeader("Sentinel News", MirrorCopy.subtitle("sentinelnews"))
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val items = Phase3Logic.arr(state.data, "items")
@@ -139,7 +139,7 @@ fun NewsDeskScreen(viewModel: AppViewModel, nav: NavController) {
             ActionErrorText(error)
         }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val data = state.data!!
@@ -271,7 +271,7 @@ private fun NewsItemFormSheet(
                 } else {
                     TextFieldRow("Tag", tag, onChange = { tag = it })
                 }
-                TextFieldRow("Date", date, onChange = { date = it })
+                DateFieldRow("Date", date, onChange = { date = it })
                 TextFieldRow("Scope", scopeText, onChange = { scopeText = it })
                 TextFieldRow("Summary", summary, onChange = { summary = it }, singleLine = false, minLines = 2)
                 TextFieldRow("Body", body, onChange = { body = it }, singleLine = false, minLines = 4)
@@ -337,7 +337,7 @@ fun ReviewsScreen(viewModel: AppViewModel, nav: NavController) {
         LazyColumn {
             item { SectionHeader("Queue") }
             when {
-                queueState.error != null -> item { ErrorBox(queueState.error!!) { queueState.reloadKey++ } }
+                queueState.error != null && queueState.data == null -> item { ErrorBox(queueState.error!!) { queueState.reloadKey++ } }
                 queueState.data == null -> item { SkeletonList(3) }
                 else -> {
                     val rows = Phase3Logic.arr(queueState.data, "reviews")
@@ -386,7 +386,7 @@ fun ReviewsScreen(viewModel: AppViewModel, nav: NavController) {
                 )
             }
             when {
-                responseState.error != null -> item { ErrorBox(responseState.error!!) { responseState.reloadKey++ } }
+                responseState.error != null && responseState.data == null -> item { ErrorBox(responseState.error!!) { responseState.reloadKey++ } }
                 responseState.data == null -> item { SkeletonList(3) }
                 else -> {
                     val rows = Phase3Logic.arr(responseState.data, "reviews")

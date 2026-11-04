@@ -182,7 +182,7 @@ private fun FormDocumentsSection(viewModel: AppViewModel, onAnyChange: () -> Uni
             ActionErrorText(error)
         }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList(3)
             else -> {
                 val files = Phase3Logic.arr(state.data, "files")

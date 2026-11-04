@@ -288,7 +288,7 @@ private fun AssetRow(
 private fun AssetRenewalsSurface(viewModel: AppViewModel, nav: NavController) {
     val state = rememberJsonScreen { viewModel.api.assetRenewals() }
     when {
-        state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+        state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
         state.data == null -> SkeletonList()
         else -> {
             val data = state.data!!
@@ -350,7 +350,7 @@ private fun AssetLabelsSurface(viewModel: AppViewModel) {
     LazyColumn {
         item { SectionHeader("Print labels") }
         when {
-            labelsState.error != null -> item { ErrorBox(labelsState.error!!) { labelsState.reloadKey++ } }
+            labelsState.error != null && labelsState.data == null -> item { ErrorBox(labelsState.error!!) { labelsState.reloadKey++ } }
             labelsState.data == null -> item { SkeletonList(3) }
             else -> items(Phase3Logic.arr(labelsState.data, "labels")) { label ->
                 MirrorCard(Phase3Logic.str(label, "name")) {
@@ -373,7 +373,7 @@ private fun AssetLabelsSurface(viewModel: AppViewModel) {
         }
         item { SectionHeader("URL labels") }
         when {
-            urlState.error != null -> item { ErrorBox(urlState.error!!) { urlState.reloadKey++ } }
+            urlState.error != null && urlState.data == null -> item { ErrorBox(urlState.error!!) { urlState.reloadKey++ } }
             urlState.data == null -> item { SkeletonList(3) }
             else -> {
                 item {
@@ -433,7 +433,7 @@ fun AssetProfileScreen(viewModel: AppViewModel, nav: NavController, assetId: Int
             OutlinedButton(onClick = { nav.popBackStack() }) { Text("← Back") }
         }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val data = state.data!!
@@ -676,10 +676,10 @@ fun AssetFormScreen(viewModel: AppViewModel, nav: NavController, assetId: Int?) 
                     TextFieldRow("Assigned to (user ID)", assignedText, onChange = { assignedText = it })
                     TextFieldRow("Type", type, onChange = { type = it })
                     TextFieldRow("Identifier / serial", identifier, onChange = { identifier = it })
-                    TextFieldRow("Review due date", reviewDue, onChange = { reviewDue = it })
+                    DateFieldRow("Review due date", reviewDue, onChange = { reviewDue = it })
                     TextFieldRow("Warranty until", warrantyUntil, onChange = { warrantyUntil = it })
-                    TextFieldRow("Warranty expires (renewal watch)", warrantyExpires, onChange = { warrantyExpires = it })
-                    TextFieldRow("Support expires (renewal watch)", supportExpires, onChange = { supportExpires = it })
+                    DateFieldRow("Warranty expires (renewal watch)", warrantyExpires, onChange = { warrantyExpires = it })
+                    DateFieldRow("Support expires (renewal watch)", supportExpires, onChange = { supportExpires = it })
                     TextFieldRow("Notes", notes, onChange = { notes = it }, singleLine = false, minLines = 3)
                     ActionErrorText(error)
                     Spacer(Modifier.height(10.dp))

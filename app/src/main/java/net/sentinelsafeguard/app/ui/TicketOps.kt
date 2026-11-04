@@ -273,7 +273,7 @@ private fun ExpensesCard(viewModel: AppViewModel, ticket: Ticket) {
         TextFieldRow("Description", description, { description = it })
         TextFieldRow("Miles (mileage)", miles, { miles = it })
         TextFieldRow("Amount ($, other categories)", amount, { amount = it })
-        TextFieldRow("Spent on (yyyy-MM-dd)", spentOn, { spentOn = it })
+        DateFieldRow("Spent on", spentOn, { spentOn = it })
         Button(
             enabled = description.isNotBlank(),
             onClick = {
@@ -285,7 +285,7 @@ private fun ExpensesCard(viewModel: AppViewModel, ticket: Ticket) {
                             put("description", description)
                             miles.toDoubleOrNull()?.let { put("miles", it) }
                             if (category == "mileage") put("rateCentsPerMile", 67)
-                            amount.toDoubleOrNull()?.let { put("amountCents", (it * 100).toInt()) }
+                            Phase4Logic.dollarsToCents(amount)?.let { put("amountCents", it) }
                             if (spentOn.isNotBlank()) put("spentOn", spentOn)
                         })
                         description = ""; miles = ""; amount = ""; reload()
@@ -646,7 +646,7 @@ private fun TimeTrackingCard(viewModel: AppViewModel, ticket: Ticket) {
                                 put("description", description)
                                 put("durationMinutes", minutes.toInt())
                                 put("billable", billable)
-                                rate.toDoubleOrNull()?.let { put("rateCents", (it * 100).toInt()) }
+                                Phase4Logic.dollarsToCents(rate)?.let { put("rateCents", it) }
                             })
                             description = ""; minutes = ""; reload()
                         } catch (e: Exception) {
@@ -947,7 +947,7 @@ private fun PlansCard(viewModel: AppViewModel, ticket: Ticket) {
                                 buildJsonObject {
                                     put("clientId", cid); put("name", name)
                                     put("cadence", cadence)
-                                    amount.toDoubleOrNull()?.let { put("amountCents", (it * 100).toInt()) }
+                                    Phase4Logic.dollarsToCents(amount)?.let { put("amountCents", it) }
                                 },
                                 null,
                             )
@@ -1017,7 +1017,7 @@ private fun PartsCard(viewModel: AppViewModel, ticket: Ticket) {
                             buildJsonObject {
                                 put("name", name); put("sku", sku)
                                 put("qtyOnHand", qty.toIntOrNull() ?: 0)
-                                cost.toDoubleOrNull()?.let { put("unitCostCents", (it * 100).toInt()) }
+                                Phase4Logic.dollarsToCents(cost)?.let { put("unitCostCents", it) }
                                 put("lowStockThreshold", 1)
                             },
                             null,

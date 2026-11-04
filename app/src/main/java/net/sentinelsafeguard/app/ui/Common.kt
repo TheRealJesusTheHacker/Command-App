@@ -26,9 +26,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import net.sentinelsafeguard.app.data.api.ApiException
@@ -221,6 +223,90 @@ fun ItemRow(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The established haptic tick (hunt16, Polish Pass 2): one light
+ * keyboard-tap tick on tab/drawer switches, chip picks, stage
+ * steppers, and picker confirms — the surfaces the owner moves
+ * by feel. Never on destructive confirms beyond the confirm
+ * itself, never on passive rendering. Returns a stable lambda.
+ */
+@Composable
+fun rememberHapticTick(): () -> Unit {
+    val view = LocalView.current
+    return remember(view) {
+        {
+            try {
+                view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+            } catch (ignored: Exception) {
+                // Haptics are garnish; a device without a vibrator
+                // path must never break the interaction.
+            }
+        }
+    }
+}
+
+/**
+ * Skeleton lines WITHOUT the card wrapper — for bodies that
+ * already live inside a card (AsyncCard) or a plain column, so
+ * the loading shape never nests a card in a card (hunt16).
+ */
+@Composable
+fun SkeletonLines(rows: Int = 3) {
+    val pulse = rememberInfiniteTransition(label = "skeletonLines")
+    val alpha by pulse.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "skeletonLinesAlpha",
+    )
+    Column {
+        repeat(rows) { i ->
+            Box(
+                Modifier
+                    .fillMaxWidth(if (i % 2 == 0) 0.85f else 0.6f)
+                    .height(13.dp)
+                    .alpha(alpha)
+                    .background(SentinelSurfaceHigh, RoundedCornerShape(4.dp)),
+            )
+            Spacer(Modifier.height(9.dp))
+        }
+    }
+}
+
+/**
+ * A mid-list failure banner (hunt16): when content is already on
+ * screen and a refresh or an action fails, the content STAYS and
+ * the failure rides as a dismissible banner with Retry — never a
+ * full-screen replacement for data the owner already has.
+ */
+@Composable
+fun ErrorBanner(message: String, onRetry: (() -> Unit)? = null, onDismiss: (() -> Unit)? = null) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = SentinelSurface),
+        border = BorderStroke(1.dp, SentinelDanger),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            if (onRetry != null) {
+                TextButton(onClick = onRetry) { Text("Retry") }
+            }
+            if (onDismiss != null) {
+                TextButton(onClick = onDismiss) { Text("Dismiss") }
             }
         }
     }

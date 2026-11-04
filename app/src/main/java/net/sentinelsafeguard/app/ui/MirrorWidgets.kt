@@ -118,10 +118,11 @@ fun ChipRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        val tick = rememberHapticTick()
         options.forEach { (key, label) ->
             FilterChip(
                 selected = selected == key,
-                onClick = { onPick(if (key == "all") null else key) },
+                onClick = { tick(); onPick(if (key == "all") null else key) },
                 label = { Text(label) },
             )
         }
@@ -136,12 +137,13 @@ fun StageStepper(
     onOpen: () -> Unit,
     openLabel: String,
 ) {
+    val tick = rememberHapticTick()
     Row(verticalAlignment = Alignment.CenterVertically) {
         val back = MirrorVocab.stepStage(current, -1)
         val fwd = MirrorVocab.stepStage(current, +1)
-        TextButton(onClick = { back?.let(onStep) }, enabled = back != null) { Text("‹") }
+        TextButton(onClick = { back?.let { tick(); onStep(it) } }, enabled = back != null) { Text("‹") }
         TextButton(onClick = onOpen) { Text(openLabel) }
-        TextButton(onClick = { fwd?.let(onStep) }, enabled = fwd != null) { Text("›") }
+        TextButton(onClick = { fwd?.let { tick(); onStep(it) } }, enabled = fwd != null) { Text("›") }
         Spacer(Modifier.width(4.dp))
     }
 }
@@ -174,6 +176,7 @@ fun ChoiceMenu(
     onPick: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
+    val tick = rememberHapticTick()
     Column {
         Text(label, color = SentinelMuted, style = MaterialTheme.typography.labelLarge)
         OutlinedButton(onClick = { open = true }) {
@@ -183,7 +186,7 @@ fun ChoiceMenu(
             options.forEach { option ->
                 DropdownMenuItem(
                     text = { Text(option.replaceFirstChar { it.uppercase() }) },
-                    onClick = { onPick(option); open = false },
+                    onClick = { tick(); onPick(option); open = false },
                 )
             }
         }

@@ -71,7 +71,7 @@ fun MoneyDeskScreen(viewModel: AppViewModel, nav: NavController) {
             if (notice != null) Text(notice!!, color = SentinelMuted, modifier = Modifier.padding(16.dp))
         }
         when {
-            state.error != null -> item {
+            state.error != null && state.data == null -> item {
                 Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
             }
             state.data == null -> item { Text("Loading…", color = SentinelMuted, modifier = Modifier.padding(16.dp)) }
@@ -337,7 +337,7 @@ fun TaxProfitScreen(viewModel: AppViewModel, nav: NavController) {
             }
         }
         when {
-            state.error != null -> item {
+            state.error != null && state.data == null -> item {
                 // The flag gate refuses in the server's own words
                 // (for example a STAFF account: "Not authorized.").
                 Text(state.error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))

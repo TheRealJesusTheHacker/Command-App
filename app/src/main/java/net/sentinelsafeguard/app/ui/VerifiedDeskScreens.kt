@@ -86,7 +86,7 @@ fun VerifiedDeskScreen(viewModel: AppViewModel, nav: NavController) {
     Column {
         MirrorHeader("Verified Desk", MirrorCopy.subtitle("b4assess"))
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
             else -> {
                 val data = state.data!!
@@ -353,7 +353,7 @@ fun AssessmentDetailScreen(viewModel: AppViewModel, nav: NavController, id: Int)
     Column {
         TextButton(onClick = { nav.popBackStack() }) { Text("← Verified Desk") }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null || assessment == null -> SkeletonList()
             else -> {
                 val a = assessment

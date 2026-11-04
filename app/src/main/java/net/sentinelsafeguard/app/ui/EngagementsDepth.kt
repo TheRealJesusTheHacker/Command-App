@@ -167,7 +167,7 @@ fun ContractDetailScreen(viewModel: AppViewModel, nav: NavController, contractId
     Column(Modifier.verticalScroll(rememberScrollState())) {
         TextButton(onClick = { nav.popBackStack() }) { Text("← Back to engagements") }
         when {
-            state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
+            state.error != null && state.data == null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList(4)
             else -> {
                 val contract = Phase3Logic.arr(state.data!!, "contracts")

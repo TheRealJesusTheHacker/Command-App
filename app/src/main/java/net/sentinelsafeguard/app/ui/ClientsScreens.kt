@@ -280,8 +280,8 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.weight(1f)) {
-                                    TextFieldRow(
-                                        "Bulk — next follow-up (yyyy-MM-dd)",
+                                    DateFieldRow(
+                                        "Bulk — next follow-up",
                                         bulkFollowUp, { bulkFollowUp = it },
                                     )
                                 }
@@ -600,26 +600,63 @@ private fun PipelineBoard(viewModel: AppViewModel, nav: NavController) {
         try {
             pipeline = viewModel.api.pipeline()
         } catch (e: Exception) {
-            error = plainError(e, "The pipeline could not be loaded. Try again.")
+            val msg = plainError(e, "The pipeline could not be loaded. Try again.")
+            if (pipeline == null) error = msg else banner = msg
+        } finally {
+            refreshing = false
         }
     }
 
+    var banner by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
     fun move(client: Client, stage: String) {
+        // hunt16: optimistic pipeline move — the card lands in
+        // the new stage at once; on failure the board rolls back
+        // and the banner says so plainly (never a full-screen
+        // error over a loaded board).
+        val previous = pipeline
+        if (previous != null) {
+            val moved = client.copy(stage = stage)
+            pipeline = previous.copy(
+                stages = previous.stages.map { st ->
+                    when {
+                        st.stage == stage && st.stage == client.stage ->
+                            st.copy(clients = st.clients.map { if (it.id == client.id) moved else it })
+                        st.stage == stage ->
+                            st.copy(clients = st.clients + moved, count = st.count + 1)
+                        st.stage == client.stage ->
+                            st.copy(
+                                clients = st.clients.filter { it.id != client.id },
+                                count = (st.count - 1).coerceAtLeast(0),
+                            )
+                        else -> st
+                    }
+                },
+            )
+        }
         scope.launch {
             try {
                 viewModel.api.setClientStage(client.id, stage)
                 reloadKey++
             } catch (e: Exception) {
-                error = plainError(e, "That stage move could not be saved. Try again.")
+                pipeline = previous
+                banner = plainError(e, "That stage move could not be saved — the client was put back. Try again.")
             }
         }
     }
 
     when {
-        error != null -> ErrorBox(error!!) { reloadKey++ }
+        error != null && pipeline == null -> ErrorBox(error!!) { reloadKey++ }
         pipeline == null -> SkeletonList(6)
         else -> {
             val stages = pipeline!!.stages
+            if (banner != null) {
+                ErrorBanner(banner!!, onRetry = { banner = null; reloadKey++ }, onDismiss = { banner = null })
+            }
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { refreshing = true; reloadKey++ },
+            ) {
             LazyColumn {
                 MirrorVocab.CLIENT_STAGES.forEach { stageName ->
                     val stageData = stages.firstOrNull { it.stage == stageName }
@@ -680,6 +717,7 @@ private fun PipelineBoard(viewModel: AppViewModel, nav: NavController) {
                     }
                 }
                 item { Spacer(Modifier.height(16.dp)) }
+            }
             }
         }
     }
@@ -1053,11 +1091,7 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = nextFollowUp, onValueChange = { nextFollowUp = it },
-                    label = { Text("Next follow-up (yyyy-MM-dd)") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                DateFieldRow("Next follow-up", nextFollowUp) { nextFollowUp = it }
                 Spacer(Modifier.height(10.dp))
                 ChoiceMenu(
                     "How did they find us?",
