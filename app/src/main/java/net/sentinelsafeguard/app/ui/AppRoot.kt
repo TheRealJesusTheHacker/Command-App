@@ -50,11 +50,12 @@ import net.sentinelsafeguard.app.ui.theme.SentinelMuted
  * The mirrored shell (COMMAND-MIRROR-SPEC §2): Command's grouped
  * navigation as a drawer — exact groups, labels, and order —
  * over a navigation-compose back stack. Landing is Today (the
- * owner default in web Command). Unbuilt Command views appear
- * under their exact names and open a placeholder naming their
- * phase; they are never renamed, hidden, or silently cut.
- * Mail + Settings live in the drawer's utility row: they are
- * app-only entries, never presented as Command views (§2.2).
+ * owner default in web Command; Dashboard for STAFF, whose
+ * drawer is exactly the web STAFF subset). As of Phase 9 every
+ * Command view is built — no placeholder screens remain.
+ * Client/Family sign-ins get the separate portal shell
+ * ([PortalShell]). Mail + Settings live in the Command drawer's
+ * utility row: app-only entries, never Command views (§2.2).
  */
 @Composable
 fun AppRoot(viewModel: AppViewModel) {
@@ -151,18 +152,30 @@ private fun AppShell(viewModel: AppViewModel) {
     }
 
     val role = user?.role ?: "OWNER"
-    if (role == "Client" || role == "Family" || role == "Tourist") {
-        // The portal shell is Phase 9 — an honest placeholder
-        // shell, never the staff shell with data it cannot show.
-        Column {
-            MirrorHeader("Sentinel Command")
-            PlaceholderScreen("Client portal", MirrorNav.PHASE9)
-            Button(
-                onClick = { viewModel.signOut {} },
-                modifier = Modifier.padding(horizontal = 16.dp),
-            ) { Text("Sign out") }
+    when (MirrorNav.shellKind(role, me?.portal ?: false)) {
+        MirrorNav.ShellKind.TOURIST_REFUSED -> {
+            // By design the demo is a separate instance: Tourist
+            // accounts never receive a production device token,
+            // so a Tourist sign-in attempt is refused plainly
+            // with the server's own refusal, never a shell.
+            ForcedFlowNotice(
+                "Demo accounts use the demo",
+                "This is a demo (Tourist) account. The demo lives on its own " +
+                    "instance, so it can't sign in to the production app — " +
+                    "the server refused this sign-in. Sign in with your real " +
+                    "account here, or open the demo the way you usually do.",
+                viewModel,
+            )
+            return
         }
-        return
+        MirrorNav.ShellKind.PORTAL -> {
+            // Phase 9: Client/Family sign-ins get the portal
+            // shell — web's twelve portal views, never the
+            // staff drawer.
+            PortalShell(viewModel)
+            return
+        }
+        MirrorNav.ShellKind.COMMAND -> Unit
     }
 
     val flags = mapOf(
@@ -228,8 +241,6 @@ private fun AppShell(viewModel: AppViewModel) {
             MirrorNav.ALL_VIEWS[route.removePrefix("adminsec/")]?.label ?: "Admin"
         route == "verified" -> "Sentinel Verified"
         route == "firmpulse" -> "Firm Pulse"
-        route.startsWith("view/") ->
-            MirrorNav.ALL_VIEWS[route.removePrefix("view/")]?.label ?: "Command"
         else -> MirrorNav.ALL_VIEWS[route]?.label ?: "Command"
     }
 
@@ -263,12 +274,17 @@ private fun AppShell(viewModel: AppViewModel) {
                         )
                     }
                     Spacer(Modifier.height(8.dp))
-                    NavigationDrawerItem(
-                        label = { Text("Search") },
-                        selected = currentKey == "search",
-                        onClick = { go("search") },
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
+                    if (role != "STAFF") {
+                        // Phase 9 STAFF verification: the STAFF
+                        // drawer is exactly the STAFF subset plus
+                        // the §2.2 utility row — no Search entry.
+                        NavigationDrawerItem(
+                            label = { Text("Search") },
+                            selected = currentKey == "search",
+                            onClick = { go("search") },
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                        )
+                    }
                     MirrorNav.visibleGroups(role, flags, taxOnly).forEach { group ->
                         Text(
                             group.label,
@@ -323,7 +339,9 @@ private fun AppShell(viewModel: AppViewModel) {
                         }
                     },
                     actions = {
-                        TextButton(onClick = { go("search") }) { Text("Search") }
+                        if (role != "STAFF") {
+                            TextButton(onClick = { go("search") }) { Text("Search") }
+                        }
                         IconButton(onClick = { go("settings") }) {
                             Icon(Icons.Filled.Settings, contentDescription = "Settings")
                         }
@@ -396,6 +414,7 @@ private fun AppShell(viewModel: AppViewModel) {
                         )
                     }
                     composable("schedule") { ScheduleScreen(viewModel, nav) }
+                    composable("myschedule") { MyScheduleScreen(viewModel, nav) }
                     composable(
                         "job/{id}",
                         arguments = listOf(navArgument("id") { type = NavType.IntType }),
@@ -609,27 +628,20 @@ private fun AppShell(viewModel: AppViewModel) {
                     MirrorNav.INJECTED.forEach { injected ->
                         composable(injected.key) { InjectedScreen(viewModel, nav, injected.key) }
                     }
-                    composable(
-                        "view/{key}",
-                        arguments = listOf(navArgument("key") { type = NavType.StringType }),
-                    ) { entry ->
-                        val view = MirrorNav.ALL_VIEWS[entry.arguments?.getString("key")]
-                        if (view != null) {
-                            PlaceholderScreen(view.label, view.phase ?: MirrorNav.PHASE8)
-                        } else {
-                            PlaceholderScreen("Command", MirrorNav.PHASE8)
-                        }
-                    }
+                    // Phase 9 closes the placeholder ledger: every
+                    // Command view has a real route above, so the
+                    // old view/{key} placeholder route is GONE —
+                    // there is no placeholder destination left in
+                    // the nav graph.
                 }
             }
         }
     }
 }
 
-/** Drawer route for a nav view: built views use their key as the
- *  route; unbuilt views land on the named placeholder. */
-private fun viewRoute(view: MirrorView): String =
-    if (view.phase == null) view.key else "view/${view.key}"
+/** Drawer route for a nav view: every view is built (Phase 9
+ *  closed the ledger), so the key IS the route. */
+private fun viewRoute(view: MirrorView): String = view.key
 
 @Composable
 private fun ForcedFlowNotice(title: String, body: String, viewModel: AppViewModel) {
@@ -660,5 +672,113 @@ fun AdminConsoleScreen(nav: androidx.navigation.NavController) {
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+/**
+ * The portal shell (Phase 9): Client/Family sign-ins land here
+ * — web's twelve portal views in web's names/order as a simple
+ * drawer, landing on My Profile. This is a separate shell from
+ * Command's: no staff groups, no injected entries, no Search.
+ * The drawer's only utility entry is Sign out (the portal token
+ * is refused on the staff utility surfaces server-side, so the
+ * app-only Settings/Mail entries do not belong here).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PortalShell(viewModel: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val nav = rememberNavController()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val backStack by nav.currentBackStackEntryAsState()
+    val currentRoute = backStack?.destination?.route ?: MirrorNav.portalLandingKey()
+    val user = viewModel.me?.user
+
+    fun go(route: String) {
+        scope.launch { drawerState.close() }
+        if (currentRoute != route) {
+            nav.navigate(route) { launchSingleTop = true }
+        }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Column(
+                    Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 12.dp),
+                ) {
+                    Text(
+                        "SENTINEL SAFEGUARD",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    if (user != null) {
+                        Text(
+                            "${user.displayName} · ${user.role}",
+                            color = SentinelMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    MirrorNav.PORTAL_VIEWS.forEach { view ->
+                        NavigationDrawerItem(
+                            label = { Text(view.label) },
+                            selected = currentRoute == view.key,
+                            onClick = { go(view.key) },
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                    NavigationDrawerItem(
+                        label = { Text("Sign out") },
+                        selected = false,
+                        onClick = { viewModel.signOut {} },
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+        },
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            MirrorNav.ALL_VIEWS[currentRoute]?.label ?: "My Profile",
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Portal menu")
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            Box(Modifier.padding(padding)) {
+                NavHost(
+                    navController = nav,
+                    startDestination = MirrorNav.portalLandingKey(),
+                ) {
+                    composable("portal_profile") { PortalProfileScreen(viewModel, nav) }
+                    composable("portal_progress") { PortalProgressScreen(viewModel, nav) }
+                    composable("portal_history") { PortalHistoryScreen(viewModel, nav) }
+                    composable("portal_documents") { PortalDocumentsScreen(viewModel, nav) }
+                    composable("portal_files") { PortalFilesScreen(viewModel, nav) }
+                    composable("portal_messages") { PortalMessagesScreen(viewModel, nav) }
+                    composable("portal_alert") { PortalAlertScreen(viewModel, nav) }
+                    composable("portal_signoffs") { PortalSignOffsScreen(viewModel, nav) }
+                    composable("portal_contracts") { PortalContractsScreen(viewModel, nav) }
+                    composable("portal_knowledge") { PortalKnowledgeScreen(viewModel, nav) }
+                    composable("portal_status") { PortalStatusScreen(viewModel, nav) }
+                    composable("portal_feedback") { PortalFeedbackScreen(viewModel, nav) }
+                }
+            }
+        }
     }
 }

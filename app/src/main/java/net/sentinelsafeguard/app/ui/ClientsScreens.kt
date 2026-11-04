@@ -930,7 +930,7 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
                                 asset.reviewDueDate?.takeIf { it.isNotBlank() }
                                     ?.let { "Review $it" },
                             ).joinToString(" · "),
-                        ) { nav.navigate("view/assets") }
+                        ) { nav.navigate("asset/${asset.id}") }
                     }
                 }
                 MirrorCard("Invoices", d.invoices.size) {
@@ -944,7 +944,7 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
                                 MirrorVocab.formatCents(invoice.totalCents),
                                 invoice.dueDate.takeIf { it.isNotBlank() }?.let { "Due $it" },
                             ).joinToString(" · "),
-                        ) { nav.navigate("view/invoices") }
+                        ) { nav.navigate("invoice/${invoice.id}") }
                     }
                 }
                 MirrorCard("Forms", d.forms.size) {
@@ -956,7 +956,7 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
                                 form.type.takeIf { it.isNotBlank() },
                                 if (form.createdAt > 0) formatEpochMs(form.createdAt) else null,
                             ).joinToString(" · "),
-                        ) { nav.navigate("view/forms") }
+                        ) { nav.navigate("forms") }
                     }
                 }
                 Spacer(Modifier.height(24.dp))
@@ -1193,11 +1193,17 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
     }
 }
 
-/** Timeline Open targets: built record views route to the
- *  record; anything else keeps its named placeholder route. */
+/** Timeline Open targets: every Command view is built as of
+ *  Phase 9 (hunt14), so a timeline row routes to its record or
+ *  to the named view itself; an unknown name lands on Today
+ *  rather than a dead end. */
 private fun timelineRoute(view: String, refId: Int): String = when (view) {
     "cases" -> "case/$refId"
     "tickets" -> "ticket/$refId"
     "clients" -> "client/$refId"
-    else -> "view/$view"
+    "invoices" -> "invoice/$refId"
+    "assets" -> "asset/$refId"
+    "engagements" -> "engagement/$refId"
+    "knowledge" -> "knowledge/$refId"
+    else -> MirrorNav.ALL_VIEWS[view]?.key ?: "today"
 }

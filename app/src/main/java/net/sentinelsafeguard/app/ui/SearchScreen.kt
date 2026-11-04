@@ -137,17 +137,18 @@ fun SearchScreen(viewModel: AppViewModel, nav: NavController) {
     }
 }
 
-/** Where a search row lands: the mirrored record view when it
- *  exists, the named phase placeholder for later-phase views,
- *  and null (a plain row) for attachments, which have no view. */
+/** Where a search row lands: the mirrored record view (every
+ *  Command view is built as of Phase 9), and null (a plain row)
+ *  for attachments, which have no view. */
 private fun searchRoute(type: String, id: Int): String? = when (type) {
     "clients" -> "client/$id"
     "cases" -> "case/$id"
     "tickets" -> "ticket/$id"
     "engagements" -> "engagement/$id"
-    "assets" -> "view/assets"
-    "invoices", "quotes" -> "view/invoices"
-    "knowledge" -> "view/knowledge"
-    "law" -> "view/law"
+    "assets" -> "asset/$id"
+    "invoices" -> "invoice/$id"
+    "quotes" -> "quote/$id"
+    "knowledge" -> "knowledge/$id"
+    "law" -> "law"
     else -> null
 }

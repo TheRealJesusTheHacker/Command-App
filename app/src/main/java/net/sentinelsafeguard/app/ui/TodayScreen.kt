@@ -215,7 +215,7 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
                     MirrorCard(
                         "Money — invoices", null,
                         footerLabel = "Show all → Invoices",
-                        onFooter = { nav.navigate("view/invoices") },
+                        onFooter = { nav.navigate("invoices") },
                     ) {
                         MoneyLine("Outstanding", d.money.outstanding)
                         MoneyLine("Overdue", d.money.overdue)
@@ -269,13 +269,13 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
                     MirrorCard(
                         "Assets flagged — warranty / review", d.assetsFlagged.total,
                         footerLabel = "Show all → Assets",
-                        onFooter = { nav.navigate("view/assets") },
+                        onFooter = { nav.navigate("assets") },
                     ) {
                         if (d.assetsFlagged.items.isEmpty()) {
                             Text("No assets are flagged.", color = SentinelMuted)
                         }
                         d.assetsFlagged.items.forEach { asset ->
-                            TodayAssetRow(asset) { nav.navigate("view/assets") }
+                            TodayAssetRow(asset) { nav.navigate("assets") }
                         }
                     }
                 }
@@ -285,7 +285,7 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
                     MirrorCard(
                         "Asset renewals", d.assetRenewals.total,
                         footerLabel = "Show all → Assets",
-                        onFooter = { nav.navigate("view/assets") },
+                        onFooter = { nav.navigate("assets") },
                     ) {
                         if (d.assetRenewals.items.isEmpty()) {
                             Text("No asset renewals are coming up.", color = SentinelMuted)
@@ -300,7 +300,7 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
                                         "${it.field.replaceFirstChar { c -> c.uppercase() }} ${it.state} ${it.date} (${it.daysLeft}d)"
                                     },
                                 ).joinToString(" · "),
-                            ) { nav.navigate("view/assets") }
+                            ) { nav.navigate("assets") }
                         }
                     }
                 }
@@ -310,7 +310,7 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
                     MirrorCard(
                         "Plan renewals", d.planRenewals.total,
                         footerLabel = "Show all → Assets",
-                        onFooter = { nav.navigate("view/assets") },
+                        onFooter = { nav.navigate("assets") },
                     ) {
                         if (d.planRenewals.items.isEmpty()) {
                             Text("No plan renewals are coming up.", color = SentinelMuted)
@@ -321,7 +321,7 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
                                 ?: "Plan renewal"
                             val date = listOf("date", "renewalDate", "nextRenewal", "expires")
                                 .firstNotNullOfOrNull { k -> obj[k]?.toString()?.trim('"')?.takeIf { it.isNotBlank() } }
-                            ItemRow(name, date) { nav.navigate("view/assets") }
+                            ItemRow(name, date) { nav.navigate("assets") }
                         }
                     }
                 }

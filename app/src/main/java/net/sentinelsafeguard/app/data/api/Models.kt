@@ -117,6 +117,10 @@ data class MeResponse(
     val reviewsAccess: Boolean = false,
     val taxAccess: Boolean = false,
     val taxOnly: Boolean = false,
+    // Phase 9 (Addendum 28): true for the web portal roles
+    // (Client / Family) — the app shell routes those accounts
+    // to the portal shell, never the staff drawer.
+    val portal: Boolean = false,
 )
 
 // ---- Clients, cases, tickets (pub_client / pub_case / pub_ticket) ----

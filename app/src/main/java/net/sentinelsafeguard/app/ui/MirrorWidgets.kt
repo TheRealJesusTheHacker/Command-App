@@ -165,19 +165,6 @@ fun MirrorHeader(
     }
 }
 
-/** Placeholder for a Command view that lands in a later phase —
- *  exact Command title + one plain line naming its phase. */
-@Composable
-fun PlaceholderScreen(title: String, phase: String) {
-    Column {
-        MirrorHeader(title)
-        EmptyBox(
-            title,
-            "$title lands in $phase of the mirror build.",
-        )
-    }
-}
-
 /** A labeled select — the mirrored form control for web's <select>. */
 @Composable
 fun ChoiceMenu(

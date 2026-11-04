@@ -114,7 +114,7 @@ fun DashboardScreen(viewModel: AppViewModel, nav: NavController) {
                                 ) { Text("+ New case") }
                             }
                             if (cw.invoices) {
-                                OutlinedButton(onClick = { nav.navigate("view/invoices") }) {
+                                OutlinedButton(onClick = { nav.navigate("invoiceNew") }) {
                                     Text("+ New invoice")
                                 }
                             }

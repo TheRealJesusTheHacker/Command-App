@@ -615,6 +615,22 @@ class SentinelApi(
         )
     }
 
+    /**
+     * Phase 9 (hunt14): My Schedule — the Schedule payload
+     * scoped to the caller (GET /api/app/my-schedule rides the
+     * same _app_schedule path server-side; for STAFF the
+     * handler forces scope "mine", own jobs only).
+     */
+    suspend fun myScheduleWindow(
+        start: String,
+        end: String,
+    ): ScheduleResponse {
+        val params = listOf("start=${urlEncode(start)}", "end=${urlEncode(end)}")
+        return json.decodeFromString(
+            ensureOk(call("GET", "/api/app/my-schedule?${params.joinToString("&")}")).body
+        )
+    }
+
     private fun jobBody(edit: JobFullEdit): String = buildJsonObject {
         put("title", edit.title)
         if (edit.clientId != null) put("clientId", edit.clientId) else put("clientId", JsonNull)
