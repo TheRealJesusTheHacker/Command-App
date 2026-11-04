@@ -200,6 +200,10 @@ private fun AppShell(viewModel: AppViewModel) {
         route == "invoiceNew" -> "New invoice"
         route.startsWith("quote/") || route.startsWith("quoteEdit") -> "Quotes"
         route == "quoteNew" -> "New quote"
+        route.startsWith("knowledge/") || route.startsWith("knowledgeEdit") -> "Knowledge"
+        route == "knowledgeNew" -> "New catalog entry"
+        route == "knowledge" -> "Knowledge"
+        route == "archive" -> "Archive"
         route.startsWith("employee/") || route.startsWith("employeeEdit") -> "Employees"
         route == "employeeNew" -> "New employee"
         route.startsWith("asset/") || route.startsWith("assetEdit") -> "Assets"
@@ -524,6 +528,27 @@ private fun AppShell(viewModel: AppViewModel) {
                             entry.arguments?.getInt("id"),
                         )
                     }
+                    composable("knowledge") { KnowledgeScreen(viewModel, nav) }
+                    composable(
+                        "knowledge/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        KnowledgeDetailScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
+                    composable("knowledgeNew") { KnowledgeFormScreen(viewModel, nav, null) }
+                    composable(
+                        "knowledgeEdit/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        KnowledgeFormScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id"),
+                        )
+                    }
+                    composable("archive") { ArchiveScreen(viewModel, nav) }
                     composable("liveintel") { LiveIntelScreen(viewModel, nav) }
                     composable("osint") { OsintScreen(viewModel, nav) }
                     composable("breachintel") { BreachIntelScreen(viewModel, nav) }

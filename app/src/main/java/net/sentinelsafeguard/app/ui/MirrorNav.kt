@@ -80,8 +80,8 @@ object MirrorNav {
         ),
         MirrorGroup(
             "Knowledge", listOf(
-                MirrorView("knowledge", "Knowledge", PHASE7),
-                MirrorView("archive", "Archive", PHASE7),
+                MirrorView("knowledge", "Knowledge"),
+                MirrorView("archive", "Archive"),
             )
         ),
         MirrorGroup(

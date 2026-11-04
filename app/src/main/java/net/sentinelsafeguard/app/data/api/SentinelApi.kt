@@ -889,10 +889,61 @@ class SentinelApi(
         return Json.parseToJsonElement(ok.body).jsonObject
     }
 
+    /**
+     * Raw-byte upload whose refusals surface the server's own
+     * `message` (Phase 7 knowledge upload: the server's PDF
+     * validation wording is the user's answer, exactly as
+     * [callJson] treats JSON refusals). [uploadBytes] keeps its
+     * plainError behavior for the Phase 3 surfaces.
+     */
+    suspend fun uploadBytesJson(
+        path: String,
+        bytes: ByteArray,
+        extraHeaders: Map<String, String>,
+    ): JsonObject {
+        val response = transport.execute(
+            HttpRequest(
+                "POST", path, null,
+                headers(authenticated = true) + extraHeaders,
+                bodyBytes = bytes,
+            )
+        )
+        if (response.status == 401) {
+            onSignedOut?.invoke()
+            throw SignedOutException()
+        }
+        if (response.status !in 200..299) {
+            val serverMessage = runCatching {
+                Json.parseToJsonElement(response.body).jsonObject["message"]
+                    ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+            }.getOrNull()
+            throw ApiException(
+                response.status,
+                serverMessage?.takeIf { it.isNotBlank() }
+                    ?: plainError(response.status, response.body),
+            )
+        }
+        if (response.body.isBlank()) return JsonObject(emptyMap())
+        return Json.parseToJsonElement(response.body).jsonObject
+    }
+
     /** Binary download to a sink (photo / diagram / voice bytes). */
-    suspend fun downloadBytes(path: String, sink: (ByteArray) -> Unit): Int {
+    suspend fun downloadBytes(path: String, sink: (ByteArray) -> Unit): Int =
+        downloadBytes(path, emptyMap(), sink)
+
+    /** Binary download with extra headers (Phase 7: Range chunks
+     *  against the knowledge file twin — a 206 partial answer is
+     *  a success here, as is the plain 200 whole-file answer). */
+    suspend fun downloadBytes(
+        path: String,
+        extraHeaders: Map<String, String>,
+        sink: (ByteArray) -> Unit,
+    ): Int {
         val response = transport.download(
-            HttpRequest("GET", path, null, headers(authenticated = true)),
+            HttpRequest(
+                "GET", path, null,
+                headers(authenticated = true) + extraHeaders,
+            ),
             sink,
         )
         if (response.status == 401) {
