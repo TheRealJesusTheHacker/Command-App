@@ -98,59 +98,58 @@ object MirrorNav {
     /** The 12 nav-injected entries, flat after the groups, in
      *  production load order. Sheets mirror as full screens. */
     val INJECTED: List<MirrorView> = listOf(
-        MirrorView("b3cops", "Ops Views", PHASE8),
-        MirrorView("b3dfield", "Pipeline & Field", PHASE8),
-        MirrorView("parts", "Parts & Inventory", PHASE8),
-        MirrorView("collections", "Collections", PHASE8),
-        MirrorView("staffgear", "Staff & Gear", PHASE8),
-        MirrorView("automation", "Automation", PHASE8),
-        MirrorView("clientops", "Client Ops", PHASE8),
-        MirrorView("pipelinepackets", "Pipeline & Packets", PHASE8),
-        MirrorView("cf2reports", "Reports & Feedback", PHASE8),
-        MirrorView("b4cadmin", "App & Integrations", PHASE8),
-        MirrorView("b4dimport", "Client Import", PHASE8),
-        MirrorView("b4jops", "Packets & Routes", PHASE8),
+        MirrorView("b3cops", "Ops Views"),
+        MirrorView("b3dfield", "Pipeline & Field"),
+        MirrorView("parts", "Parts & Inventory"),
+        MirrorView("collections", "Collections"),
+        MirrorView("staffgear", "Staff & Gear"),
+        MirrorView("automation", "Automation"),
+        MirrorView("clientops", "Client Ops"),
+        MirrorView("pipelinepackets", "Pipeline & Packets"),
+        MirrorView("cf2reports", "Reports & Feedback"),
+        MirrorView("b4cadmin", "App & Integrations"),
+        MirrorView("b4dimport", "Client Import"),
+        MirrorView("b4jops", "Packets & Routes"),
     )
 
     /** Admin console: 6 groups / 13 sections + injected DMARC.
-     *  The console structure renders in hunt5; its sections are
-     *  placeholders until Phase 8. */
+     *  Sections are built mirrors as of Phase 8B (hunt13). */
     val ADMIN_GROUPS: List<MirrorGroup> = listOf(
         MirrorGroup(
             "Overview", listOf(
-                MirrorView("overview", "Overview", PHASE8),
-                MirrorView("report", "Ops Report", PHASE8),
+                MirrorView("overview", "Overview"),
+                MirrorView("report", "Ops Report" ),
             )
         ),
         MirrorGroup(
             "People", listOf(
-                MirrorView("roles", "Roles", PHASE8),
-                MirrorView("members", "Members", PHASE8),
-                MirrorView("invites", "Invites", PHASE8),
-                MirrorView("sessions", "Sessions", PHASE8),
+                MirrorView("roles", "Roles" ),
+                MirrorView("members", "Members" ),
+                MirrorView("invites", "Invites" ),
+                MirrorView("sessions", "Sessions" ),
             )
         ),
         MirrorGroup(
             "Security", listOf(
-                MirrorView("security", "Security", PHASE8),
-                MirrorView("oversight", "Security Oversight", PHASE8),
-                MirrorView("audit", "Audit", PHASE8),
+                MirrorView("security", "Security" ),
+                MirrorView("oversight", "Security Oversight" ),
+                MirrorView("audit", "Audit" ),
             )
         ),
         MirrorGroup(
             "Law AI", listOf(
-                MirrorView("lawai", "Law AI", PHASE8),
+                MirrorView("lawai", "Law AI" ),
             )
         ),
         MirrorGroup(
             "Backups & Data", listOf(
-                MirrorView("backups", "Backups", PHASE8),
-                MirrorView("dmarc", "DMARC reports", PHASE8),
+                MirrorView("backups", "Backups" ),
+                MirrorView("dmarc", "DMARC reports" ),
             )
         ),
         MirrorGroup(
             "Danger Zone", listOf(
-                MirrorView("danger", "Danger Zone", PHASE8),
+                MirrorView("danger", "Danger Zone" ),
             )
         ),
     )

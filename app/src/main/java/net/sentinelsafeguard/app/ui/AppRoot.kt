@@ -224,6 +224,8 @@ private fun AppShell(viewModel: AppViewModel) {
         route == "mail" -> "Mail"
         route == "settings" -> "Settings"
         route == "admin" -> "Admin"
+        route.startsWith("adminsec/") ->
+            MirrorNav.ALL_VIEWS[route.removePrefix("adminsec/")]?.label ?: "Admin"
         route == "verified" -> "Sentinel Verified"
         route == "firmpulse" -> "Firm Pulse"
         route.startsWith("view/") ->
@@ -596,6 +598,18 @@ private fun AppShell(viewModel: AppViewModel) {
                     }
                     composable("admin") { AdminConsoleScreen(nav) }
                     composable(
+                        "adminsec/{key}",
+                        arguments = listOf(navArgument("key") { type = NavType.StringType }),
+                    ) { entry ->
+                        AdminSectionScreen(
+                            viewModel, nav,
+                            entry.arguments?.getString("key") ?: "overview",
+                        )
+                    }
+                    MirrorNav.INJECTED.forEach { injected ->
+                        composable(injected.key) { InjectedScreen(viewModel, nav, injected.key) }
+                    }
+                    composable(
                         "view/{key}",
                         arguments = listOf(navArgument("key") { type = NavType.StringType }),
                     ) { entry ->
@@ -630,8 +644,8 @@ private fun ForcedFlowNotice(title: String, body: String, viewModel: AppViewMode
 
 /**
  * The Admin console (spec §2.1): its own grouped structure —
- * 6 groups / 13 sections + injected DMARC. The structure renders
- * in hunt5; every section is a placeholder until Phase 8.
+ * 6 groups / 13 sections + injected DMARC. The sections are the
+ * built Phase 8B mirrors (hunt13) and open as full screens.
  */
 @Composable
 fun AdminConsoleScreen(nav: androidx.navigation.NavController) {
@@ -641,7 +655,7 @@ fun AdminConsoleScreen(nav: androidx.navigation.NavController) {
             item { SectionHeader(group.label) }
             group.views.forEach { section ->
                 item {
-                    ItemRow(section.label) { nav.navigate("view/${section.key}") }
+                    ItemRow(section.label) { nav.navigate("adminsec/${section.key}") }
                 }
             }
         }
