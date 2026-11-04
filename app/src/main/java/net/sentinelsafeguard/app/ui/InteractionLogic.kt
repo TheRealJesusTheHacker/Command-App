@@ -85,22 +85,47 @@ object InteractionLogic {
      * typing dollars gets the decimal pad); counts and ids are
      * NUMBER; contact fields get their own pads. Anything else is
      * plain text.
+     *
+     * hunt17 (Polish Pass 3) — the hunt16 substring version was
+     * audited against every real label in the app and had real
+     * false positives: "Account type" and "Countersign" matched
+     * "count", "reporting"/"Support" matched "port", "stage"/
+     * "engagement" matched "age", and general search boxes
+     * ("Search name, title, email or phone", "Search the phone
+     * book") raised email/phone pads that cannot type a name.
+     * Matching is now WORD-based (tokens split on non-letters):
+     * a keyword must be a whole word, search boxes are always
+     * plain text, money follows the $ / % markers plus the money
+     * words, and fractional quantities (miles) get the decimal
+     * pad. "Threshold %" (a decimal with no money word) is now
+     * DECIMAL, and "Daily cap" (a count) is NUMBER.
      */
+    private val WORD_SPLIT = Regex("[^a-z0-9]+")
+    private val DECIMAL_WORDS = setOf(
+        "amount", "rate", "price", "budget", "salary",
+        "balance", "miles", "mileage",
+    )
+    private val NUMBER_WORDS = setOf(
+        "qty", "quantity", "count", "days", "day", "hours",
+        "hour", "minutes", "minute", "year", "years", "id",
+        "ids", "seats", "age", "port", "zip", "extension", "cap",
+    )
+
     fun fieldKindForLabel(label: String): FieldKind {
         val l = label.lowercase(Locale.US)
+        val words = l.split(WORD_SPLIT).filter { it.isNotBlank() }.toSet()
         return when {
-            "email" in l || "e-mail" in l -> FieldKind.EMAIL
-            "phone" in l || "mobile" in l -> FieldKind.PHONE
-            "($)" in l || "($" in l || "unit $" in l || "amount" in l ||
-                "rate" in l || "unit cost" in l || "price" in l ||
-                "contract value" in l || "pipeline / contract value" in l ||
-                "budget" in l || "salary" in l || "balance" in l ||
-                "total" in l && "$" in l -> FieldKind.DECIMAL
-            "qty" in l || "quantity" in l || "count" in l ||
-                "days" in l || "hours" in l || "minutes" in l ||
-                "year" in l || " id" in l || l.endsWith(" id") ||
-                "number of" in l || "seats" in l || "age" in l ||
-                "port" in l || "zip" in l || "extension" in l -> FieldKind.NUMBER
+            // A search box searches names and words: always text.
+            words.firstOrNull() == "search" -> FieldKind.TEXT
+            "email" in words || "e-mail" in l -> FieldKind.EMAIL
+            "phone" in words || "mobile" in words -> FieldKind.PHONE
+            "$" in l || "%" in l ||
+                words.any { it in DECIMAL_WORDS } -> FieldKind.DECIMAL
+            // Deliberately NO bare "number": the app's one
+            // "… number" field is Flight number, which is
+            // alphanumeric (airline code + digits) — a number
+            // pad would be the wrong keyboard for it.
+            words.any { it in NUMBER_WORDS } -> FieldKind.NUMBER
             else -> FieldKind.TEXT
         }
     }

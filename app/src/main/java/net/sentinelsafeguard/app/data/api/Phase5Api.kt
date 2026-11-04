@@ -168,6 +168,13 @@ suspend fun SentinelApi.assetRenewals(): JsonObject =
 suspend fun SentinelApi.resolveAssetQr(code: String): JsonObject =
     callJson("GET", "/api/app/assets/resolve?code=${encodeQuery(code)}")
 
+/** hunt17 (final contract census): the client's vault files
+ *  (expansion item 36) — the client profile carried no files
+ *  surface before this pass. Downloads ride the form-files
+ *  binary route the Forms vault already uses. */
+suspend fun SentinelApi.clientFiles(clientId: Int): JsonObject =
+    callJson("GET", "/api/app/clients/$clientId/files")
+
 // ---- Forms: records ----
 
 suspend fun SentinelApi.forms(q: String = "", clientId: Int? = null): JsonObject {

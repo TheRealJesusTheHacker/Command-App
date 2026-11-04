@@ -63,19 +63,42 @@ fun plainError(e: Throwable, fallback: String): String {
 }
 
 /**
+ * The ONE skeleton pulse for the whole app (hunt17, Polish
+ * Pass 3). Before hunt17 every SkeletonList / SkeletonLines
+ * instance ran its OWN infinite transition — a Today screen with
+ * a dozen loading cards recomposed a dozen subtrees every frame
+ * for the whole load. [SkeletonPulseHost] (installed once in
+ * AppRoot) runs a single transition and shares its alpha through
+ * this local; every skeleton reads the same value, so one frame
+ * recomposes the pulsing boxes once, not once per card. Outside
+ * a host the alpha rests at a static mid-pulse value.
+ */
+val LocalSkeletonAlpha = androidx.compose.runtime.compositionLocalOf { 0.6f }
+
+/** Installs the shared skeleton pulse above [content]. */
+@Composable
+fun SkeletonPulseHost(content: @Composable () -> Unit) {
+    val pulse = rememberInfiniteTransition(label = "skeletonShared")
+    val alpha by pulse.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "skeletonSharedAlpha",
+    )
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalSkeletonAlpha provides alpha,
+        content = content,
+    )
+}
+
+/**
  * Loading placeholder in the shape of the list that is coming
  * (hunt4 premium pass): softly pulsing card silhouettes instead of
  * a bare spinner on a blank screen.
  */
 @Composable
 fun SkeletonList(rows: Int = 5) {
-    val pulse = rememberInfiniteTransition(label = "skeleton")
-    val alpha by pulse.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "skeletonAlpha",
-    )
+    val alpha = LocalSkeletonAlpha.current
     Column {
         repeat(rows) {
             Card(
@@ -257,13 +280,7 @@ fun rememberHapticTick(): () -> Unit {
  */
 @Composable
 fun SkeletonLines(rows: Int = 3) {
-    val pulse = rememberInfiniteTransition(label = "skeletonLines")
-    val alpha by pulse.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "skeletonLinesAlpha",
-    )
+    val alpha = LocalSkeletonAlpha.current
     Column {
         repeat(rows) { i ->
             Box(

@@ -141,11 +141,16 @@ private fun MailSignIn(viewModel: AppViewModel) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun FolderList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
     var folders by remember { mutableStateOf<List<MailFolder>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
+    // hunt17: pull-to-refresh on the folder list (Pass 3
+    // decision — mail is the surface where the gesture is most
+    // expected); it re-lists folders + unread counts over IMAP.
+    var refreshing by remember { mutableStateOf(false) }
     val username = viewModel.secure.mailUsername!!
     val password = viewModel.secure.mailPassword!!
 
@@ -156,6 +161,8 @@ private fun FolderList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
         } catch (e: Exception) {
             error = "Mail could not be loaded. The mail server may be unreachable, or the mailbox password changed. " +
                 "Check your connection and try again."
+        } finally {
+            refreshing = false
         }
     }
 
@@ -163,7 +170,11 @@ private fun FolderList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
             folders == null -> SkeletonList(6)
-            else -> LazyColumn {
+            else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { refreshing = true; reloadKey++ },
+            ) {
+            LazyColumn {
                 items(folders!!) { folder ->
                     ItemRow(
                         title = folder.name.replace(MailRules.SHARED_PREFIX, "Shared business mail"),
@@ -183,10 +194,12 @@ private fun FolderList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
                     Spacer(Modifier.height(24.dp))
                 }
             }
+            }
         }
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun MessageList(
     viewModel: AppViewModel,
@@ -198,6 +211,7 @@ private fun MessageList(
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     var reloadKey by remember { mutableStateOf(0) }
+    var refreshing by remember { mutableStateOf(false) }
     val username = viewModel.secure.mailUsername!!
     val password = viewModel.secure.mailPassword!!
 
@@ -208,6 +222,8 @@ private fun MessageList(
             messages = viewModel.mail.listMessages(username, password, folder)
         } catch (e: Exception) {
             error = "This folder could not be loaded. Check your connection and try again."
+        } finally {
+            refreshing = false
         }
     }
 
@@ -245,7 +261,11 @@ private fun MessageList(
             error != null -> ErrorBox(error!!) { reloadKey++ }
             messages == null -> SkeletonList(6)
             messages!!.isEmpty() -> EmptyBox("No messages", "This folder is empty.")
-            else -> LazyColumn {
+            else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { refreshing = true; reloadKey++ },
+            ) {
+            LazyColumn {
                 items(messages!!) { message ->
                     ItemRow(
                         title = message.subject,
@@ -253,6 +273,7 @@ private fun MessageList(
                         badge = if (message.unread) "New" else null,
                     ) { onOpen(message.uid) }
                 }
+            }
             }
         }
     }

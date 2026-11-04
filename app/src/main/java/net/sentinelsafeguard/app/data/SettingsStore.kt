@@ -50,6 +50,16 @@ class SettingsStore(context: Context) {
         get() = prefs.getInt(KEY_LAST_ALERTS, -1)
         set(value) = prefs.edit().putInt(KEY_LAST_ALERTS, value).apply()
 
+    /** hunt17: the "your sign-in has ended" notice survives
+     *  process death. The 401 handler sets this flag BEFORE the
+     *  session is torn down; the sign-in screen reads it on the
+     *  next cold start and the next sign-in attempt clears it.
+     *  It is a boolean only — the notice text itself is a
+     *  constant, never stored. */
+    var sessionEndedNoticePending: Boolean
+        get() = prefs.getBoolean(KEY_SESSION_ENDED, false)
+        set(value) = prefs.edit().putBoolean(KEY_SESSION_ENDED, value).apply()
+
     companion object {
         const val FILE_NAME = "sentinel_settings"
         private const val KEY_BIOMETRIC = "biometric_enabled"
@@ -61,5 +71,6 @@ class SettingsStore(context: Context) {
         private const val KEY_LAST_TICKETS = "last_new_ticket_count"
         private const val KEY_LAST_MAIL = "last_mail_unread_count"
         private const val KEY_LAST_ALERTS = "last_signin_alert_count"
+        private const val KEY_SESSION_ENDED = "session_ended_notice_pending"
     }
 }

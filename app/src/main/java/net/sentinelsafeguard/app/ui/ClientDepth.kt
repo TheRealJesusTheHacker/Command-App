@@ -42,6 +42,7 @@ import net.sentinelsafeguard.app.data.api.addSiteDiagram
 import net.sentinelsafeguard.app.data.api.archiveRoadmapItem
 import net.sentinelsafeguard.app.data.api.clientContacts
 import net.sentinelsafeguard.app.data.api.clientDigests
+import net.sentinelsafeguard.app.data.api.clientFiles
 import net.sentinelsafeguard.app.data.api.clientDocExpiry
 import net.sentinelsafeguard.app.data.api.clientDuplicates
 import net.sentinelsafeguard.app.data.api.clientHealthTimeline
@@ -211,6 +212,7 @@ fun ClientDepthPart2(viewModel: AppViewModel, nav: NavController, clientId: Int)
     SecurityDetailCard(viewModel, clientId)
     TrainingDocsCard(viewModel, clientId)
     ClientMailCard(viewModel, clientId)
+    ClientFilesCard(viewModel, clientId)
     ClientReportsCard(viewModel, clientId)
     ClientDigestsCard(viewModel, clientId)
     MirrorCard("Firm Pulse") {
@@ -1604,5 +1606,56 @@ fun FirmPulseScreen(viewModel: AppViewModel, nav: NavController) {
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+}
+
+/**
+ * hunt17 (final contract census): the client's vault files —
+ * expansion item 36's list, with each file opening through the
+ * form-files download route (shared as a file, like every other
+ * document surface in the app).
+ */
+@Composable
+private fun ClientFilesCard(viewModel: AppViewModel, clientId: Int) {
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var error by remember { mutableStateOf<String?>(null) }
+    AsyncCard(
+        "Client files", "files",
+        loader = { viewModel.api.clientFiles(clientId) },
+    ) { data, _ ->
+        val files = Phase3Logic.arr(data, "files")
+        if (files.isEmpty()) Text("No files in this client's vault.", color = SentinelMuted)
+        files.forEach { file ->
+            val fid = Phase3Logic.int(file, "id")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    Phase3Logic.str(file, "displayName").ifBlank {
+                        Phase3Logic.str(file, "originalFilename")
+                    },
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = {
+                    if (fid != null) scope.launch {
+                        try {
+                            val bytes = viewModel.api.downloadAll(
+                                "/api/app/form-files/$fid/download",
+                            )
+                            shareBytes(
+                                context,
+                                Phase3Logic.str(file, "originalFilename")
+                                    .ifBlank { "client-file-$fid" },
+                                "application/octet-stream",
+                                bytes,
+                            )
+                        } catch (e: Exception) {
+                            error = plainError(e, "The file could not be opened. Try again.")
+                        }
+                    }
+                }) { Text("Open") }
+            }
+        }
+        ActionErrorText(error)
     }
 }

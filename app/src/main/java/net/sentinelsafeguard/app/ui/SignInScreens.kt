@@ -26,6 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -86,7 +89,18 @@ fun SignInScreen(viewModel: AppViewModel) {
         // explanation (set by the shell when a 401 ended it).
         val notice = viewModel.sessionNotice
         if (notice != null && !needsTotp) {
-            Text(notice, color = SentinelDanger, style = MaterialTheme.typography.bodyMedium)
+            // hunt17 (accessibility): the notice and errors are
+            // live regions — TalkBack announces them as they
+            // appear instead of leaving the owner to discover
+            // them by swiping.
+            Text(
+                notice,
+                color = SentinelDanger,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics {
+                    liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+                },
+            )
             Spacer(Modifier.height(12.dp))
         }
 
@@ -127,7 +141,14 @@ fun SignInScreen(viewModel: AppViewModel) {
 
         if (error != null) {
             Spacer(Modifier.height(12.dp))
-            Text(error!!, color = SentinelDanger, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                error!!,
+                color = SentinelDanger,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics {
+                    liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+                },
+            )
         }
 
         Spacer(Modifier.height(20.dp))

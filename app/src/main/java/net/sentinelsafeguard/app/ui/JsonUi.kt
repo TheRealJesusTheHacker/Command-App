@@ -219,8 +219,15 @@ fun DateFieldRow(
 ) {
     var showPicker by remember { mutableStateOf(false) }
     val tick = rememberHapticTick()
+    // hunt17: the pretty rendering is parsed once per VALUE, not
+    // once per recomposition — a big form recomposes its whole
+    // column on every keystroke, and re-parsing + re-formatting
+    // every date field each time was pure waste. (The harness
+    // measured the parse itself at ~1.2 µs, so this is hygiene,
+    // not a rescue: 29 fields × 1.2 µs was never the bottleneck.)
+    val prettyValue = remember(value) { InteractionLogic.prettyYmd(value) }
     OutlinedTextField(
-        value = InteractionLogic.prettyYmd(value),
+        value = prettyValue,
         onValueChange = { },
         label = { Text(label) },
         singleLine = true,

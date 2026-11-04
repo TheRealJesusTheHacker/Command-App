@@ -90,10 +90,19 @@ private fun navPopExit(): androidx.compose.animation.ExitTransition =
 @Composable
 fun AppRoot(viewModel: AppViewModel) {
     var splashDone by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxSize()) {
-        AppShell(viewModel)
-        if (!splashDone) {
-            SplashScreen { splashDone = true }
+    // hunt17: AppShell composes UNDER the splash from the first
+    // frame — sign-in state resolves and (when signed in) the /me
+    // fetch + Today loads run DURING the splash, so the splash's
+    // own timing (Command's 3840/4700 ms) is the only wait; it
+    // never serializes ahead of data. Tap dismisses it at once.
+    // The shared skeleton pulse also lives here: one infinite
+    // transition for every loading skeleton in the app.
+    SkeletonPulseHost {
+        Box(Modifier.fillMaxSize()) {
+            AppShell(viewModel)
+            if (!splashDone) {
+                SplashScreen { splashDone = true }
+            }
         }
     }
 }

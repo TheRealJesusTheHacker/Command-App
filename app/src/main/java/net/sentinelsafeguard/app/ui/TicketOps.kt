@@ -891,6 +891,21 @@ private fun ChecklistRunsCard(viewModel: AppViewModel, ticket: Ticket) {
                     color = SentinelMuted,
                 )
             }
+            // hunt17: web's Complete-run action (cfECompleteRun)
+            // — closes the run, distinct from sign-off.
+            if (rid != null && Phase3Logic.str(run, "status") != "Completed") {
+                OutlinedButton(onClick = {
+                    scope.launch {
+                        try {
+                            viewModel.api.completeChecklistRun(rid)
+                            openRun = viewModel.api.checklistRun(rid)
+                            reload()
+                        } catch (e: Exception) {
+                            error = plainError(e, "The run could not be completed. Try again.")
+                        }
+                    }
+                }) { Text("Complete run") }
+            }
         }
         ActionErrorText(error)
     }
@@ -959,6 +974,17 @@ private fun PlansCard(viewModel: AppViewModel, ticket: Ticket) {
                 },
             ) { Text("Save plan") }
         }
+        // hunt17: web's "run due plans now" action
+        // (runrecurringplans) — generates the tickets that are due.
+        OutlinedButton(onClick = {
+            scope.launch {
+                try {
+                    viewModel.api.runPlans(); reload()
+                } catch (e: Exception) {
+                    error = plainError(e, "The due plans could not be run. Try again.")
+                }
+            }
+        }) { Text("Run due plans") }
         ActionErrorText(error)
     }
 }

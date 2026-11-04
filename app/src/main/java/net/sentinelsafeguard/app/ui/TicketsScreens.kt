@@ -420,6 +420,7 @@ private fun TicketViewsBar(viewModel: AppViewModel) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun TicketDirectory(
     viewModel: AppViewModel,
@@ -441,13 +442,18 @@ private fun TicketDirectory(
     var adOnly by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<Ticket>?>(null) }
     var dirError by remember { mutableStateOf<String?>(null) }
+    // hunt17: pull-to-refresh extends the board pattern to the
+    // directory (Pass 3 decision): pulling re-runs the current
+    // filtered query.
+    var refreshKey by remember { mutableStateOf(0) }
+    var refreshing by remember { mutableStateOf(false) }
 
     fun reset() {
         q = ""; sort = MirrorVocab.TICKET_SORTS[0]; stage = null; priority = null
         overdueOnly = false; unassignedOnly = false; noCaseOnly = false; adOnly = false
     }
 
-    LaunchedEffect(q, sort, stage, priority, overdueOnly, unassignedOnly, noCaseOnly, adOnly) {
+    LaunchedEffect(q, sort, stage, priority, overdueOnly, unassignedOnly, noCaseOnly, adOnly, refreshKey) {
         dirError = null
         try {
             val params = MirrorVocab.ticketDirectoryParams(
@@ -465,9 +471,15 @@ private fun TicketDirectory(
             ).items
         } catch (e: Exception) {
             dirError = plainError(e, "The ticket search could not be run. Try again.")
+        } finally {
+            refreshing = false
         }
     }
 
+    androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = { refreshing = true; refreshKey++ },
+    ) {
     LazyColumn {
         item {
             OutlinedTextField(
@@ -593,6 +605,7 @@ private fun TicketDirectory(
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
     }
 }
 

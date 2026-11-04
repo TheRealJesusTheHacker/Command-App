@@ -30,11 +30,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import net.sentinelsafeguard.app.data.api.CaseFullEdit
+import net.sentinelsafeguard.app.data.api.casePhotos
+import net.sentinelsafeguard.app.data.api.deletePhoto
+import net.sentinelsafeguard.app.data.api.uploadPhoto
 import net.sentinelsafeguard.app.data.api.CaseDetailResponse
 import net.sentinelsafeguard.app.data.api.CaseItem
 import net.sentinelsafeguard.app.data.api.Client
@@ -311,6 +315,7 @@ private fun CaseCard(
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun CaseDirectory(
     viewModel: AppViewModel,
@@ -331,13 +336,16 @@ private fun CaseDirectory(
     var adOnly by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<CaseItem>?>(null) }
     var dirError by remember { mutableStateOf<String?>(null) }
+    // hunt17: pull-to-refresh, same decision as TicketDirectory.
+    var refreshKey by remember { mutableStateOf(0) }
+    var refreshing by remember { mutableStateOf(false) }
 
     fun reset() {
         q = ""; sort = MirrorVocab.CASE_SORTS[0]; stage = null; priority = null
         overdueOnly = false; unassignedOnly = false; adOnly = false
     }
 
-    LaunchedEffect(q, sort, stage, priority, overdueOnly, unassignedOnly, adOnly) {
+    LaunchedEffect(q, sort, stage, priority, overdueOnly, unassignedOnly, adOnly, refreshKey) {
         dirError = null
         try {
             val params = MirrorVocab.caseDirectoryParams(
@@ -354,9 +362,15 @@ private fun CaseDirectory(
             ).items
         } catch (e: Exception) {
             dirError = plainError(e, "The case search could not be run. Try again.")
+        } finally {
+            refreshing = false
         }
     }
 
+    androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = { refreshing = true; refreshKey++ },
+    ) {
     LazyColumn {
         item {
             OutlinedTextField(
@@ -474,6 +488,7 @@ private fun CaseDirectory(
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
     }
 }
 
@@ -626,6 +641,8 @@ fun CaseProfileScreen(viewModel: AppViewModel, nav: NavController, caseId: Int) 
                         ) { nav.navigate("ticket/${ticket.id}") }
                     }
                 }
+
+                CasePhotosCard(viewModel, c.id)
 
                 MirrorCard("Case activity", d.activity.size) {
                     if (d.activity.isEmpty()) {
@@ -823,5 +840,109 @@ fun CaseFormScreen(viewModel: AppViewModel, nav: NavController, caseId: Int?) {
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+}
+
+/**
+ * hunt17 (final contract census): the case profile's Photos card —
+ * the case twin of the ticket PhotosCard in TicketOps, riding the
+ * same web handler (a_cfgetphotos keyed by caseId) and the same
+ * upload/download/delete routes. The case profile had no photo
+ * surface before this pass even though the backend serves one.
+ */
+@Composable
+private fun CasePhotosCard(viewModel: AppViewModel, caseId: Int) {
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var caption by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var viewPhoto by remember { mutableStateOf<ByteArray?>(null) }
+    var reloadRef by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val bytes = context.contentResolver.openInputStream(uri)?.readBytes()
+                        ?: throw IllegalStateException("unreadable")
+                    val name = uri.lastPathSegment?.substringAfterLast('/') ?: "photo.jpg"
+                    viewModel.api.uploadPhoto(
+                        caseId, bytes, name, caption,
+                        targetType = "case",
+                    )
+                    caption = ""
+                    reloadRef?.invoke()
+                } catch (e: Exception) {
+                    error = plainError(e, "The photo could not be uploaded. Try again.")
+                }
+            }
+        }
+    }
+    AsyncCard(
+        "Photos", "photos",
+        loader = { viewModel.api.casePhotos(caseId) },
+    ) { data, reload ->
+        reloadRef = reload
+        val photos = Phase3Logic.arr(data, "photos")
+        if (photos.isEmpty()) Text("No photos on this case.", color = SentinelMuted)
+        photos.forEach { photo ->
+            val pid = Phase3Logic.int(photo, "id")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    listOfNotNull(
+                        Phase3Logic.str(photo, "fileName").takeIf { it.isNotBlank() }
+                            ?: Phase3Logic.str(photo, "caption").takeIf { it.isNotBlank() },
+                        Phase3Logic.str(photo, "kind").takeIf { it.isNotBlank() },
+                    ).joinToString(" · "),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = {
+                    if (pid != null) scope.launch {
+                        try {
+                            viewPhoto = viewModel.api.downloadAll("/api/app/photos/$pid/download")
+                        } catch (e: Exception) {
+                            error = plainError(e, "The photo could not be opened. Try again.")
+                        }
+                    }
+                }) { Text("View") }
+                TextButton(onClick = {
+                    if (pid != null) scope.launch {
+                        try {
+                            viewModel.api.deletePhoto(pid); reload()
+                        } catch (e: Exception) {
+                            error = plainError(e, "The photo could not be deleted. Try again.")
+                        }
+                    }
+                }) { Text("Delete") }
+            }
+        }
+        TextFieldRow("Caption for the next upload", caption, { caption = it })
+        Button(onClick = { picker.launch("image/*") }) { Text("Upload photo") }
+        ActionErrorText(error)
+    }
+    viewPhoto?.let { bytes ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { viewPhoto = null },
+            title = { Text("Photo") },
+            text = {
+                val bmp = remember(bytes) {
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }
+                if (bmp != null) {
+                    androidx.compose.foundation.Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = "Case photo",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Text("This photo could not be shown.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewPhoto = null }) { Text("Close") }
+            },
+        )
     }
 }

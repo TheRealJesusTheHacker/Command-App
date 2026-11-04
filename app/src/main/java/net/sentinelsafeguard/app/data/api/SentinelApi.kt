@@ -85,7 +85,53 @@ class SentinelApi(
         return map
     }
 
+    /**
+     * In-flight GET coalescing (hunt17, Polish Pass 3): when
+     * several cards on one screen ask for the same GET at the
+     * same moment (the per-card fan-out pattern), they share ONE
+     * transport call and one response instead of N identical
+     * round trips. Only requests that overlap in time coalesce —
+     * a call that arrives after the first has finished always
+     * fetches fresh, so reload/refresh semantics are unchanged,
+     * and nothing is ever cached beyond the in-flight window.
+     * Mutations never coalesce.
+     */
+    private val inFlightGets =
+        java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<HttpResponse>>()
+
     private suspend fun call(
+        method: String,
+        path: String,
+        body: String? = null,
+        authenticated: Boolean = true,
+    ): HttpResponse {
+        if (method != "GET") {
+            return executeCall(method, path, body, authenticated)
+        }
+        val key = "$path\n${body ?: ""}\n$authenticated"
+        inFlightGets[key]?.let { existing ->
+            // A twin of this GET is already on the wire: ride it.
+            // (If it failed, its failure is this call's failure too.)
+            return existing.await()
+        }
+        val mine = kotlinx.coroutines.CompletableDeferred<HttpResponse>()
+        if (inFlightGets.putIfAbsent(key, mine) != null) {
+            // Lost the race to register; ride the winner's call.
+            return inFlightGets[key]!!.await()
+        }
+        try {
+            val response = executeCall(method, path, body, authenticated)
+            mine.complete(response)
+            return response
+        } catch (e: Exception) {
+            mine.completeExceptionally(e)
+            throw e
+        } finally {
+            inFlightGets.remove(key, mine)
+        }
+    }
+
+    private suspend fun executeCall(
         method: String,
         path: String,
         body: String? = null,

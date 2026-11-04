@@ -114,6 +114,7 @@ fun ClientsScreen(viewModel: AppViewModel, nav: NavController) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
     val scope = rememberCoroutineScope()
@@ -126,6 +127,9 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
     var stage by remember { mutableStateOf<String?>(null) }
     var tier by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
+    // hunt17: pull-to-refresh extends to the Clients directory —
+    // the last list surface without it (Pass 3 decision).
+    var refreshing by remember { mutableStateOf(false) }
     var selecting by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf(setOf<Int>()) }
     var bulkTag by remember { mutableStateOf("") }
@@ -141,6 +145,8 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
             total = page.total
         } catch (e: Exception) {
             error = plainError(e, "Clients could not be loaded. Check your connection and try again.")
+        } finally {
+            refreshing = false
         }
     }
 
@@ -173,6 +179,10 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
                 },
                 sort,
             )
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { refreshing = true; reloadKey++ },
+            ) {
             LazyColumn {
                 item {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
@@ -369,6 +379,7 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
                     }
                 }
                 item { Spacer(Modifier.height(16.dp)) }
+            }
             }
         }
     }

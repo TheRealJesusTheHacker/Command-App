@@ -409,17 +409,25 @@ suspend fun SentinelApi.saveSlaConfig(priority: String, responseTargetMin: Int, 
 suspend fun SentinelApi.ticketPhotos(ticketId: Int): JsonObject =
     getJson("/api/app/tickets/$ticketId/photos")
 
+/** hunt17 (final contract census): the case twin of
+ *  [ticketPhotos] — the SAME web handler (a_cfgetphotos) keyed by
+ *  caseId, the same body shape. The case profile carried no photo
+ *  surface before this pass. */
+suspend fun SentinelApi.casePhotos(caseId: Int): JsonObject =
+    getJson("/api/app/cases/$caseId/photos")
+
 suspend fun SentinelApi.uploadPhoto(
     ticketId: Int,
     bytes: ByteArray,
     fileName: String,
     caption: String,
     kind: String = "other",
+    targetType: String = "ticket",
 ): JsonObject = uploadBytes(
     "/api/app/photos/upload", bytes,
     mapOf(
         "Content-Type" to "application/octet-stream",
-        "X-Photo-Target-Type" to "ticket",
+        "X-Photo-Target-Type" to targetType,
         "X-Photo-Target-Id" to ticketId.toString(),
         "X-Photo-Kind" to kind,
         "X-File-Name" to fileName,
@@ -554,6 +562,12 @@ suspend fun SentinelApi.signoffChecklistRun(runId: Int, signoffName: String): Js
         buildJsonObject { put("signoffName", signoffName) }.toBody(),
     )
 
+/** hunt17 (final contract census): web's Complete-run action —
+ *  a_cfcompletechecklistrun — distinct from sign-off: it closes
+ *  the run; the app offered only sign-off before this pass. */
+suspend fun SentinelApi.completeChecklistRun(runId: Int): JsonObject =
+    postJson("/api/app/checklists/runs/$runId/complete", "{}")
+
 suspend fun SentinelApi.plans(): JsonObject = getJson("/api/app/plans")
 
 suspend fun SentinelApi.savePlan(plan: JsonObject, id: Int?): JsonObject {
@@ -563,6 +577,12 @@ suspend fun SentinelApi.savePlan(plan: JsonObject, id: Int?): JsonObject {
 }
 
 suspend fun SentinelApi.deletePlan(id: Int): JsonObject = deleteJson("/api/app/plans/$id")
+
+/** hunt17 (final contract census): web's "run due plans now"
+ *  action (a_runrecurringplans, POST /api/app/plans/run) — the
+ *  Plans card listed and deleted plans but could not run them. */
+suspend fun SentinelApi.runPlans(): JsonObject =
+    postJson("/api/app/plans/run", "{}")
 
 suspend fun SentinelApi.parts(): JsonObject = getJson("/api/app/parts")
 

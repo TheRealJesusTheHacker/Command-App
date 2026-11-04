@@ -72,6 +72,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     init {
         api.deviceToken = secure.deviceToken
         api.onSignedOut = { handleTokenDead() }
+        // hunt17: restore a session-ended notice that survived
+        // process death (set by handleTokenDead, cleared by the
+        // next sign-in attempt) so the explanation is never lost
+        // just because Android reclaimed the process first.
+        if (settings.sessionEndedNoticePending) {
+            sessionNotice = InteractionLogic.SESSION_ENDED_NOTICE
+        }
         if (signedIn) {
             // Cold start with a live token: prove the human once,
             // if biometric unlock is on (spec §5).
@@ -95,6 +102,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         onResult: (LoginResult) -> Unit,
     ) {
         sessionNotice = null
+        settings.sessionEndedNoticePending = false
         viewModelScope.launch {
             val result = try {
                 api.login(displayName, passphrase, deviceName())
@@ -167,11 +175,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearSessionNotice() {
         sessionNotice = null
+        settings.sessionEndedNoticePending = false
     }
 
     /** A 401 from anywhere lands here: the token is dead, back to sign-in. */
     private fun handleTokenDead() {
         sessionNotice = InteractionLogic.SESSION_ENDED_NOTICE
+        // Persist BEFORE teardown: if the process dies on the way
+        // to the sign-in screen, the notice still shows (hunt17).
+        settings.sessionEndedNoticePending = true
         viewModelScope.launch {
             secure.clearAll()
             mail.clearCache()
