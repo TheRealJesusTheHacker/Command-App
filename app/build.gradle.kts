@@ -71,8 +71,12 @@ android {
         applicationId = "net.sentinelsafeguard.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "0.1.0"
+        // 1.0.0 RELEASE (owner verdict 2026-11-04: "No hunt 17
+        // is 1.0.0"): the hunt17 polish tree IS the release.
+        // versionCode 100 steps clear of the whole hunt series
+        // (1..17) and opens the release line (1.0.1 -> 101, ...).
+        versionCode = 100
+        versionName = "1.0.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")
