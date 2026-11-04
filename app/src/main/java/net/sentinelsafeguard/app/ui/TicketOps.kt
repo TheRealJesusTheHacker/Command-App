@@ -41,6 +41,7 @@ import net.sentinelsafeguard.app.data.api.cannedResponses
 import net.sentinelsafeguard.app.data.api.checklistRun
 import net.sentinelsafeguard.app.data.api.checklists
 import net.sentinelsafeguard.app.data.api.completeChecklistItem
+import net.sentinelsafeguard.app.data.api.completeChecklistRun
 import net.sentinelsafeguard.app.data.api.consumePart
 import net.sentinelsafeguard.app.data.api.convertTimeToInvoice
 import net.sentinelsafeguard.app.data.api.createExpense
@@ -61,6 +62,7 @@ import net.sentinelsafeguard.app.data.api.plans
 import net.sentinelsafeguard.app.data.api.playbooks
 import net.sentinelsafeguard.app.data.api.renderCannedResponse
 import net.sentinelsafeguard.app.data.api.restockPart
+import net.sentinelsafeguard.app.data.api.runPlans
 import net.sentinelsafeguard.app.data.api.saveCannedResponse
 import net.sentinelsafeguard.app.data.api.saveChecklistTemplate
 import net.sentinelsafeguard.app.data.api.savePart

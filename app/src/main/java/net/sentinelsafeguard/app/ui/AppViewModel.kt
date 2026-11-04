@@ -63,6 +63,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Plain explanation waiting on the sign-in screen after a
+     *  401 ended the session (hunt16): a clean return to sign-in
+     *  WITH the reason, never a silent ejection. Declared before
+     *  init: hunt17 restores a persisted notice there. */
+    var sessionNotice by mutableStateOf<String?>(null)
+
     var updateAvailable by mutableStateOf<UpdateState.Available?>(null)
         private set
 
@@ -167,11 +173,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun lockNow() {
         if (signedIn && settings.biometricEnabled) locked = true
     }
-
-    /** Plain explanation waiting on the sign-in screen after a
-     *  401 ended the session (hunt16): a clean return to sign-in
-     *  WITH the reason, never a silent ejection. */
-    var sessionNotice by mutableStateOf<String?>(null)
 
     fun clearSessionNotice() {
         sessionNotice = null
