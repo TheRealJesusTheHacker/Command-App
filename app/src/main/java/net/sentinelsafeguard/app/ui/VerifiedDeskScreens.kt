@@ -84,7 +84,7 @@ fun VerifiedDeskScreen(viewModel: AppViewModel, nav: NavController) {
     }
 
     Column {
-        MirrorHeader("Verified Desk")
+        MirrorHeader("Verified Desk", MirrorCopy.subtitle("b4assess"))
         when {
             state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()

@@ -131,7 +131,7 @@ fun ThreatIntelScreen(viewModel: AppViewModel, nav: NavController) {
     }
     androidx.compose.runtime.LaunchedEffect(query, severity, category) { state.reloadKey++ }
     Column {
-        MirrorHeader("Threat Intel") {
+        MirrorHeader("Threat Intel", MirrorCopy.subtitle("threatintel")) {
             Button(onClick = {
                 scope.launch {
                     try {

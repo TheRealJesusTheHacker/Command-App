@@ -104,7 +104,7 @@ fun ScheduleScreen(viewModel: AppViewModel, nav: NavController) {
     }
 
     Column {
-        MirrorHeader("Schedule") {
+        MirrorHeader("Schedule", MirrorCopy.subtitle("schedule")) {
             Button(onClick = { nav.navigate("jobNew") }) { Text("+ New job") }
         }
         Row(

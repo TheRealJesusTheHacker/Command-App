@@ -154,7 +154,7 @@ import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 fun InjectedScreen(viewModel: AppViewModel, nav: NavController, key: String) {
     val label = MirrorNav.ALL_VIEWS[key]?.label ?: "Command"
     Column {
-        MirrorHeader(label)
+        MirrorHeader(MirrorCopy.title(key, label), MirrorCopy.subtitle(key))
         LazyColumn {
             item {
                 when (key) {
@@ -188,11 +188,6 @@ private fun ClientIdField(value: String, onChange: (String) -> Unit) {
 
 @Composable
 private fun OpsViewsScreen(viewModel: AppViewModel) {
-    Text(
-        "Read-only planning surfaces computed live",
-        color = SentinelMuted,
-        modifier = Modifier.padding(horizontal = 16.dp),
-    )
     AsyncCard("Risk heatmap", "rows", loader = { viewModel.api.opsRiskHeatmap() }) { data, _ ->
         Phase3Logic.arr(data, "rows").forEach { row ->
             Text(Phase3Logic.str(row, "clientName"), style = MaterialTheme.typography.bodyLarge)

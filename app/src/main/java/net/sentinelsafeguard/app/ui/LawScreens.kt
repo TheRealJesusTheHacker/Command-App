@@ -71,7 +71,13 @@ fun LawScreen(viewModel: AppViewModel, nav: NavController) {
         }
     }
     Column {
-        MirrorHeader("Dogg and Associates")
+        MirrorHeader("Dogg and Associates", MirrorCopy.subtitle("law"))
+        Text(
+            "Legal intelligence, not legal advice.",
+            color = SentinelMuted,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
         Column(Modifier.padding(horizontal = 16.dp)) {
             if (notice != null) Text(notice!!)
             ActionErrorText(error)

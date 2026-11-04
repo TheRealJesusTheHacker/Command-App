@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import net.sentinelsafeguard.app.data.api.ScheduleResponse
-import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import java.time.LocalDate
 
 /**
@@ -40,7 +39,7 @@ fun MyScheduleScreen(viewModel: AppViewModel, nav: NavController) {
         }
     }
     Column {
-        MirrorHeader("My Schedule")
+        MirrorHeader("My Schedule", MirrorCopy.subtitle("myschedule"))
         when {
             error != null -> ErrorBox(error!!) { }
             data == null -> SkeletonList()
@@ -88,13 +87,6 @@ fun MyScheduleScreen(viewModel: AppViewModel, nav: NavController) {
                         }
                     }
                     item { Spacer(Modifier.height(16.dp)) }
-                    item {
-                        Text(
-                            "Showing your jobs only (scope: ${resp.scope}).",
-                            color = SentinelMuted,
-                            modifier = Modifier.height(24.dp),
-                        )
-                    }
                 }
             }
         }

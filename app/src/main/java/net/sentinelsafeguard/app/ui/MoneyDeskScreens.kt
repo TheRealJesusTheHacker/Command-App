@@ -66,11 +66,7 @@ fun MoneyDeskScreen(viewModel: AppViewModel, nav: NavController) {
     val act = rememberAction({ error = it }, { state.reloadKey++ })
     LazyColumn {
         item {
-            MirrorHeader("Money Desk")
-            Text(
-                "Automations create DRAFTS only — nothing is sent or ordered.",
-                color = SentinelMuted, modifier = Modifier.padding(horizontal = 16.dp),
-            )
+            MirrorHeader("Money Desk", MirrorCopy.subtitle("b3money"))
             ActionErrorText(error)
             if (notice != null) Text(notice!!, color = SentinelMuted, modifier = Modifier.padding(16.dp))
         }
@@ -335,7 +331,7 @@ fun TaxProfitScreen(viewModel: AppViewModel, nav: NavController) {
     var pulseError by remember { mutableStateOf<String?>(null) }
     LazyColumn {
         item {
-            MirrorHeader("Tax & Profit")
+            MirrorHeader("Tax & Profit", MirrorCopy.subtitle("b4etax"))
             ChoiceMenu("Tax year", year.toString(), Phase4Logic.taxYearOptions(currentYear).map { it.toString() }) {
                 year = it.toIntOrNull() ?: currentYear
             }

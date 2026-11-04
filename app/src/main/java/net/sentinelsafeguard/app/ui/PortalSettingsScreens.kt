@@ -85,7 +85,7 @@ fun PortalSettingsScreen(viewModel: AppViewModel, nav: NavController) {
     }
 
     Column {
-        MirrorHeader("Portal Settings")
+        MirrorHeader("Portal Settings", MirrorCopy.subtitle("b3ops"))
         LazyColumn {
             item {
                 if (notice != null) {

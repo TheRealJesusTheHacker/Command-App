@@ -56,7 +56,7 @@ fun FirmOpsScreen(viewModel: AppViewModel, nav: NavController) {
     var notice by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     Column {
-        MirrorHeader("Firm Ops")
+        MirrorHeader(MirrorCopy.title("cf2firmops", "Firm Ops"), MirrorCopy.subtitle("cf2firmops"))
         LazyColumn {
             item {
                 if (notice != null) {

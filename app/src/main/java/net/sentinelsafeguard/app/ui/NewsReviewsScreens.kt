@@ -62,7 +62,7 @@ fun SentinelNewsScreen(viewModel: AppViewModel, nav: NavController) {
     val state = rememberJsonScreen { viewModel.api.newsFeed() }
     var openId by remember { mutableStateOf<Int?>(null) }
     Column {
-        MirrorHeader("Sentinel News")
+        MirrorHeader("Sentinel News", MirrorCopy.subtitle("sentinelnews"))
         when {
             state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
@@ -131,7 +131,7 @@ fun NewsDeskScreen(viewModel: AppViewModel, nav: NavController) {
         }
     }
     Column {
-        MirrorHeader("News Desk") {
+        MirrorHeader("News Desk", MirrorCopy.subtitle("newsdesk")) {
             Button(onClick = { creating = true }) { Text("New item") }
         }
         Column(Modifier.padding(horizontal = 16.dp)) {
@@ -329,7 +329,7 @@ fun ReviewsScreen(viewModel: AppViewModel, nav: NavController) {
         }
     }
     Column {
-        MirrorHeader("Reviews")
+        MirrorHeader("Reviews", MirrorCopy.subtitle("reviews"))
         Column(Modifier.padding(horizontal = 16.dp)) {
             if (notice != null) Text(notice!!)
             ActionErrorText(error)

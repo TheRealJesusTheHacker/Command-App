@@ -259,3 +259,81 @@ object MirrorNav {
         else -> "today"
     }
 }
+
+/**
+ * Polish Pass 1 (hunt15) — visual fidelity: the exact view
+ * titles and header subtitles production Command renders, as
+ * extracted from the staging static tree (hash-recorded in the
+ * hunt15 build record; staging index.html has drifted from the
+ * Phase 0 production hash, so these strings were re-read from
+ * the staging files themselves, not assumed from the inventory).
+ * Web's <h1> sometimes differs from its nav label (Operations
+ * Views, Pipeline & Field Jobs, Client CSV Import, Firm
+ * Operations, OSINT Toolkit) — [VIEW_TITLES] carries those.
+ */
+object MirrorCopy {
+    val VIEW_TITLES: Map<String, String> = mapOf(
+        "b3cops" to "Operations Views",
+        "b3dfield" to "Pipeline & Field Jobs",
+        "b4dimport" to "Client CSV Import",
+        "cf2firmops" to "Firm Operations",
+        "osint" to "OSINT Toolkit",
+    )
+
+    fun title(key: String, fallback: String): String = VIEW_TITLES[key] ?: fallback
+
+    val SUBTITLES: Map<String, String> = mapOf(
+        "cases" to "Every engagement as a working case — board, directory, and full case files.",
+        "assets" to "Two registers, kept separate: Sentinel's own equipment first, then the gear tracked for clients.",
+        "invoices" to "Real billing documents — line items, tax, a true lifecycle, and a printable invoice for every client.",
+        "employees" to "The team directory — who is here, what each person is carrying, and the work still waiting for an owner.",
+        "schedule" to "Every job and every person on one calendar — pick a person to see only their jobs.",
+        "myschedule" to "Only the jobs assigned to you appear here.",
+        "activity" to "Everything your team has done in Command, newest first. The security console — IP addresses, devices, and sign-in attempts — is owner-only.",
+        "law" to "Legal research workspace and document drafting — for Sentinel's own use.",
+        "sentinelnews" to "What the public sees on the Sentinel News page — published items only, newest first. Drafts are worked on the News Desk tab.",
+        "newsdesk" to "The desk behind Sentinel News on the public site — drafts live here, automation-filed stories arrive already published, and anything live can be unpublished with a tap.",
+        "reviews" to "Client reviews submitted through one-time review-request links. A review appears on the public website only when you publish it here — pending and hidden reviews are never exported.",
+        "b3money" to "Build quotes from the price book, convert unbilled work to draft invoices, review purchase drafts, and work the payment board. Automations create DRAFTS only — nothing is sent or ordered.",
+        "b4etax" to "The tax-year pack (invoices, expenses, mileage, payments, summary PDF) and Firm Pulse profit rollups. Figures are computed live from Command records, America/Chicago.",
+        "b3ops" to "Subcontractor assignments, one-time secrets, client one-pagers, portal tips and the review showcase.",
+        "engagements" to "Contracts & e-signature, pentest engagements, findings, and the findings library. Findings cannot be added until a pentest authorization for that client is fully signed (client signature + owner countersignature).",
+        "cf2firmops" to "Job costing, Sentinel's own vendors, the internal task board, and staff availability. Internal only — none of this is ever shown to clients.",
+        "cf2assurance" to "Document packets, client file requests, the backup restore-test log, and the vulnerability scan register. A scan can only be recorded for a client with a fully signed pentest authorization on file.",
+        "b4assess" to "Guided security assessments, Sentinel Verified badge issuance, review responses, and generated documents in the client's language.",
+        "osint" to "Public-source checks on identifiers already in hand — every run needs a purpose note and is written to the activity log. Client and demo accounts never see this tool.",
+        "breachintel" to "A living register of recent data breaches and where the stolen data surfaced — as publicly reported. This register cites reporting only: it never links to a leak or download, and never stores leaked data.",
+        "threatintel" to "One fused feed from the free sources verified live for this workspace — CISA's Known Exploited Vulnerabilities catalog, NVD critical CVEs, CISA advisories, and reputable security reporting — deduped by CVE, URL, and headline, and scored by a documented deterministic rule (source class, KEV ransomware/due-date pressure, exploitation signals, corroboration). The score is a triage sort, not a risk measurement. Nothing here auto-publishes: filing an item to the News Desk is a deliberate tap and always lands as a draft.",
+        "b3cops" to "Read-only planning surfaces computed live from the existing record. Staff only. Family-linked clients never show money figures here.",
+        "b3dfield" to "Service playbooks, today's field jobs, staged asset import, and transparent lead scoring with source ROI. Nothing here sends anything.",
+        "cf2reports" to "Monthly client reports, satisfaction surveys, the referral tracker, and per-client threat briefs. Everything here is a draft until the owner sends it — threat briefs are never emailed by Command.",
+        "b4cadmin" to "Sentinel App devices, partner lead API keys, and outbound webhooks. Keys and signing secrets are shown once, at creation only. Webhook deliveries run on the automation tick with backoff (60s, 5m, 30m, 2h; 5 attempts, then dead-letter) — never inline.",
+        "b4dimport" to "Bulk-import clients into the onboarding review queue. A dry run reports every row first — duplicates flagged with their match reasons, invalid rows with line numbers — and confirming only STAGES rows in the review queue. No client is created by an import: a person merges each staged row in the wizard, and a row that matches an existing client is staged against that client so approving updates it instead of creating a second record. A family flag in the file is a suggestion for the reviewer only — the import never sets a Family link.",
+        "b4jops" to "Paper invoice packets for clients with no email on file, the day route planner, warranty claims, retainer statement drafts and urgent-alert routing. Nothing here sends anything: packets are posted by hand, statements are drafts.",
+        "search" to "Grouped by module. A module your role cannot open never appears — not even as a count.",
+        "portal_profile" to "Your Sentinel Safeguard client portal — your profile, and the work we hold for you.",
+        "portal_progress" to "Where your work stands — your tickets and cases on one timeline: Received, In Progress, Resolved. Newest first.",
+        "portal_history" to "Your work with Sentinel Safeguard in one timeline, plus your current security tip and any one-time secrets waiting for you.",
+        "portal_documents" to "Your invoices and the documents we hold for you — only yours, from your own client record.",
+        "portal_files" to "Document packets Sentinel has issued to you, and files Sentinel has asked you to upload (PDF).",
+        "portal_messages" to "Message Sentinel Safeguard about a ticket — the thread lives here in your portal; email is only a notification.",
+        "portal_alert" to "For an emergency happening right now — a Critical Alert files a ticket at Critical priority, the highest in our system.",
+        "portal_contracts" to "Contracts sent to you for signature, and your published engagement reports.",
+        "portal_feedback" to "Surveys Sentinel has asked you about, and the referrals you have given.",
+        "portal_knowledge" to "The practice library — codes, standards, and law, housed on site and readable here.",
+    )
+
+    fun subtitle(key: String): String? = SUBTITLES[key]
+
+    /** Web Today's header line: "<Weekday, Month D, YYYY> — what
+     *  needs you first." in America/Chicago (production fmt). */
+    fun todaySubtitle(
+        now: java.time.ZonedDateTime =
+            java.time.ZonedDateTime.now(java.time.ZoneId.of("America/Chicago")),
+    ): String {
+        val fmt = java.time.format.DateTimeFormatter.ofPattern(
+            "EEEE, MMMM d, yyyy", java.util.Locale.US,
+        )
+        return "${now.format(fmt)} — what needs you first."
+    }
+}

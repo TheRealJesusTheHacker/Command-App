@@ -53,7 +53,13 @@ fun SignInScreen(viewModel: AppViewModel) {
             .padding(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Sentinel App", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            "SENTINEL SAFEGUARD",
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text("Sign in", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(
             "Sign in with the same name and passphrase you use for Sentinel Command.",
@@ -65,7 +71,7 @@ fun SignInScreen(viewModel: AppViewModel) {
         OutlinedTextField(
             value = displayName,
             onValueChange = { displayName = it },
-            label = { Text("Your name") },
+            label = { Text("Display name") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )

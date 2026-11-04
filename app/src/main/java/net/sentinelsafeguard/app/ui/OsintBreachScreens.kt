@@ -81,7 +81,7 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
         }
     }
     Column {
-        MirrorHeader("OSINT")
+        MirrorHeader(MirrorCopy.title("osint", "OSINT"), MirrorCopy.subtitle("osint"))
         when {
             state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null -> SkeletonList()
@@ -91,10 +91,6 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
                 LazyColumn {
                     item {
                         MirrorCard("New search") {
-                            Text(
-                                "Every run requires a purpose note and is written to the activity log.",
-                                color = SentinelMuted, style = MaterialTheme.typography.bodySmall,
-                            )
                             if (types.isNotEmpty()) {
                                 ChoiceMenu(
                                     "Identifier type",
@@ -272,7 +268,7 @@ fun BreachIntelScreen(viewModel: AppViewModel, nav: NavController) {
     val state = rememberJsonScreen { viewModel.api.breachIntel(sector = sector) }
     LaunchedEffect(sector) { state.reloadKey++ }
     Column {
-        MirrorHeader("Breach Intel") {
+        MirrorHeader("Breach Intel", MirrorCopy.subtitle("breachintel")) {
             Button(onClick = { creating = true }) { Text("Record a breach") }
         }
         state.data?.let { data ->

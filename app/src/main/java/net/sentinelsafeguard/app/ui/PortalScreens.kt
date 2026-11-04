@@ -92,10 +92,15 @@ private fun PortalRow(row: JsonObject, onClick: (() -> Unit)? = null) {
 @Composable
 private fun PortalScreenShell(
     title: String,
+    subtitleKey: String,
     content: @Composable () -> Unit,
 ) {
     LazyColumn {
-        item { MirrorHeader(title) }
+        item {
+            MirrorHeader(title, MirrorCopy.subtitle(subtitleKey)) {
+                MirrorChip("● Client portal")
+            }
+        }
         item { content() }
         item { Spacer(Modifier.height(16.dp)) }
     }
@@ -116,7 +121,7 @@ private fun UnlinkedNotice() {
 
 @Composable
 fun PortalProfileScreen(viewModel: AppViewModel, nav: NavController) {
-    PortalScreenShell("My Profile") {
+    PortalScreenShell("My Profile", "portal_profile") {
         AsyncCard("Profile", loader = { viewModel.api.portalHome() }) { home, reload ->
             if (Phase3Logic.bool(home, "linked") == false) {
                 UnlinkedNotice()
@@ -219,7 +224,7 @@ private fun PortalLangCard(viewModel: AppViewModel) {
 
 @Composable
 fun PortalProgressScreen(viewModel: AppViewModel, nav: NavController) {
-    PortalScreenShell("Progress") {
+    PortalScreenShell("Progress", "portal_progress") {
         AsyncCard("Your work in progress", loader = { viewModel.api.portalHome() }) { home, _ ->
             if (Phase3Logic.bool(home, "linked") == false) {
                 UnlinkedNotice()
@@ -250,7 +255,7 @@ fun PortalProgressScreen(viewModel: AppViewModel, nav: NavController) {
 
 @Composable
 fun PortalHistoryScreen(viewModel: AppViewModel, nav: NavController) {
-    PortalScreenShell("History") {
+    PortalScreenShell("History", "portal_history") {
         AsyncCard("History", loader = { viewModel.api.portalHistory() }) { data, _ ->
             val rows = Phase3Logic.arr(data, "history")
             if (rows.isEmpty()) Text("No history yet.", color = SentinelMuted)
@@ -285,7 +290,7 @@ fun PortalHistoryScreen(viewModel: AppViewModel, nav: NavController) {
 
 @Composable
 fun PortalDocumentsScreen(viewModel: AppViewModel, nav: NavController) {
-    PortalScreenShell("Your Documents") {
+    PortalScreenShell("Your Documents", "portal_documents") {
         AsyncCard("Documents", loader = { viewModel.api.portalHome() }) { home, _ ->
             if (Phase3Logic.bool(home, "linked") == false) {
                 UnlinkedNotice()
@@ -316,7 +321,7 @@ fun PortalDocumentsScreen(viewModel: AppViewModel, nav: NavController) {
 @Composable
 fun PortalFilesScreen(viewModel: AppViewModel, nav: NavController) {
     val context = LocalContext.current
-    PortalScreenShell("My Files & Packets") {
+    PortalScreenShell("My Files & Packets", "portal_files") {
         AsyncCard("Packets", loader = { viewModel.api.portalPackets() }) { data, _ ->
             var error by remember { mutableStateOf<String?>(null) }
             val run = rememberAction({ error = it }, {})
@@ -418,7 +423,7 @@ private fun FileRequestsCard(viewModel: AppViewModel) {
 
 @Composable
 fun PortalMessagesScreen(viewModel: AppViewModel, nav: NavController) {
-    PortalScreenShell("Messages") {
+    PortalScreenShell("Messages", "portal_messages") {
         AsyncCard("Your tickets", loader = { viewModel.api.portalHome() }) { home, _ ->
             var selected by remember { mutableStateOf<Int?>(null) }
             val tickets = Phase3Logic.arr(home, "tickets")
@@ -487,7 +492,7 @@ private fun PortalThread(viewModel: AppViewModel, ticketId: Int) {
 
 @Composable
 fun PortalAlertScreen(viewModel: AppViewModel, nav: NavController) {
-    PortalScreenShell("Critical Alert") {
+    PortalScreenShell("Critical Alert", "portal_alert") {
         MirrorCard("Send a Critical Alert") {
             var title by remember { mutableStateOf("") }
             var details by remember { mutableStateOf("") }
@@ -533,7 +538,7 @@ fun PortalAlertScreen(viewModel: AppViewModel, nav: NavController) {
 
 @Composable
 fun PortalSignOffsScreen(viewModel: AppViewModel, nav: NavController) {
-    PortalScreenShell("My Sign-offs") {
+    PortalScreenShell("My Sign-offs", "portal_signoffs") {
         AsyncCard("Sign-offs", loader = { viewModel.api.portalSignOffs() }) { data, _ ->
             val rows = Phase3Logic.arr(data, "signOffs")
             if (rows.isEmpty()) {
@@ -580,7 +585,7 @@ fun PortalSignOffsScreen(viewModel: AppViewModel, nav: NavController) {
 @Composable
 fun PortalContractsScreen(viewModel: AppViewModel, nav: NavController) {
     val context = LocalContext.current
-    PortalScreenShell("Contracts & Reports") {
+    PortalScreenShell("Contracts & Reports", "portal_contracts") {
         AsyncCard("Approval inbox", loader = { viewModel.api.portalApprovalInbox() }) { data, _ ->
             val counts = Phase3Logic.obj(data, "counts")
             if (counts != null) {
@@ -829,7 +834,7 @@ private fun PortalChangeRequestsCard(viewModel: AppViewModel) {
 
 @Composable
 fun PortalKnowledgeScreen(viewModel: AppViewModel, nav: NavController) {
-    PortalScreenShell("Knowledge") {
+    PortalScreenShell("Knowledge", "portal_knowledge") {
         AsyncCard("Knowledge", loader = { viewModel.api.portalKnowledge() }) { data, _ ->
             val rows = Phase3Logic.arr(data, "library")
             if (rows.isEmpty()) Text("No knowledge entries for you yet.", color = SentinelMuted)
@@ -850,7 +855,7 @@ fun PortalKnowledgeScreen(viewModel: AppViewModel, nav: NavController) {
 
 @Composable
 fun PortalStatusScreen(viewModel: AppViewModel, nav: NavController) {
-    PortalScreenShell("Status Board") {
+    PortalScreenShell("Status Board", "portal_status") {
         AsyncCard("Status Board", loader = { viewModel.api.portalStatusBoard() }) { data, _ ->
             val board = Phase3Logic.obj(data, "board") ?: data
             val clientName = Phase3Logic.str(board, "clientName")
@@ -881,7 +886,7 @@ fun PortalStatusScreen(viewModel: AppViewModel, nav: NavController) {
 
 @Composable
 fun PortalFeedbackScreen(viewModel: AppViewModel, nav: NavController) {
-    PortalScreenShell("Feedback & Referrals") {
+    PortalScreenShell("Feedback & Referrals", "portal_feedback") {
         AsyncCard("Surveys", loader = { viewModel.api.portalSurveys() }) { data, reload ->
             var answerTarget by remember { mutableStateOf<Int?>(null) }
             var rating by remember { mutableStateOf(5) }

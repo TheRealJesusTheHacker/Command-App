@@ -61,7 +61,7 @@ private enum class AssetMode { Directory, Board, Renewals, Labels }
 fun AssetsScreen(viewModel: AppViewModel, nav: NavController) {
     var mode by remember { mutableStateOf(AssetMode.Directory) }
     Column {
-        MirrorHeader("Assets") {
+        MirrorHeader("Assets", MirrorCopy.subtitle("assets")) {
             Button(onClick = { nav.navigate("assetNew") }) { Text("+ New asset") }
         }
         Row(Modifier.padding(horizontal = 16.dp)) {

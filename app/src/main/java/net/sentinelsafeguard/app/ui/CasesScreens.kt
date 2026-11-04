@@ -106,7 +106,7 @@ fun CasesScreen(viewModel: AppViewModel, nav: NavController) {
     }
 
     Column {
-        MirrorHeader("Cases") {
+        MirrorHeader("Cases", MirrorCopy.subtitle("cases")) {
             Button(onClick = { nav.navigate("caseNew") }) { Text("+ New case") }
         }
         when {

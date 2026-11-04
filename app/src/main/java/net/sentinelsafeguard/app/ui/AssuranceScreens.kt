@@ -69,7 +69,7 @@ fun AssuranceScreen(viewModel: AppViewModel, nav: NavController) {
         clients = try { viewModel.api.clients().items } catch (e: Exception) { emptyList() }
     }
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        MirrorHeader("Documents & Assurance")
+        MirrorHeader("Documents & Assurance", MirrorCopy.subtitle("cf2assurance"))
         PacketsCard(viewModel, clients)
         FileRequestsCard(viewModel, clients)
         BackupTestsCard(viewModel)

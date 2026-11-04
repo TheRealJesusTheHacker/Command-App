@@ -58,7 +58,7 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
         else -> {
             val d = today!!
             LazyColumn {
-                item { MirrorHeader("Today") }
+                item { MirrorHeader("Today", MirrorCopy.todaySubtitle()) }
                 item { UrgentBanner(viewModel, nav) }
                 item {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {

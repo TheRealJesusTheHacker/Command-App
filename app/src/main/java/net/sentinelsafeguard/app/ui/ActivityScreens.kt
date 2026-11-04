@@ -85,7 +85,7 @@ fun ActivityScreen(viewModel: AppViewModel, nav: NavController) {
     var revokeTarget by remember { mutableStateOf<JsonObject?>(null) }
 
     Column {
-        MirrorHeader("Activity")
+        MirrorHeader("Activity", MirrorCopy.subtitle("activity"))
         when {
             state.error != null -> ErrorBox(state.error!!) { state.reloadKey++ }
             state.data == null && sessionsState.data == null -> SkeletonList()

@@ -176,7 +176,7 @@ fun SectionHeader(title: String, count: Int? = null) {
         if (count != null) {
             Text(
                 count.toString(),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.titleMedium,
                 color = if (count > 0) MaterialTheme.colorScheme.primary else SentinelMuted,
                 fontWeight = FontWeight.Bold,
             )

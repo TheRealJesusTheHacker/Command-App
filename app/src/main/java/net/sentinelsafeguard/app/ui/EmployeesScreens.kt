@@ -63,7 +63,7 @@ fun EmployeesScreen(viewModel: AppViewModel, nav: NavController) {
     var mode by remember { mutableStateOf(EmpMode.Directory) }
     val isOwner = viewModel.me?.user?.role == "OWNER"
     Column {
-        MirrorHeader("Employees") {
+        MirrorHeader("Employees", MirrorCopy.subtitle("employees")) {
             if (isOwner) {
                 Button(onClick = { nav.navigate("employeeNew") }) { Text("+ New employee") }
             }

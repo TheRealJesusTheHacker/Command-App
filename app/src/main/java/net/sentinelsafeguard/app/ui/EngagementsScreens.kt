@@ -67,7 +67,7 @@ fun EngagementsScreen(viewModel: AppViewModel, nav: NavController) {
     }
 
     Column {
-        MirrorHeader("Engagements") {
+        MirrorHeader("Engagements", MirrorCopy.subtitle("engagements")) {
             Button(onClick = { nav.navigate("engagementNew") }) { Text("New engagement") }
         }
         when {

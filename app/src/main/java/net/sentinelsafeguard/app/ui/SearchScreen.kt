@@ -57,7 +57,7 @@ fun SearchScreen(viewModel: AppViewModel, nav: NavController) {
     }
 
     Column {
-        MirrorHeader("Search")
+        MirrorHeader("Search results", MirrorCopy.subtitle("search"))
         Row(
             Modifier
                 .fillMaxWidth()

@@ -73,7 +73,7 @@ private enum class InvMode { Board, Directory, Quotes, PriceBook, Plans }
 fun InvoicesScreen(viewModel: AppViewModel, nav: NavController) {
     var mode by remember { mutableStateOf(InvMode.Directory) }
     Column {
-        MirrorHeader("Invoices") {
+        MirrorHeader("Invoices", MirrorCopy.subtitle("invoices")) {
             Button(onClick = { nav.navigate("invoiceNew") }) { Text("+ New invoice") }
         }
         Row(Modifier.padding(horizontal = 16.dp)) {
