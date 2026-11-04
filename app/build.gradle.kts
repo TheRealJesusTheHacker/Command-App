@@ -71,12 +71,14 @@ android {
         applicationId = "net.sentinelsafeguard.app"
         minSdk = 26
         targetSdk = 35
-        // 1.0.0 RELEASE (owner verdict 2026-11-04: "No hunt 17
-        // is 1.0.0"): the hunt17 polish tree IS the release.
-        // versionCode 100 steps clear of the whole hunt series
-        // (1..17) and opens the release line (1.0.1 -> 101, ...).
-        versionCode = 100
-        versionName = "1.0.0"
+        // 1.1.0 RELEASE (owner green-light 2026-11-04 02:35 CST:
+        // "I already approve"): the hunt18 Emerald Depth GUI
+        // elevation, cut exactly as proven in the signed hunt18
+        // build (run 41803880967) — version fields only.
+        // versionCode 101 steps over 1.0.0's 100 (and matches the
+        // hunt flavor's own 101 step).
+        versionCode = 101
+        versionName = "1.1.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")
