@@ -149,7 +149,7 @@ class ContractPhase6Test {
                 .liveThreatData()
             fail("expected a SignedOutException")
         } catch (e: SignedOutException) {
-            assertEquals("Sign-in required.", e.message)
+            assertEquals("Your sign-in has ended. Please sign in again.", e.message)
         }
     }
 
