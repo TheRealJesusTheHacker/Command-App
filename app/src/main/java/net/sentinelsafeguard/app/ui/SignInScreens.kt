@@ -37,6 +37,7 @@ import androidx.fragment.app.FragmentActivity
 import net.sentinelsafeguard.app.data.api.LoginResult
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
+import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceLow
 
 /**
  * Enrollment sign-in (spec §2.1): the same display name + passphrase as
@@ -109,6 +110,10 @@ fun SignInScreen(viewModel: AppViewModel) {
             onValueChange = { displayName = it },
             label = { Text("Display name") },
             singleLine = true,
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = SentinelSurfaceLow,
+                focusedContainerColor = SentinelSurfaceLow,
+            ),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
@@ -119,6 +124,10 @@ fun SignInScreen(viewModel: AppViewModel) {
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = SentinelSurfaceLow,
+                focusedContainerColor = SentinelSurfaceLow,
+            ),
             modifier = Modifier.fillMaxWidth(),
         )
         if (needsTotp) {
@@ -135,6 +144,10 @@ fun SignInScreen(viewModel: AppViewModel) {
                 label = { Text("6-digit code") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = SentinelSurfaceLow,
+                focusedContainerColor = SentinelSurfaceLow,
+            ),
                 modifier = Modifier.fillMaxWidth().focusRequester(totpFocus),
             )
         }
@@ -152,7 +165,8 @@ fun SignInScreen(viewModel: AppViewModel) {
         }
 
         Spacer(Modifier.height(20.dp))
-        Button(
+        GradientPrimaryButton(
+            text = if (busy) "Signing in…" else "Sign in",
             onClick = {
                 busy = true
                 error = null
@@ -194,9 +208,7 @@ fun SignInScreen(viewModel: AppViewModel) {
             enabled = !busy && displayName.isNotBlank() && passphrase.isNotEmpty() &&
                 (!needsTotp || totpCode.length == 6),
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (busy) "Signing in…" else "Sign in")
-        }
+        )
         if (needsTotp) {
             TextButton(onClick = {
                 // Start over: drop the challenge and the typed
@@ -285,9 +297,11 @@ fun LockScreen(viewModel: AppViewModel) {
             Text(error!!, color = SentinelDanger, style = MaterialTheme.typography.bodyMedium)
         }
         Spacer(Modifier.height(24.dp))
-        Button(onClick = { promptBiometric() }, modifier = Modifier.fillMaxWidth()) {
-            Text("Unlock with fingerprint")
-        }
+        GradientPrimaryButton(
+            text = "Unlock with fingerprint",
+            onClick = { promptBiometric() },
+            modifier = Modifier.fillMaxWidth(),
+        )
         TextButton(onClick = { viewModel.signOut { } }) {
             Text("Use passphrase instead (signs this device out first)")
         }

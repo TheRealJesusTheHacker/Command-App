@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -22,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,7 +46,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
+import net.sentinelsafeguard.app.ui.theme.SentinelGreen
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
+import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceTop
 
 /**
  * One transition pattern app-wide (hunt16, Polish Pass 2): a
@@ -323,6 +327,8 @@ private fun AppShell(viewModel: AppViewModel) {
                             label = { Text("Search") },
                             selected = currentKey == "search",
                             onClick = { go("search") },
+                            icon = { DrawerIcon("search", currentKey == "search") },
+                            colors = drawerItemColors(),
                             modifier = Modifier.padding(horizontal = 8.dp),
                         )
                     }
@@ -340,6 +346,8 @@ private fun AppShell(viewModel: AppViewModel) {
                                 onClick = {
                                     go(if (view.key == "admin") "admin" else viewRoute(view))
                                 },
+                                icon = { DrawerIcon(view.key, currentKey == view.key) },
+                                colors = drawerItemColors(),
                                 modifier = Modifier.padding(horizontal = 8.dp),
                             )
                         }
@@ -349,6 +357,8 @@ private fun AppShell(viewModel: AppViewModel) {
                             label = { Text(view.label) },
                             selected = currentKey == view.key,
                             onClick = { go(viewRoute(view)) },
+                            icon = { DrawerIcon(view.key, currentKey == view.key) },
+                            colors = drawerItemColors(),
                             modifier = Modifier.padding(horizontal = 8.dp),
                         )
                     }
@@ -357,12 +367,16 @@ private fun AppShell(viewModel: AppViewModel) {
                         label = { Text("Mail") },
                         selected = currentKey == "mail",
                         onClick = { go("mail") },
+                        icon = { DrawerIcon("mail", currentKey == "mail") },
+                        colors = drawerItemColors(),
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
                     NavigationDrawerItem(
                         label = { Text("Settings") },
                         selected = currentKey == "settings",
                         onClick = { go("settings") },
+                        icon = { DrawerIcon("settings", currentKey == "settings") },
+                        colors = drawerItemColors(),
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
                     Spacer(Modifier.height(12.dp))
@@ -680,6 +694,28 @@ private fun AppShell(viewModel: AppViewModel) {
     }
 }
 
+
+/**
+ * hunt18 drawer icon: the view's Material Symbol at 20dp,
+ * muted at rest, emerald on the active item (whose pill fill
+ * is refined to SurfaceTop). Decoration beside the unchanged
+ * label — never a replacement for it.
+ */
+@Composable
+private fun DrawerIcon(key: String, selected: Boolean) {
+    Icon(
+        painter = androidx.compose.ui.res.painterResource(mirrorViewIcon(key)),
+        contentDescription = null,
+        tint = if (selected) SentinelGreen else SentinelMuted,
+        modifier = Modifier.size(20.dp),
+    )
+}
+
+@Composable
+private fun drawerItemColors() = NavigationDrawerItemDefaults.colors(
+    selectedContainerColor = SentinelSurfaceTop,
+)
+
 /** Drawer route for a nav view: every view is built (Phase 9
  *  closed the ledger), so the key IS the route. */
 private fun viewRoute(view: MirrorView): String = view.key
@@ -772,6 +808,8 @@ fun PortalShell(viewModel: AppViewModel) {
                             label = { Text(view.label) },
                             selected = currentRoute == view.key,
                             onClick = { go(view.key) },
+                            icon = { DrawerIcon(view.key, currentRoute == view.key) },
+                            colors = drawerItemColors(),
                             modifier = Modifier.padding(horizontal = 8.dp),
                         )
                     }
@@ -780,6 +818,8 @@ fun PortalShell(viewModel: AppViewModel) {
                         label = { Text("Sign out") },
                         selected = false,
                         onClick = { viewModel.signOut {} },
+                        icon = { DrawerIcon("signout", false) },
+                        colors = drawerItemColors(),
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
                     Spacer(Modifier.height(12.dp))

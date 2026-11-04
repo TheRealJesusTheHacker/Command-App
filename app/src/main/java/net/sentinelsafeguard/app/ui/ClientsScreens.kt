@@ -16,6 +16,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import net.sentinelsafeguard.app.R
+import net.sentinelsafeguard.app.ui.theme.SentinelSurface
+import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceTop
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -218,6 +225,18 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
                         label = { Text("Search the phone book") },
                         placeholder = { Text("Name, company, email, or phone") },
                         singleLine = true,
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_nav_search),
+                                contentDescription = null,
+                                tint = SentinelMuted,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = net.sentinelsafeguard.app.ui.theme.SentinelSurfaceLow,
+                            focusedContainerColor = net.sentinelsafeguard.app.ui.theme.SentinelSurfaceLow,
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 4.dp),
@@ -536,25 +555,41 @@ private fun ClientCard(
 ) {
     androidx.compose.material3.Card(
         colors = androidx.compose.material3.CardDefaults.cardColors(
-            containerColor = net.sentinelsafeguard.app.ui.theme.SentinelSurface
+            containerColor = Color.Transparent
         ),
         border = androidx.compose.foundation.BorderStroke(
             1.dp, net.sentinelsafeguard.app.ui.theme.SentinelOutline
         ),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .background(sentinelCardBrush(), RoundedCornerShape(16.dp)),
     ) {
-        Column(Modifier.padding(14.dp)) {
+        Column(Modifier.padding(16.dp)) {
             if (selectChecked != null && onSelectToggle != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = selectChecked, onCheckedChange = { onSelectToggle() })
                     Text("Select for bulk actions", color = SentinelMuted)
                 }
             }
-            Text(client.legalName, style = MaterialTheme.typography.bodyLarge)
-            if (client.dba.isNotBlank()) {
-                Text(client.dba, color = SentinelMuted)
+            // hunt18: 40dp monogram disc from the displayed name +
+            // the chevron affordance — row structure unchanged.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MonogramDisc(client.legalName, 40.dp)
+                Spacer(Modifier.size(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(client.legalName, style = MaterialTheme.typography.bodyLarge)
+                    if (client.dba.isNotBlank()) {
+                        Text(client.dba, color = SentinelMuted)
+                    }
+                }
+                Icon(
+                    painter = painterResource(R.drawable.ic_chevron_right),
+                    contentDescription = null,
+                    tint = SentinelMuted,
+                    modifier = Modifier.size(20.dp),
+                )
             }
             Row(
                 Modifier.padding(top = 6.dp),
@@ -767,20 +802,25 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
             else -> {
                 val d = detail!!
                 val c = d.client
-                Column(Modifier.padding(horizontal = 16.dp)) {
+                // hunt18: the profile header becomes a SurfaceTop
+                // banner card with a 56dp monogram disc — same
+                // name, same sub-line, same chips beneath.
+                androidx.compose.material3.Card(
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = Color.Transparent,
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp, net.sentinelsafeguard.app.ui.theme.SentinelOutline
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .background(sentinelCardBrush(SentinelSurfaceTop), RoundedCornerShape(16.dp)),
+                ) {
+                Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .size(48.dp)
-                                .background(SentinelSurfaceHigh, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                c.legalName.split(" ").mapNotNull { it.firstOrNull() }
-                                    .take(2).joinToString(""),
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                        }
+                        MonogramDisc(c.legalName, 56.dp)
                         Column(Modifier.padding(start = 12.dp)) {
                             Text(c.legalName, style = MaterialTheme.typography.titleLarge)
                             Text(
@@ -834,6 +874,7 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
                             }
                         }) { Text("Archive") }
                     }
+                }
                 }
 
                 MirrorCard("Contact") {

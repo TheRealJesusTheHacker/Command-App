@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <group android:rotation="0" android:pivotX="12" android:pivotY="12">
+        <path android:fillColor="#FF000000" android:pathData="M10.9 2.6 h2.2 v3.8 h-2.2 Z"/>
+    </group>
+    <group android:rotation="60" android:pivotX="12" android:pivotY="12">
+        <path android:fillColor="#FF000000" android:pathData="M10.9 2.6 h2.2 v3.8 h-2.2 Z"/>
+    </group>
+    <group android:rotation="120" android:pivotX="12" android:pivotY="12">
+        <path android:fillColor="#FF000000" android:pathData="M10.9 2.6 h2.2 v3.8 h-2.2 Z"/>
+    </group>
+    <group android:rotation="180" android:pivotX="12" android:pivotY="12">
+        <path android:fillColor="#FF000000" android:pathData="M10.9 2.6 h2.2 v3.8 h-2.2 Z"/>
+    </group>
+    <group android:rotation="240" android:pivotX="12" android:pivotY="12">
+        <path android:fillColor="#FF000000" android:pathData="M10.9 2.6 h2.2 v3.8 h-2.2 Z"/>
+    </group>
+    <group android:rotation="300" android:pivotX="12" android:pivotY="12">
+        <path android:fillColor="#FF000000" android:pathData="M10.9 2.6 h2.2 v3.8 h-2.2 Z"/>
+    </group>
+    <path android:fillColor="#FF000000" android:fillType="evenOdd"
+        android:pathData="M4.4 12 a7.6 7.6 0 1 0 15.2 0 a7.6 7.6 0 1 0 -15.2 0 Z M7 12 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 Z"/>
+    <path android:fillColor="#FF000000"
+        android:pathData="M10.1 12 a1.9 1.9 0 1 0 3.8 0 a1.9 1.9 0 1 0 -3.8 0 Z"/>
+</vector>

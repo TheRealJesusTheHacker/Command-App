@@ -1,5 +1,7 @@
 package net.sentinelsafeguard.app.ui
 
+import net.sentinelsafeguard.app.R
+
 /**
  * The mirrored shell's navigation structure (COMMAND-MIRROR-SPEC
  * §2.1): Command's groups, exact labels, exact order, as production
@@ -258,6 +260,97 @@ object MirrorNav {
         role == "STAFF" -> "dashboard"
         else -> "today"
     }
+}
+
+
+/**
+ * hunt18 drawer iconography: one Material Symbol per view,
+ * shipped as in-repo vector drawables (res/drawable/ic_nav_*),
+ * tinted muted at rest and emerald when the item is active.
+ * The mapping is keyed by the same view keys GROUPS / INJECTED /
+ * ADMIN_GROUPS / PORTAL_VIEWS / EXTRA_VIEWS already carry —
+ * labels, groups, and order are untouched; the icons are
+ * decoration beside the unchanged labels. Utility entries
+ * (search / mail / settings / signout) map by their route keys.
+ * The full mapping is recorded in the hunt18 BUILD-RECORD.
+ */
+fun mirrorViewIcon(key: String): Int = when (key) {
+    "today" -> R.drawable.ic_nav_today
+    "dashboard" -> R.drawable.ic_nav_dashboard
+    "tickets" -> R.drawable.ic_nav_tickets
+    "cases" -> R.drawable.ic_nav_cases
+    "schedule" -> R.drawable.ic_nav_schedule
+    "myschedule" -> R.drawable.ic_nav_myschedule
+    "engagements" -> R.drawable.ic_nav_engagements
+    "b4fdesk" -> R.drawable.ic_nav_b4fdesk
+    "clients" -> R.drawable.ic_nav_clients
+    "cf2assurance" -> R.drawable.ic_nav_cf2assurance
+    "invoices" -> R.drawable.ic_nav_invoices
+    "b3money" -> R.drawable.ic_nav_b3money
+    "b4etax" -> R.drawable.ic_nav_b4etax
+    "employees" -> R.drawable.ic_nav_employees
+    "assets" -> R.drawable.ic_nav_assets
+    "forms" -> R.drawable.ic_nav_forms
+    "liveintel" -> R.drawable.ic_nav_liveintel
+    "osint" -> R.drawable.ic_nav_osint
+    "breachintel" -> R.drawable.ic_nav_breachintel
+    "threatintel" -> R.drawable.ic_nav_threatintel
+    "sentinelnews" -> R.drawable.ic_nav_sentinelnews
+    "newsdesk" -> R.drawable.ic_nav_newsdesk
+    "reviews" -> R.drawable.ic_nav_reviews
+    "law" -> R.drawable.ic_nav_law
+    "knowledge" -> R.drawable.ic_nav_knowledge
+    "archive" -> R.drawable.ic_nav_archive
+    "b3ops" -> R.drawable.ic_nav_b3ops
+    "cf2firmops" -> R.drawable.ic_nav_cf2firmops
+    "b4assess" -> R.drawable.ic_nav_b4assess
+    "activity" -> R.drawable.ic_nav_activity
+    "admin" -> R.drawable.ic_nav_admin
+    "b3cops" -> R.drawable.ic_nav_b3cops
+    "b3dfield" -> R.drawable.ic_nav_b3dfield
+    "parts" -> R.drawable.ic_nav_parts
+    "collections" -> R.drawable.ic_nav_collections
+    "staffgear" -> R.drawable.ic_nav_staffgear
+    "automation" -> R.drawable.ic_nav_automation
+    "clientops" -> R.drawable.ic_nav_clientops
+    "pipelinepackets" -> R.drawable.ic_nav_pipelinepackets
+    "cf2reports" -> R.drawable.ic_nav_cf2reports
+    "b4cadmin" -> R.drawable.ic_nav_b4cadmin
+    "b4dimport" -> R.drawable.ic_nav_b4dimport
+    "b4jops" -> R.drawable.ic_nav_b4jops
+    "overview" -> R.drawable.ic_nav_overview
+    "report" -> R.drawable.ic_nav_report
+    "roles" -> R.drawable.ic_nav_roles
+    "members" -> R.drawable.ic_nav_members
+    "invites" -> R.drawable.ic_nav_invites
+    "sessions" -> R.drawable.ic_nav_sessions
+    "security" -> R.drawable.ic_nav_security
+    "oversight" -> R.drawable.ic_nav_oversight
+    "audit" -> R.drawable.ic_nav_audit
+    "lawai" -> R.drawable.ic_nav_lawai
+    "backups" -> R.drawable.ic_nav_backups
+    "dmarc" -> R.drawable.ic_nav_dmarc
+    "danger" -> R.drawable.ic_nav_danger
+    "portal_profile" -> R.drawable.ic_nav_portal_profile
+    "portal_progress" -> R.drawable.ic_nav_portal_progress
+    "portal_history" -> R.drawable.ic_nav_portal_history
+    "portal_documents" -> R.drawable.ic_nav_portal_documents
+    "portal_files" -> R.drawable.ic_nav_portal_files
+    "portal_messages" -> R.drawable.ic_nav_portal_messages
+    "portal_alert" -> R.drawable.ic_nav_portal_alert
+    "portal_signoffs" -> R.drawable.ic_nav_portal_signoffs
+    "portal_contracts" -> R.drawable.ic_nav_portal_contracts
+    "portal_knowledge" -> R.drawable.ic_nav_portal_knowledge
+    "portal_status" -> R.drawable.ic_nav_portal_status
+    "portal_feedback" -> R.drawable.ic_nav_portal_feedback
+    "verified" -> R.drawable.ic_nav_verified
+    "firmpulse" -> R.drawable.ic_nav_firmpulse
+    "contract" -> R.drawable.ic_nav_contract
+    "search" -> R.drawable.ic_nav_search
+    "mail" -> R.drawable.ic_nav_mail
+    "settings" -> R.drawable.ic_nav_settings
+    "signout" -> R.drawable.ic_nav_signout
+    else -> R.drawable.ic_nav_dashboard
 }
 
 /**

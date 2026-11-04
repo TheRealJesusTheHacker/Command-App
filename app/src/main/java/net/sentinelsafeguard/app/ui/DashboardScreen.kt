@@ -1,6 +1,12 @@
 package net.sentinelsafeguard.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import net.sentinelsafeguard.app.data.api.DashboardResponse
 import net.sentinelsafeguard.app.ui.theme.SentinelGreen
+import net.sentinelsafeguard.app.ui.theme.SentinelGreenDim
+import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceTop
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 
 /**
@@ -55,7 +63,23 @@ fun DashboardScreen(viewModel: AppViewModel, nav: NavController) {
             val d = dash!!
             LazyColumn {
                 item {
-                    MirrorHeader("Dashboard") { MirrorChip("● Operational") }
+                    MirrorHeader("Dashboard") {
+                        // hunt18: the Operational chip becomes a
+                        // filled pill — SurfaceTop fill, gradient
+                        // hairline, same string.
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = SentinelSurfaceTop),
+                            border = BorderStroke(1.dp, gradientHairlineBrush()),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text(
+                                "● Operational",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                 }
 
                 // Attention chips — only kinds with count > 0.
@@ -235,7 +259,13 @@ fun DashboardScreen(viewModel: AppViewModel, nav: NavController) {
 private fun DashRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
         Text(label, modifier = Modifier.weight(1f))
-        Text(value)
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontFeatureSettings = "tnum",
+            ),
+        )
     }
 }
 
@@ -257,8 +287,13 @@ private fun SegmentBar(segments: List<Pair<String, Int>>) {
                     .height(6.dp)
                     .padding(end = if (idx == segments.lastIndex) 0.dp else 2.dp)
                     .background(
-                        SentinelGreen.copy(alpha = 1f - (idx % 4) * 0.18f),
-                        MaterialTheme.shapes.extraSmall,
+                        Brush.horizontalGradient(
+                            listOf(
+                                SentinelGreen.copy(alpha = 1f - (idx % 4) * 0.18f),
+                                SentinelGreenDim.copy(alpha = 1f - (idx % 4) * 0.18f),
+                            ),
+                        ),
+                        RoundedCornerShape(50),
                     ),
             )
         }

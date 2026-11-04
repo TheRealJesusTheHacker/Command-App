@@ -197,16 +197,34 @@ private fun InvoiceRow(inv: JsonObject, onOpen: () -> Unit) {
     MirrorCard(Phase3Logic.str(inv, "invoiceNumber")) {
         Text(Phase3Logic.str(inv, "clientName"), style = MaterialTheme.typography.bodyLarge)
         Row {
-            MirrorChip(Phase3Logic.str(inv, "status"))
-            if (Phase4Logic.isOverdueInvoice(inv)) {
-                Spacer(Modifier.padding(horizontal = 4.dp)); MirrorChip("Overdue")
+            // hunt18: the status string renders as a pill — Paid
+            // green tint, Sent outline, Overdue amber, Draft muted.
+            // The string itself is unchanged.
+            val statusText = Phase3Logic.str(inv, "status")
+            StatusPill(
+                statusText,
+                when {
+                    Phase4Logic.isOverdueInvoice(inv) || statusText == "Overdue" -> "amber"
+                    statusText == "Paid" -> "paid"
+                    statusText == "Draft" -> "muted"
+                    else -> "outline"
+                },
+            )
+            if (Phase4Logic.isOverdueInvoice(inv) && statusText != "Overdue") {
+                Spacer(Modifier.padding(horizontal = 4.dp)); StatusPill("Overdue", "amber")
             }
             val discount = Phase3Logic.long(inv, "discountCents") ?: 0
             if (discount > 0) {
                 Spacer(Modifier.padding(horizontal = 4.dp)); MirrorChip("Friends — 20% off")
             }
         }
-        DetailLine("Total", MirrorVocab.formatCents(Phase3Logic.long(inv, "totalCents") ?: 0))
+        // hunt18: totals lead in the display numeral face.
+        Spacer(Modifier.height(10.dp))
+        Text("Total", color = SentinelMuted, style = MaterialTheme.typography.labelLarge)
+        Text(
+            MirrorVocab.formatCents(Phase3Logic.long(inv, "totalCents") ?: 0),
+            style = MaterialTheme.typography.headlineSmall,
+        )
         DetailLine("Balance due", MirrorVocab.formatCents(Phase3Logic.long(inv, "balanceDueCents") ?: 0))
         DetailLine("Due", Phase3Logic.str(inv, "dueDate").ifBlank { null })
         OutlinedButton(onClick = onOpen) { Text("Open profile") }
@@ -288,8 +306,19 @@ fun InvoiceProfileScreen(viewModel: AppViewModel, nav: NavController, invoiceId:
                     }
                 }
                 Row(Modifier.padding(horizontal = 16.dp)) {
-                    MirrorChip(Phase3Logic.str(inv, "status"))
-                    if (Phase4Logic.isOverdueInvoice(inv)) MirrorChip("Overdue")
+                    val profileStatus = Phase3Logic.str(inv, "status")
+                    StatusPill(
+                        profileStatus,
+                        when {
+                            Phase4Logic.isOverdueInvoice(inv) || profileStatus == "Overdue" -> "amber"
+                            profileStatus == "Paid" -> "paid"
+                            profileStatus == "Draft" -> "muted"
+                            else -> "outline"
+                        },
+                    )
+                    if (Phase4Logic.isOverdueInvoice(inv) && profileStatus != "Overdue") {
+                        StatusPill("Overdue", "amber")
+                    }
                 }
                 ActionErrorText(error)
                 if (notice != null) Text(notice!!, color = SentinelMuted, modifier = Modifier.padding(16.dp))

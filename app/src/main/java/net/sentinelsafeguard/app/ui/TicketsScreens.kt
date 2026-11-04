@@ -1,6 +1,13 @@
 package net.sentinelsafeguard.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,7 +54,11 @@ import net.sentinelsafeguard.app.data.api.applySavedView
 import net.sentinelsafeguard.app.data.api.deleteSavedView
 import net.sentinelsafeguard.app.data.api.saveSavedView
 import net.sentinelsafeguard.app.data.api.savedViews
+import net.sentinelsafeguard.app.ui.theme.SentinelAmber
+import net.sentinelsafeguard.app.ui.theme.SentinelDanger
+import net.sentinelsafeguard.app.ui.theme.SentinelGreenDim
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
+import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceLow
 
 /**
  * Tickets (mirror spec §3.3): web's list shell (header, subtitle,
@@ -211,28 +222,36 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
                     LazyColumn {
                         MirrorVocab.groupBoard(tickets).forEach { (stage, cards) ->
                             item {
-                                SectionHeader(stage, cards.size)
-                            }
-                            if (cards.isEmpty()) {
-                                item {
-                                    Text(
-                                        "No tickets in this stage",
-                                        color = SentinelMuted,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                    )
+                                // hunt18: the stage section sits in a
+                                // SurfaceLow well — same header, same
+                                // cards, same order.
+                                Column(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .background(SentinelSurfaceLow)
+                                        .padding(vertical = 4.dp),
+                                ) {
+                                    SectionHeader(stage, cards.size)
+                                    if (cards.isEmpty()) {
+                                        Text(
+                                            "No tickets in this stage",
+                                            color = SentinelMuted,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                        )
+                                    }
+                                    cards.forEach { ticket ->
+                                        TicketCard(
+                                            ticket = ticket,
+                                            roster = roster,
+                                            todayStr = todayStr,
+                                            onOpen = { nav.navigate("ticket/${ticket.id}") },
+                                            onStage = { moveStage(ticket, it) },
+                                            onCase = ticket.caseId?.let { cid ->
+                                                { nav.navigate("case/$cid") }
+                                            },
+                                        )
+                                    }
                                 }
-                            }
-                            items(cards) { ticket ->
-                                TicketCard(
-                                    ticket = ticket,
-                                    roster = roster,
-                                    todayStr = todayStr,
-                                    onOpen = { nav.navigate("ticket/${ticket.id}") },
-                                    onStage = { moveStage(ticket, it) },
-                                    onCase = ticket.caseId?.let { cid ->
-                                        { nav.navigate("case/$cid") }
-                                    },
-                                )
                             }
                         }
                         item { Spacer(Modifier.height(16.dp)) }
@@ -255,16 +274,34 @@ private fun TicketCard(
 ) {
     androidx.compose.material3.Card(
         colors = androidx.compose.material3.CardDefaults.cardColors(
-            containerColor = net.sentinelsafeguard.app.ui.theme.SentinelSurface
+            containerColor = Color.Transparent
         ),
         border = androidx.compose.foundation.BorderStroke(
             1.dp, net.sentinelsafeguard.app.ui.theme.SentinelOutline
         ),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .background(sentinelCardBrush(), RoundedCornerShape(16.dp)),
     ) {
-        Column(Modifier.padding(14.dp)) {
+        // hunt18: a 3dp left spine colored by the priority the card
+        // already shows as a chip (the chip stays): Critical/High
+        // danger, Medium / On Hold amber, else outline-green.
+        val spineColor = when {
+            ticket.priority == "Critical" || ticket.priority == "High" -> SentinelDanger
+            ticket.priority == "Medium" ||
+                ticket.status.contains("Hold", ignoreCase = true) -> SentinelAmber
+            else -> SentinelGreenDim
+        }
+        Row(Modifier.height(IntrinsicSize.Max)) {
+            Box(
+                Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(spineColor),
+            )
+        Column(Modifier.padding(16.dp)) {
             TextButton(onClick = onOpen) {
                 Text(ticket.title, style = MaterialTheme.typography.bodyLarge)
             }
@@ -325,6 +362,7 @@ private fun TicketCard(
                     openLabel = "Open ticket",
                 )
             }
+        }
         }
     }
 }

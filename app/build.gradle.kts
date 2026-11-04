@@ -102,7 +102,14 @@ android {
         create("hunt") {
             dimension = "line"
             applicationId = "net.sentinelsafeguard.app.hunt"
-            versionNameSuffix = "-hunt17"
+            // hunt18 TEST build (GUI elevation): installs as an
+            // update over every earlier hunt build — the pre-release
+            // hunt series ran versionCode 1..17 and the 1.0.0 head's
+            // hunt flavor would carry the shared 100 — so the hunt
+            // flavor steps to 101 here. The standard flavor keeps
+            // the release fields in defaultConfig untouched.
+            versionCode = 101
+            versionNameSuffix = "-hunt18"
         }
     }
 

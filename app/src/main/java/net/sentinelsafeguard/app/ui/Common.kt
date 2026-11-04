@@ -7,6 +7,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +32,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.Dp
+import net.sentinelsafeguard.app.R
+import net.sentinelsafeguard.app.ui.theme.SentinelGreen
+import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceLow
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -102,19 +112,20 @@ fun SkeletonList(rows: Int = 5) {
     Column {
         repeat(rows) {
             Card(
-                colors = CardDefaults.cardColors(containerColor = SentinelSurface),
+                colors = CardDefaults.cardColors(containerColor = SentinelSurfaceLow),
                 border = BorderStroke(1.dp, SentinelOutline),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
             ) {
-                Column(Modifier.padding(14.dp)) {
+                Column(Modifier.padding(16.dp)) {
                     Box(
                         Modifier
                             .fillMaxWidth(0.55f)
                             .height(16.dp)
                             .alpha(alpha)
-                            .background(SentinelSurfaceHigh, RoundedCornerShape(4.dp)),
+                            .background(SentinelSurfaceHigh, RoundedCornerShape(10.dp)),
                     )
                     Spacer(Modifier.height(8.dp))
                     Box(
@@ -122,7 +133,7 @@ fun SkeletonList(rows: Int = 5) {
                             .fillMaxWidth(0.8f)
                             .height(12.dp)
                             .alpha(alpha)
-                            .background(SentinelSurfaceHigh, RoundedCornerShape(4.dp)),
+                            .background(SentinelSurfaceHigh, RoundedCornerShape(10.dp)),
                     )
                 }
             }
@@ -190,9 +201,11 @@ fun SectionHeader(title: String, count: Int? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 8.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        SectionTick()
+        Spacer(Modifier.width(8.dp))
         Text(
             title,
             style = MaterialTheme.typography.titleMedium,
@@ -217,37 +230,80 @@ fun ItemRow(
     onClick: (() -> Unit)? = null,
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = SentinelSurface),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         border = BorderStroke(1.dp, SentinelOutline),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
-                if (!subtitle.isNullOrBlank()) {
-                    Text(subtitle, color = SentinelMuted, style = MaterialTheme.typography.bodyMedium)
+        Box(Modifier.background(sentinelCardBrush())) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.bodyLarge)
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(subtitle, color = SentinelMuted, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
-            }
-            if (!badge.isNullOrBlank()) {
-                Card(colors = CardDefaults.cardColors(containerColor = SentinelSurfaceHigh)) {
-                    Text(
-                        badge,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                if (!badge.isNullOrBlank()) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = SentinelSurfaceHigh),
+                        shape = RoundedCornerShape(10.dp),
+                    ) {
+                        Text(
+                            badge,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                } else if (onClick != null) {
+                    // hunt18: the chevron affordance in the trailing
+                    // space a badge would take — rows that go
+                    // somewhere say so. Badge behavior unchanged
+                    // when a badge exists (above).
+                    Icon(
+                        painter = painterResource(R.drawable.ic_chevron_right),
+                        contentDescription = null,
+                        tint = SentinelMuted,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
+            Box(Modifier.align(Alignment.TopCenter)) { CardTopHighlight() }
         }
+    }
+}
+
+/**
+ * A monogram disc (hunt18): the initials of a name already on
+ * screen, in an emerald ring on SurfaceHigh — no new data, no
+ * new copy; the disc is decoration beside the unchanged name.
+ */
+@Composable
+fun MonogramDisc(name: String, sizeDp: Dp = 40.dp) {
+    val initials = name.split(" ").mapNotNull { it.firstOrNull() }.take(2).joinToString("")
+    Box(
+        Modifier
+            .size(sizeDp)
+            .background(SentinelSurfaceHigh, CircleShape)
+            .border(1.dp, SentinelGreen.copy(alpha = 0.55f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            initials,
+            style = if (sizeDp >= 48.dp) MaterialTheme.typography.titleMedium
+            else MaterialTheme.typography.labelLarge,
+            color = SentinelGreen,
+        )
     }
 }
 
@@ -288,7 +344,7 @@ fun SkeletonLines(rows: Int = 3) {
                     .fillMaxWidth(if (i % 2 == 0) 0.85f else 0.6f)
                     .height(13.dp)
                     .alpha(alpha)
-                    .background(SentinelSurfaceHigh, RoundedCornerShape(4.dp)),
+                    .background(SentinelSurfaceHigh, RoundedCornerShape(10.dp)),
             )
             Spacer(Modifier.height(9.dp))
         }

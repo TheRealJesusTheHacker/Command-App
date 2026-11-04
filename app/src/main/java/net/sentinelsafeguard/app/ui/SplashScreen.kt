@@ -182,7 +182,7 @@ private fun SplashField(content: @Composable () -> Unit) {
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            SentinelGreen.copy(alpha = 0.13f),
+                            SentinelGreen.copy(alpha = 0.16f),
                             Color.Transparent,
                         ),
                         center = glowCenter,
@@ -196,6 +196,32 @@ private fun SplashField(content: @Composable () -> Unit) {
             while (y < size.height) {
                 drawLine(
                     color = Color.White.copy(alpha = 0.025f),
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = 1f,
+                )
+                y += step
+            }
+        }
+        // hunt18: a faint 24dp grid under the scanlines — field
+        // depth only; drawn beneath every beat, keyframe, and
+        // timing in the stages above it (all unchanged).
+        Canvas(Modifier.fillMaxSize()) {
+            val step = 24.dp.toPx()
+            var x = step
+            while (x < size.width) {
+                drawLine(
+                    color = Color.White.copy(alpha = 0.02f),
+                    start = Offset(x, 0f),
+                    end = Offset(x, size.height),
+                    strokeWidth = 1f,
+                )
+                x += step
+            }
+            var y = step
+            while (y < size.height) {
+                drawLine(
+                    color = Color.White.copy(alpha = 0.02f),
                     start = Offset(0f, y),
                     end = Offset(size.width, y),
                     strokeWidth = 1f,
@@ -493,9 +519,26 @@ private fun LogoCard(
         modifier
             .width(218.dp)
             .aspectRatio(390f / 475f)
-            .shadow(18.dp, RoundedCornerShape(18.dp))
+            // hunt18: emerald under-glow (the splash field's own
+            // glow language) under the card.
+            .shadow(
+                18.dp,
+                RoundedCornerShape(18.dp),
+                spotColor = SentinelGreen.copy(alpha = 0.12f),
+                ambientColor = SentinelGreen.copy(alpha = 0.12f),
+            )
             .background(Color.Black, RoundedCornerShape(18.dp))
-            .border(1.dp, SentinelOutline, RoundedCornerShape(18.dp))
+            // hunt18: the flat outline becomes a gradient ring —
+            // emerald at 45% easing into the outline, drawn as a
+            // 1dp gradient border in the card's web-true shape
+            // (218dp / 390:475 / 18dp radius, all unchanged).
+            .border(
+                1.dp,
+                Brush.horizontalGradient(
+                    listOf(SentinelGreen.copy(alpha = 0.45f), SentinelOutline),
+                ),
+                RoundedCornerShape(18.dp),
+            )
             .clip(RoundedCornerShape(18.dp)),
     ) {
         Image(

@@ -134,7 +134,10 @@ fun UrgentBanner(viewModel: AppViewModel, nav: NavController) {
     val u = urgent ?: return
     val total = u.totalOf()
     if (total <= 0) return
-    MirrorCard("Urgent intake", total) {
+    // hunt18: Today's pinned top card takes the SurfaceTop
+    // treatment (the brief's "Open full Command" top card does
+    // not exist in the 1.0.0 tree — see the hunt18 build record).
+    MirrorCard("Urgent intake", total, topTier = true) {
         PanelRows(u.items(), nav, "No urgent alerts.")
         u.str("latencyNote")?.let {
             Text(it, color = SentinelMuted, style = MaterialTheme.typography.bodySmall)

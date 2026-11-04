@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,6 +46,7 @@ import net.sentinelsafeguard.app.ui.theme.SentinelDanger
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import net.sentinelsafeguard.app.ui.theme.SentinelOutline
 import net.sentinelsafeguard.app.ui.theme.SentinelSurface
+import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceTop
 import net.sentinelsafeguard.app.update.UpdateState
 import java.security.MessageDigest
 
@@ -94,19 +98,38 @@ fun SettingsScreen(
             .padding(horizontal = 16.dp),
     ) {
         SectionHeader("This device")
-        Text(
-            "Signed in as ${accountName ?: viewModel.secure.displayName ?: "you"} on " +
-                "${Build.MANUFACTURER} ${Build.MODEL}.",
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        devices?.firstOrNull { it.current }?.let { device ->
-            Text(
-                "Device name: ${device.deviceName}" +
-                    (if (device.createdAt > 0) "\nAdded: ${formatEpochMs(device.createdAt)}" else "") +
-                    (if (device.lastSeenAt > 0) "\nLast used: ${formatEpochMs(device.lastSeenAt)}" else ""),
-                color = SentinelMuted,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+        // hunt18: the identity block becomes a SurfaceTop card
+        // with a monogram disc — same strings, same order.
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            border = BorderStroke(1.dp, SentinelOutline),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(sentinelCardBrush(SentinelSurfaceTop), RoundedCornerShape(16.dp)),
+        ) {
+            Row(
+                Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MonogramDisc(accountName ?: viewModel.secure.displayName ?: "you", 40.dp)
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(
+                        "Signed in as ${accountName ?: viewModel.secure.displayName ?: "you"} on " +
+                            "${Build.MANUFACTURER} ${Build.MODEL}.",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    devices?.firstOrNull { it.current }?.let { device ->
+                        Text(
+                            "Device name: ${device.deviceName}" +
+                                (if (device.createdAt > 0) "\nAdded: ${formatEpochMs(device.createdAt)}" else "") +
+                                (if (device.lastSeenAt > 0) "\nLast used: ${formatEpochMs(device.lastSeenAt)}" else ""),
+                            color = SentinelMuted,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
         }
 
         SectionHeader("Unlock")
@@ -199,9 +222,12 @@ fun SettingsScreen(
 
         SectionHeader("About this app")
         Card(
-            colors = CardDefaults.cardColors(containerColor = SentinelSurface),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
             border = BorderStroke(1.dp, SentinelOutline),
-            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(sentinelCardBrush(SentinelSurface), RoundedCornerShape(16.dp)),
         ) {
             Column(Modifier.padding(16.dp)) {
                 IdentityLine("App", "Sentinel App")
