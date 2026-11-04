@@ -68,14 +68,14 @@ object MirrorNav {
         ),
         MirrorGroup(
             "Intel", listOf(
-                MirrorView("liveintel", "Live Intel", PHASE6),
-                MirrorView("osint", "OSINT", PHASE6, flag = "osintAccess"),
-                MirrorView("breachintel", "Breach Intel", PHASE6, flag = "breachAccess"),
-                MirrorView("threatintel", "Threat Intel", PHASE6, flag = "threatAccess"),
-                MirrorView("sentinelnews", "Sentinel News", PHASE6, flag = "newsAccess"),
-                MirrorView("newsdesk", "News Desk", PHASE6, flag = "newsAccess"),
-                MirrorView("reviews", "Reviews", PHASE6, flag = "reviewsAccess"),
-                MirrorView("law", "Dogg and Associates", PHASE6, flag = "lawAccess"),
+                MirrorView("liveintel", "Live Intel"),
+                MirrorView("osint", "OSINT", flag = "osintAccess"),
+                MirrorView("breachintel", "Breach Intel", flag = "breachAccess"),
+                MirrorView("threatintel", "Threat Intel", flag = "threatAccess"),
+                MirrorView("sentinelnews", "Sentinel News", flag = "newsAccess"),
+                MirrorView("newsdesk", "News Desk", flag = "newsAccess"),
+                MirrorView("reviews", "Reviews", flag = "reviewsAccess"),
+                MirrorView("law", "Dogg and Associates", flag = "lawAccess"),
             )
         ),
         MirrorGroup(

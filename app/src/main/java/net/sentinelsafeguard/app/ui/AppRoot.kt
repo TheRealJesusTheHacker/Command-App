@@ -524,6 +524,14 @@ private fun AppShell(viewModel: AppViewModel) {
                             entry.arguments?.getInt("id"),
                         )
                     }
+                    composable("liveintel") { LiveIntelScreen(viewModel, nav) }
+                    composable("osint") { OsintScreen(viewModel, nav) }
+                    composable("breachintel") { BreachIntelScreen(viewModel, nav) }
+                    composable("threatintel") { ThreatIntelScreen(viewModel, nav) }
+                    composable("sentinelnews") { SentinelNewsScreen(viewModel, nav) }
+                    composable("newsdesk") { NewsDeskScreen(viewModel, nav) }
+                    composable("reviews") { ReviewsScreen(viewModel, nav) }
+                    composable("law") { LawScreen(viewModel, nav) }
                     composable("b3money") { MoneyDeskScreen(viewModel, nav) }
                     composable("b4etax") { TaxProfitScreen(viewModel, nav) }
                     composable("verified") { VerifiedScreen(viewModel, nav) }
