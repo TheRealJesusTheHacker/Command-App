@@ -72,7 +72,7 @@ fun DashboardScreen(viewModel: AppViewModel, nav: NavController) {
                                     "followups" -> "Follow-ups due" to "clients"
                                     "overdueCases" -> "Overdue cases" to "cases"
                                     "unassignedTickets" -> "Unassigned tickets" to "tickets"
-                                    "signinAlerts" -> "Sign-in alerts" to "view/activity"
+                                    "signinAlerts" -> "Sign-in alerts" to "activity"
                                     else -> chip.kind to "dashboard"
                                 }
                                 FilterChip(

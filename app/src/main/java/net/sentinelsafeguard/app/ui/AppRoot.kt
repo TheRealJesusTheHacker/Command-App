@@ -212,6 +212,11 @@ private fun AppShell(viewModel: AppViewModel) {
         route.startsWith("formEdit") -> "Forms"
         route == "b3money" -> "Money Desk"
         route == "b4etax" -> "Tax & Profit"
+        route == "b3ops" -> "Portal Settings"
+        route == "cf2firmops" -> "Firm Ops"
+        route == "b4assess" -> "Verified Desk"
+        route.startsWith("assessment/") -> "Verified Desk"
+        route == "activity" -> "Activity"
         route == "b4fdesk" -> "Runbooks & Sign-off"
         route.startsWith("job/") || route.startsWith("jobEdit") -> "Schedule"
         route == "jobNew" -> "New job"
@@ -549,6 +554,19 @@ private fun AppShell(viewModel: AppViewModel) {
                         )
                     }
                     composable("archive") { ArchiveScreen(viewModel, nav) }
+                    composable("b3ops") { PortalSettingsScreen(viewModel, nav) }
+                    composable("cf2firmops") { FirmOpsScreen(viewModel, nav) }
+                    composable("b4assess") { VerifiedDeskScreen(viewModel, nav) }
+                    composable(
+                        "assessment/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { entry ->
+                        AssessmentDetailScreen(
+                            viewModel, nav,
+                            entry.arguments?.getInt("id") ?: 0,
+                        )
+                    }
+                    composable("activity") { ActivityScreen(viewModel, nav) }
                     composable("liveintel") { LiveIntelScreen(viewModel, nav) }
                     composable("osint") { OsintScreen(viewModel, nav) }
                     composable("breachintel") { BreachIntelScreen(viewModel, nav) }

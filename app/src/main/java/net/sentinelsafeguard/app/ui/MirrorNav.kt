@@ -86,10 +86,10 @@ object MirrorNav {
         ),
         MirrorGroup(
             "Firm", listOf(
-                MirrorView("b3ops", "Portal Settings", PHASE8),
-                MirrorView("cf2firmops", "Firm Ops", PHASE8),
-                MirrorView("b4assess", "Verified Desk", PHASE8),
-                MirrorView("activity", "Activity", PHASE8),
+                MirrorView("b3ops", "Portal Settings"),
+                MirrorView("cf2firmops", "Firm Ops"),
+                MirrorView("b4assess", "Verified Desk"),
+                MirrorView("activity", "Activity"),
                 MirrorView("admin", "Admin"),
             )
         ),

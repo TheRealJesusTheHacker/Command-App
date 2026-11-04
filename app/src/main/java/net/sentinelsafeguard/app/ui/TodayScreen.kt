@@ -193,7 +193,7 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
                     MirrorCard(
                         "Sign-in alerts", d.signinAlerts.total,
                         footerLabel = "Show all → Activity",
-                        onFooter = { nav.navigate("view/activity") },
+                        onFooter = { nav.navigate("activity") },
                     ) {
                         if (d.signinAlerts.items.isEmpty()) {
                             Text("No sign-in alerts.", color = SentinelMuted)
