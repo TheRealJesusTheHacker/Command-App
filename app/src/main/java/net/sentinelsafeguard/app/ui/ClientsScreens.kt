@@ -234,6 +234,15 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
                                 modifier = Modifier.size(20.dp),
                             )
                         },
+                        // M-18 (d) Search↔X: trailing affordance
+                        // morphs magnifier→clear while text is
+                        // present; tapping the X clears the query.
+                        trailingIcon = {
+                            SearchMorphIcon(
+                                hasQuery = query.isNotEmpty(),
+                                onClear = { query = "" },
+                            )
+                        },
                         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                             unfocusedContainerColor = net.sentinelsafeguard.app.ui.theme.SentinelSurfaceLow,
                             focusedContainerColor = net.sentinelsafeguard.app.ui.theme.SentinelSurfaceLow,

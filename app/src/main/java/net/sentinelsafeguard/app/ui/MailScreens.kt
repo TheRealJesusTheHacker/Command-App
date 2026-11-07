@@ -246,6 +246,14 @@ private fun MessageList(
                 onValueChange = { query = it },
                 label = { Text("Search this folder") },
                 singleLine = true,
+                // M-18 (d) Search↔X: trailing affordance morphs
+                // magnifier→clear while text is present.
+                trailingIcon = {
+                    SearchMorphIcon(
+                        hasQuery = query.isNotEmpty(),
+                        onClear = { query = "" },
+                    )
+                },
                 modifier = Modifier.weight(1f),
             )
             Button(
@@ -310,6 +318,8 @@ private fun MessageRead(
     var message by remember { mutableStateOf<MailMessage?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var replyText by remember { mutableStateOf("") }
+    // M-18 (e) Send arc: bumped only on a successful send.
+    var sendKey by remember { mutableStateOf(0) }
     var actionNote by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     val username = viewModel.secure.mailUsername!!
@@ -402,13 +412,18 @@ private fun MessageRead(
                                 try {
                                     viewModel.mail.reply(username, password, folder, m, body)
                                     replyText = ""
+                                    sendKey++
                                     actionNote = "Reply sent as $identity."
                                 } catch (e: Exception) {
                                     actionNote = "The reply could not be sent. Check your connection and try again."
                                 }
                             }
                         },
-                    ) { Text("Send reply") }
+                    ) {
+                        SendArcIcon(sendKey)
+                        Spacer(Modifier.padding(start = 8.dp))
+                        Text("Send reply")
+                    }
                     Spacer(Modifier.height(32.dp))
                 }
             }

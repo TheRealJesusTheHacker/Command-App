@@ -71,15 +71,17 @@ android {
         applicationId = "net.sentinelsafeguard.app"
         minSdk = 26
         targetSdk = 35
-        // 1.2.0 RELEASE (Motion & Quality Design Program,
-        // 2026-11-04): the motion layer over the 1.1.0 Emerald
-        // Depth tree — M-01 press-sink, M-13 error shake, M-09
-        // capped list stagger, M-06/M-08 drawn-tick submit morph,
-        // reduced-motion nav fades, X-Request-ID correlation —
-        // no structure, label, or data changes. versionCode 102
-        // steps over 1.1.0's 101 so it upgrades in place.
-        versionCode = 102
-        versionName = "1.2.0"
+        // 1.3.0 RELEASE (Icon State-Morph Program, M-18,
+        // 2026-11-07): the icon morph layer over the 1.2.0
+        // motion tree — Search↔X on the live search fields,
+        // send arc on the three genuine send controls,
+        // download story-arc on the Settings update download,
+        // unlock spring on the Lock screen; play/pause and
+        // theme switch honestly skipped (no media playback
+        // control exists; the app is dark-only). versionCode
+        // 103 steps over 1.2.0's 102 so it upgrades in place.
+        versionCode = 103
+        versionName = "1.3.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")

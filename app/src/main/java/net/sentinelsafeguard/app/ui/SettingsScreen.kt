@@ -80,6 +80,12 @@ fun SettingsScreen(
 
     var updateBusy by remember { mutableStateOf(false) }
     var updateNote by remember { mutableStateOf<String?>(null) }
+    // Icon Morph Program (2026-11-07): M-18 (b) download
+    // story-arc phase for the update download below — IDLE at
+    // rest, ACTIVE while the APK streams (indeterminate: the
+    // transport reports no byte total to this layer), DONE
+    // when the download actually completes.
+    var updatePhase by remember { mutableStateOf(DownloadPhase.IDLE) }
 
     LaunchedEffect(Unit) {
         try {
@@ -258,6 +264,7 @@ fun SettingsScreen(
             onClick = {
                 updateBusy = true
                 updateNote = null
+                updatePhase = DownloadPhase.IDLE
                 scope.launch {
                     try {
                         when (val state = viewModel.updates.check()) {
@@ -265,18 +272,28 @@ fun SettingsScreen(
                             is UpdateState.Available -> {
                                 updateNote = "Sentinel App ${state.info.version} is ready." +
                                     (state.info.notes.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
+                                updatePhase = DownloadPhase.ACTIVE
                                 val file = viewModel.updates.download(context)
+                                updatePhase = DownloadPhase.DONE
                                 viewModel.updates.install(context, file)
                             }
                         }
                     } catch (e: Exception) {
+                        updatePhase = DownloadPhase.IDLE
                         updateNote = "The update check did not work. Check your connection and try again."
                     } finally {
                         updateBusy = false
                     }
                 }
             },
-        ) { Text(if (updateBusy) "Checking…" else "Check for updates") }
+        ) {
+            // M-18 (b): the story-arc icon rides the button —
+            // arrow at rest, ring while downloading, drawn
+            // tick when the download completes.
+            DownloadStoryIcon(phase = updatePhase, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.padding(start = 8.dp))
+            Text(if (updateBusy) "Checking…" else "Check for updates")
+        }
 
         Spacer(Modifier.height(28.dp))
         Button(

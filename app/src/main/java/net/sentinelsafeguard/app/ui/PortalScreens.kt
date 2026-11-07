@@ -463,7 +463,10 @@ private fun PortalThread(viewModel: AppViewModel, ticketId: Int) {
     var error by remember(ticketId) { mutableStateOf<String?>(null) }
     var draft by remember(ticketId) { mutableStateOf("") }
     var sendError by remember { mutableStateOf<String?>(null) }
-    val run = rememberAction({ sendError = it }, { draft = ""; reloadKey++ })
+    // M-18 (e) Send arc: bumped only on a successful send
+    // (rememberAction's onSuccess), never on failure.
+    var sendKey by remember { mutableStateOf(0) }
+    val run = rememberAction({ sendError = it }, { draft = ""; sendKey++; reloadKey++ })
     androidx.compose.runtime.LaunchedEffect(ticketId, reloadKey) {
         error = null
         try {
@@ -492,7 +495,11 @@ private fun PortalThread(viewModel: AppViewModel, ticketId: Int) {
         Button(
             onClick = { if (draft.isNotBlank()) run { viewModel.api.portalTicketMessagePost(ticketId, draft) } },
             enabled = draft.isNotBlank(),
-        ) { Text("Send reply") }
+        ) {
+            SendArcIcon(sendKey)
+            Spacer(Modifier.padding(start = 8.dp))
+            Text("Send reply")
+        }
         ActionErrorText(sendError)
     }
 }

@@ -529,6 +529,14 @@ private fun TicketDirectory(
                 label = { Text("Search tickets") },
                 placeholder = { Text("Title, client, case #, or category") },
                 singleLine = true,
+                // M-18 (d) Search↔X: trailing affordance morphs
+                // magnifier→clear while text is present.
+                trailingIcon = {
+                    SearchMorphIcon(
+                        hasQuery = q.isNotEmpty(),
+                        onClear = { q = "" },
+                    )
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
@@ -663,6 +671,8 @@ fun TicketProfileScreen(viewModel: AppViewModel, nav: NavController, ticketId: I
     var portal by remember { mutableStateOf<PortalMessagesResponse?>(null) }
     var portalLoaded by remember { mutableStateOf(false) }
     var replyText by remember { mutableStateOf("") }
+    // M-18 (e) Send arc: bumped only on a successful send.
+    var sendKey by remember { mutableStateOf(0) }
     var reviewSent by remember { mutableStateOf(false) }
     val todayStr = remember { java.time.LocalDate.now().toString() }
     val myRole = viewModel.me?.user?.role
@@ -854,13 +864,18 @@ fun TicketProfileScreen(viewModel: AppViewModel, nav: NavController, ticketId: I
                                     try {
                                         viewModel.api.postPortalMessage(t.id, replyText.trim())
                                         replyText = ""
+                                        sendKey++
                                         portal = viewModel.api.portalMessages(t.id)
                                     } catch (e: Exception) {
                                         actionError = plainError(e, "The reply could not be sent. Try again.")
                                     }
                                 }
                             },
-                        ) { Text("Send reply") }
+                        ) {
+                            SendArcIcon(sendKey)
+                            Spacer(Modifier.padding(start = 8.dp))
+                            Text("Send reply")
+                        }
                     }
                 }
 

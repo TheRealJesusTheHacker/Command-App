@@ -244,6 +244,19 @@ fun LockScreen(viewModel: AppViewModel) {
     var error by remember { mutableStateOf<String?>(null) }
     // Motion pass (2026-11-04): M-13 shake on unlock failure too.
     var shakeKey by remember { mutableStateOf(0) }
+    // Icon Morph Program (2026-11-07): M-18 (f) unlock spring —
+    // the lock state genuinely changes on this screen. Biometric
+    // success flips the visual state, the shackle springs open
+    // (34% overshoot), and only then does the shell unlock.
+    // Under reduced motion the swap + unlock are instant.
+    var unlockedVisual by remember { mutableStateOf(false) }
+    val reducedMotion = rememberReducedMotion()
+    LaunchedEffect(unlockedVisual) {
+        if (unlockedVisual) {
+            unlockSpringSettle(reducedMotion)
+            viewModel.unlock()
+        }
+    }
 
     fun promptBiometric() {
         val activity = context as? FragmentActivity ?: return
@@ -262,7 +275,9 @@ fun LockScreen(viewModel: AppViewModel) {
             ContextCompat.getMainExecutor(context),
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    viewModel.unlock()
+                    // M-18 (f): play the unlock spring, then the
+                    // LaunchedEffect above unlocks the shell.
+                    if (!unlockedVisual) unlockedVisual = true
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -296,6 +311,8 @@ fun LockScreen(viewModel: AppViewModel) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        UnlockSpringIcon(unlocked = unlockedVisual)
+        Spacer(Modifier.height(16.dp))
         Text("Sentinel App is locked", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(

@@ -69,6 +69,20 @@ fun SearchScreen(viewModel: AppViewModel, nav: NavController) {
                 label = { Text("Search") },
                 placeholder = { Text("Search clients, cases, tickets…") },
                 singleLine = true,
+                // M-18 (d) Search↔X: the trailing affordance is
+                // the magnifier while the query is empty and
+                // morphs into the clear action while text is
+                // present — the same 400 ms motion both ways.
+                trailingIcon = {
+                    SearchMorphIcon(
+                        hasQuery = query.isNotEmpty(),
+                        onClear = {
+                            query = ""
+                            results = null
+                            error = null
+                        },
+                    )
+                },
                 modifier = Modifier.weight(1f),
             )
             Button(
