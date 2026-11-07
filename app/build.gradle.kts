@@ -83,8 +83,14 @@ android {
         // (Skyler's mid-run correction: not flat — alive,
         // premium, professional, Sentinel). versionCode 104
         // steps over 1.3.0's 103 so it upgrades in place.
-        versionCode = 104
-        versionName = "1.4.0"
+        // Hotfix 1.4.1 (owner report 2026-11-07): the permission
+        // state model — a decided-denied POST_NOTIFICATIONS now
+        // routes the explainer's button to Android's notification
+        // settings instead of a prompt that never appears, and
+        // the grant state is re-read on resume. versionCode 105
+        // steps over 104 so it upgrades in place.
+        versionCode = 105
+        versionName = "1.4.1"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")

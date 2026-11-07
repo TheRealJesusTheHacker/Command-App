@@ -45,6 +45,19 @@ class SettingsStore(context: Context) {
         get() = prefs.getBoolean(KEY_NOTIFY_EXPLAINER_DISMISSED, false)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFY_EXPLAINER_DISMISSED, value).apply()
 
+    /** Hotfix 1.4.1: a system permission request launched from
+     *  either explainer surface has completed at least once
+     *  (any result). Together with the grant check and the
+     *  platform's rationale answer this decides whether Android
+     *  will still show the prompt (ASKABLE) or never will again
+     *  (DENIED_FINAL) — see notify/PermissionState.kt. Persisted
+     *  because the decided state itself persists across runs
+     *  and upgrades; a per-session flag would re-offer a dead
+     *  prompt on every cold start. */
+    var notifyPermissionAsked: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFY_ASKED, false)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFY_ASKED, value).apply()
+
     /** Quiet hours default to the owner's sleep window (spec §6). */
     var quietStartMinutes: Int
         get() = prefs.getInt(KEY_QUIET_START, 11 * 60)
@@ -84,6 +97,7 @@ class SettingsStore(context: Context) {
         private const val KEY_NOTIFY_ALERTS = "notify_signin_alerts"
         private const val KEY_NOTIFY_CRITICAL = "notify_critical"
         private const val KEY_NOTIFY_EXPLAINER_DISMISSED = "notify_permission_explainer_dismissed"
+        private const val KEY_NOTIFY_ASKED = "notify_permission_asked"
         private const val KEY_QUIET_START = "quiet_start_minutes"
         private const val KEY_QUIET_END = "quiet_end_minutes"
         private const val KEY_LAST_TICKETS = "last_new_ticket_count"

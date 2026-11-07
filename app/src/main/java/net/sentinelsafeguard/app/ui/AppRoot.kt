@@ -49,6 +49,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
+import net.sentinelsafeguard.app.notify.NotifAllowAction
+import net.sentinelsafeguard.app.notify.NotifPermission
+import net.sentinelsafeguard.app.notify.NotifPermissionState
 import net.sentinelsafeguard.app.ui.theme.SentinelGreen
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceTop
@@ -239,18 +242,45 @@ private fun AppShell(
     // permission is explained in Sentinel's own words BEFORE
     // Android's system prompt is ever shown, and only once.
     // "Not now" is remembered (SettingsStore) and the explanation
-    // stays re-openable from Settings → Notifications. This is
-    // the only place in the app that requests the permission.
+    // stays re-openable from Settings → Notifications.
+    // Hotfix 1.4.1 — this dialog and the Settings card are the
+    // two surfaces that act on the permission, and both now run
+    // on the state model (notify/PermissionState.kt): the grant
+    // is re-read on every resume (a grant made in Android
+    // Settings counts at once, no restart, and the dialog never
+    // reappears after it), and when the permission sits in its
+    // decided-denied state — the 1.4.0 "Allow shows no prompt"
+    // defect — the dialog's button opens Android's notification
+    // settings instead of launching a prompt that cannot appear.
     val notifSettings = viewModel.settings
     var notifGranted by remember { mutableStateOf(notificationsPermissionGranted(context)) }
+    var notifAsked by remember { mutableStateOf(notifSettings.notifyPermissionAsked) }
+    var notifRationale by remember { mutableStateOf(notificationsShowRationale(context)) }
     var notifPromptDismissed by remember {
         mutableStateOf(notifSettings.notifyPermissionExplainerDismissed)
     }
     var notifAskedThisSession by remember { mutableStateOf(false) }
+    var notifSettingsTripThisSession by remember { mutableStateOf(false) }
+    val notifState = NotifPermission.state(
+        notifGranted, notifAsked, notifRationale,
+    )
+    OnResumeEffect {
+        val grantedNow = notificationsPermissionGranted(context)
+        notifGranted = grantedNow
+        notifRationale = notificationsShowRationale(context)
+        notifAsked = notifSettings.notifyPermissionAsked
+        if (grantedNow) {
+            notifSettings.notifyPermissionExplainerDismissed = false
+            notifPromptDismissed = false
+        }
+    }
     val notifLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
     ) { granted ->
+        notifSettings.notifyPermissionAsked = true
+        notifAsked = true
         notifGranted = granted
+        notifRationale = notificationsShowRationale(context)
         notifAskedThisSession = true
         if (granted) {
             notifSettings.notifyPermissionExplainerDismissed = false
@@ -258,11 +288,27 @@ private fun AppShell(
         }
     }
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
-        !notifGranted && !notifPromptDismissed && !notifAskedThisSession
+        NotifPermission.shouldShowFirstRunDialog(
+            notifState, notifPromptDismissed, notifAskedThisSession, notifSettingsTripThisSession,
+        )
     ) {
         NotificationPermissionExplainerDialog(
+            deniedFinal = notifState ==
+                NotifPermissionState.DENIED_FINAL,
             onAllow = {
-                notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                when (
+                    NotifPermission.allowAction(notifState)
+                ) {
+                    NotifAllowAction.LAUNCH_SYSTEM_REQUEST ->
+                        notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    NotifAllowAction.OPEN_NOTIFICATION_SETTINGS -> {
+                        // The dialog stays down for the rest of
+                        // this session; on return, the resume
+                        // re-read above shows the true state.
+                        notifSettingsTripThisSession = true
+                        openAppNotificationSettings(context)
+                    }
+                }
             },
             onNotNow = {
                 notifSettings.notifyPermissionExplainerDismissed = true

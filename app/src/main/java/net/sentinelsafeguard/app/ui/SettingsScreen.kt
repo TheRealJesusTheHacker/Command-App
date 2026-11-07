@@ -1,11 +1,17 @@
 package net.sentinelsafeguard.app.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -33,12 +39,17 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +57,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import net.sentinelsafeguard.app.BuildConfig
 import net.sentinelsafeguard.app.data.api.DeviceInfo
+import net.sentinelsafeguard.app.notify.NotifAllowAction
+import net.sentinelsafeguard.app.notify.NotifPermission
+import net.sentinelsafeguard.app.notify.NotifPermissionState
 import net.sentinelsafeguard.app.notify.QuietHours
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
@@ -86,16 +100,38 @@ fun SettingsScreen(
     // Do All 1.4.0 (item 6): the notification permission is only
     // ever requested from the explanation surface below (first
     // run shows the same explanation in AppShell) — never cold.
+    // Hotfix 1.4.1: the surface now runs on the permission state
+    // model (notify/PermissionState.kt). The platform's answers
+    // are re-read on every resume — a grant made in Android
+    // Settings takes effect here at once, no restart — and when
+    // the permission is in its decided-denied state the card's
+    // button opens Android's notification settings instead of
+    // launching a prompt that will never appear.
     var notifPermissionGranted by remember {
         mutableStateOf(notificationsPermissionGranted(context))
     }
+    var notifAsked by remember { mutableStateOf(settings.notifyPermissionAsked) }
+    var notifRationale by remember { mutableStateOf(notificationsShowRationale(context)) }
+    val notifState = NotifPermission.state(notifPermissionGranted, notifAsked, notifRationale)
     var showNotifyExplainer by remember {
         mutableStateOf(!settings.notifyPermissionExplainerDismissed)
+    }
+    OnResumeEffect {
+        val grantedNow = notificationsPermissionGranted(context)
+        notifPermissionGranted = grantedNow
+        notifRationale = notificationsShowRationale(context)
+        notifAsked = settings.notifyPermissionAsked
+        // A grant reached via Android Settings clears the stale
+        // dismissal too, so the granted line below is what shows.
+        if (grantedNow) settings.notifyPermissionExplainerDismissed = false
     }
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
+        settings.notifyPermissionAsked = true
+        notifAsked = true
         notifPermissionGranted = granted
+        notifRationale = notificationsShowRationale(context)
         if (granted) settings.notifyPermissionExplainerDismissed = false
     }
     var notifyCritical by remember { mutableStateOf(settings.notifyCritical) }
@@ -181,8 +217,14 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
             } else if (showNotifyExplainer) {
                 NotificationPermissionExplainerCard(
+                    deniedFinal = notifState == NotifPermissionState.DENIED_FINAL,
                     onAllow = {
-                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        when (NotifPermission.allowAction(notifState)) {
+                            NotifAllowAction.LAUNCH_SYSTEM_REQUEST ->
+                                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            NotifAllowAction.OPEN_NOTIFICATION_SETTINGS ->
+                                openAppNotificationSettings(context)
+                        }
                     },
                     onNotNow = {
                         settings.notifyPermissionExplainerDismissed = true
@@ -437,6 +479,76 @@ fun notificationsPermissionGranted(context: Context): Boolean =
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+/** The Activity behind a Compose context, or null when there is
+ *  none. Every app screen is hosted by MainActivity; the chain
+ *  is walked because LocalContext may hand back a wrapper. */
+fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+/**
+ * Hotfix 1.4.1 — Android's own answer to "would the system
+ * prompt still show?": true after a soft denial, false when
+ * the permission sits in its decided-denied state (the state
+ * where RequestPermission returns instantly and shows nothing).
+ * Before Android 13 there is no prompt to reason about.
+ */
+fun notificationsShowRationale(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+    val activity = context.findActivity() ?: return false
+    return ActivityCompat.shouldShowRequestPermissionRationale(
+        activity, Manifest.permission.POST_NOTIFICATIONS,
+    )
+}
+
+/**
+ * Hotfix 1.4.1 — opens Android's per-app notification settings,
+ * the only place the switch exists once the permission is
+ * decided-denied. Falls back to the app's details page (which
+ * links to the same switch) when the direct screen is absent.
+ */
+fun openAppNotificationSettings(context: Context) {
+    val direct = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(direct)
+    } catch (ignored: Exception) {
+        try {
+            context.startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        } catch (ignoredAgain: Exception) {
+        }
+    }
+}
+
+/**
+ * Hotfix 1.4.1 — runs [onResume] on every ON_RESUME of the host
+ * lifecycle. The 1.4.0 permission surfaces read the grant once
+ * at composition, so a grant made in Android Settings kept
+ * reporting "off" until the app restarted; this is the re-read.
+ * (ON_RESUME also fires right after composition — re-reading
+ * the same true state is harmless.)
+ */
+@Composable
+fun OnResumeEffect(onResume: () -> Unit) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val latestOnResume by rememberUpdatedState(onResume)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) latestOnResume()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+}
+
 /**
  * Do All 1.4.0 (item 6): what each notification channel is for,
  * in plain words — the body shared by the Settings card and the
@@ -446,7 +558,7 @@ fun notificationsPermissionGranted(context: Context): Boolean =
  * leaves the phone and no third-party service is involved.
  */
 @Composable
-private fun NotificationExplainerBody() {
+private fun NotificationExplainerBody(deniedFinal: Boolean = false) {
     Column {
         NotifyChannelLine(
             "New tickets",
@@ -480,6 +592,21 @@ private fun NotificationExplainerBody() {
             color = SentinelMuted,
             style = MaterialTheme.typography.bodyMedium,
         )
+        if (deniedFinal) {
+            // Hotfix 1.4.1: the platform will not show its pop-up
+            // for this app anymore, so say so plainly and point
+            // at the one place the switch still lives.
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Android has stopped showing the pop-up for this app — " +
+                    "that can happen after an earlier no. The switch now " +
+                    "lives in Android Settings, on this app's page. The " +
+                    "button below opens it: turn Notifications on there, " +
+                    "then come back — this screen updates itself.",
+                color = SentinelMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
     }
 }
 
@@ -501,6 +628,7 @@ private fun NotifyChannelLine(name: String, what: String) {
 fun NotificationPermissionExplainerCard(
     onAllow: () -> Unit,
     onNotNow: () -> Unit,
+    deniedFinal: Boolean = false,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -514,10 +642,10 @@ fun NotificationPermissionExplainerCard(
         Column(Modifier.padding(16.dp)) {
             Text("Notifications, in plain words", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            NotificationExplainerBody()
+            NotificationExplainerBody(deniedFinal)
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onAllow) { Text("Allow") }
+                Button(onClick = onAllow) { Text(if (deniedFinal) "Open Settings" else "Allow") }
                 OutlinedButton(onClick = onNotNow) { Text("Not now") }
             }
         }
@@ -530,13 +658,14 @@ fun NotificationPermissionExplainerCard(
 fun NotificationPermissionExplainerDialog(
     onAllow: () -> Unit,
     onNotNow: () -> Unit,
+    deniedFinal: Boolean = false,
 ) {
     AlertDialog(
         onDismissRequest = onNotNow,
         title = { Text("Notifications, in plain words") },
-        text = { NotificationExplainerBody() },
+        text = { NotificationExplainerBody(deniedFinal) },
         confirmButton = {
-            Button(onClick = onAllow) { Text("Allow") }
+            Button(onClick = onAllow) { Text(if (deniedFinal) "Open Settings" else "Allow") }
         },
         dismissButton = {
             TextButton(onClick = onNotNow) { Text("Not now") }
