@@ -1,5 +1,6 @@
 package net.sentinelsafeguard.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -74,7 +75,6 @@ private fun MailSignIn(viewModel: AppViewModel) {
     val scope = rememberCoroutineScope()
     var username by remember { mutableStateOf(MailRules.PERSONAL_ADDRESS) }
     var password by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var done by remember { mutableStateOf(false) }
 
@@ -114,27 +114,24 @@ private fun MailSignIn(viewModel: AppViewModel) {
             Text(error!!, color = MaterialTheme.colorScheme.error)
         }
         Spacer(Modifier.height(16.dp))
-        Button(
-            enabled = !busy && username.isNotBlank() && password.isNotEmpty(),
-            onClick = {
-                busy = true
-                error = null
-                scope.launch {
-                    try {
-                        // Prove the password against the real server before saving it.
-                        viewModel.mail.listFolders(username.trim(), password)
-                        viewModel.saveMailCredentials(username.trim(), password)
-                        done = true
-                    } catch (e: Exception) {
-                        error = "That password did not work for this mailbox. Check it and try again. " +
-                            "If you changed it in webmail, use the new one."
-                    } finally {
-                        busy = false
-                    }
-                }
-            },
+        MorphSubmitButton(
+            text = "Connect mail",
+            enabled = username.isNotBlank() && password.isNotEmpty(),
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (busy) "Checking…" else "Connect mail") }
+        ) {
+            error = null
+            try {
+                // Prove the password against the real server before saving it.
+                viewModel.mail.listFolders(username.trim(), password)
+                viewModel.saveMailCredentials(username.trim(), password)
+                done = true
+                true
+            } catch (e: Exception) {
+                error = "That password did not work for this mailbox. Check it and try again. " +
+                    "If you changed it in webmail, use the new one."
+                false
+            }
+        }
         if (done) {
             Spacer(Modifier.height(12.dp))
             Text("Connected. Your folders are ready — tap Mail again if this screen does not refresh.")
@@ -171,9 +168,13 @@ private fun FolderList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
         when {
             error != null -> ErrorBox(error!!) { reloadKey++ }
             folders == null -> SkeletonList(6)
-            else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+            else -> {
+            val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = { refreshing = true; reloadKey++ },
+                state = pullState,
+                indicator = { DampedPullIndicator(pullState, refreshing, Modifier.align(androidx.compose.ui.Alignment.TopCenter)) },
             ) {
             LazyColumn {
                 items(folders!!) { folder ->
@@ -196,6 +197,7 @@ private fun FolderList(viewModel: AppViewModel, onOpen: (String) -> Unit) {
                 }
             }
             }
+            }
         }
     }
 }
@@ -213,6 +215,7 @@ private fun MessageList(
     var query by remember { mutableStateOf("") }
     var reloadKey by remember { mutableStateOf(0) }
     var refreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val username = viewModel.secure.mailUsername!!
     val password = viewModel.secure.mailPassword!!
 
@@ -270,19 +273,56 @@ private fun MessageList(
             error != null -> ErrorBox(error!!) { reloadKey++ }
             messages == null -> SkeletonList(6)
             messages!!.isEmpty() -> EmptyBox("No messages", "This folder is empty.")
-            else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+            else -> {
+            val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = { refreshing = true; reloadKey++ },
+                state = pullState,
+                indicator = { DampedPullIndicator(pullState, refreshing, Modifier.align(androidx.compose.ui.Alignment.TopCenter)) },
             ) {
             LazyColumn {
                 itemsIndexed(messages!!) { index, message ->
-                    ItemRow(
-                        title = message.subject,
-                        subtitle = "${message.from} · ${message.dateText}",
-                        badge = if (message.unread) "New" else null,
-                        entranceIndex = index,
-                    ) { onOpen(message.uid) }
+                    // Lane B (1.4.0) M-10: swipe right archives,
+                    // swipe left deletes - the same MailService
+                    // calls the message screen's own Archive /
+                    // Delete buttons make. The row is removed
+                    // locally on success; on failure the folder
+                    // reloads and the error shows.
+                    SwipeMailRow(
+                        message = message,
+                        onArchive = {
+                            scope.launch {
+                                try {
+                                    viewModel.mail.archive(username, password, folder, message.uid)
+                                    messages = messages?.filterNot { it.uid == message.uid }
+                                } catch (e: Exception) {
+                                    error = "Archive did not work. Check your connection and try again."
+                                    reloadKey++
+                                }
+                            }
+                        },
+                        onDelete = {
+                            scope.launch {
+                                try {
+                                    viewModel.mail.delete(username, password, folder, message.uid)
+                                    messages = messages?.filterNot { it.uid == message.uid }
+                                } catch (e: Exception) {
+                                    error = "Delete did not work. Check your connection and try again."
+                                    reloadKey++
+                                }
+                            }
+                        },
+                    ) {
+                        ItemRow(
+                            title = message.subject,
+                            subtitle = "${message.from} · ${message.dateText}",
+                            badge = if (message.unread) "New" else null,
+                            entranceIndex = index,
+                        ) { onOpen(message.uid) }
+                    }
                 }
+            }
             }
             }
         }
@@ -429,4 +469,75 @@ private fun MessageRead(
             }
         }
     }
+}
+
+
+/**
+ * Lane B (1.4.0) M-10 for mail rows: SwipeToDismissBox
+ * (Material3 1.3.1, already in the tree) - start-to-end
+ * archives, end-to-start deletes, calling the exact
+ * MailService actions the read screen's buttons call.
+ * confirmValueChange always returns false so the row
+ * settles back; the caller removes it from the list only
+ * when the action actually succeeds. The threshold pass
+ * fires the primary haptic.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeMailRow(
+    message: MailSummary,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val primaryHaptic = rememberPrimaryHaptic()
+    val state = androidx.compose.material3.rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> {
+                    primaryHaptic(); onArchive()
+                }
+                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> {
+                    primaryHaptic(); onDelete()
+                }
+                else -> {}
+            }
+            false
+        },
+    )
+    androidx.compose.material3.SwipeToDismissBox(
+        state = state,
+        backgroundContent = {
+            val direction = state.dismissDirection
+            androidx.compose.foundation.layout.Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .background(
+                        if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                            net.sentinelsafeguard.app.ui.theme.SentinelDanger
+                        } else {
+                            net.sentinelsafeguard.app.ui.theme.SentinelGreen.copy(alpha = 0.18f)
+                        },
+                        androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    )
+                    .padding(horizontal = 16.dp),
+                contentAlignment = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                    androidx.compose.ui.Alignment.CenterEnd
+                } else {
+                    androidx.compose.ui.Alignment.CenterStart
+                },
+            ) {
+                Text(
+                    if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) "Delete" else "Archive",
+                    color = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                        androidx.compose.ui.graphics.Color.White
+                    } else {
+                        net.sentinelsafeguard.app.ui.theme.SentinelGreen
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        },
+    ) { content() }
 }

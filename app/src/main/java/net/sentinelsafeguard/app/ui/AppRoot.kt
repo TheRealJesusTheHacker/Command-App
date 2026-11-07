@@ -2,8 +2,10 @@ package net.sentinelsafeguard.app.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -118,7 +121,12 @@ private fun navPopExit(reduced: Boolean = false): androidx.compose.animation.Exi
  * utility row: app-only entries, never Command views (§2.2).
  */
 @Composable
-fun AppRoot(viewModel: AppViewModel) {
+fun AppRoot(
+    viewModel: AppViewModel,
+    deepLinkRoute: String? = null,
+    deepLinkNonce: Int = 0,
+    onDeepLinkConsumed: () -> Unit = {},
+) {
     var splashDone by remember { mutableStateOf(false) }
     // hunt17: AppShell composes UNDER the splash from the first
     // frame — sign-in state resolves and (when signed in) the /me
@@ -129,7 +137,7 @@ fun AppRoot(viewModel: AppViewModel) {
     // transition for every loading skeleton in the app.
     SkeletonPulseHost {
         Box(Modifier.fillMaxSize()) {
-            AppShell(viewModel)
+            AppShell(viewModel, deepLinkRoute, deepLinkNonce, onDeepLinkConsumed)
             if (!splashDone) {
                 SplashScreen { splashDone = true }
             }
@@ -139,7 +147,12 @@ fun AppRoot(viewModel: AppViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppShell(viewModel: AppViewModel) {
+private fun AppShell(
+    viewModel: AppViewModel,
+    deepLinkRoute: String? = null,
+    deepLinkNonce: Int = 0,
+    onDeepLinkConsumed: () -> Unit = {},
+) {
     if (!viewModel.signedIn) {
         SignInScreen(viewModel)
         return
@@ -176,7 +189,7 @@ private fun AppShell(viewModel: AppViewModel) {
                     viewModel.dismissUpdate()
                     scope.launch {
                         try {
-                            val file = viewModel.updates.download(context)
+                            val file = viewModel.updates.download(context, info.info)
                             viewModel.updates.install(context, file)
                         } catch (ignored: Exception) {
                             // The Settings screen's update check remains
@@ -222,6 +235,42 @@ private fun AppShell(viewModel: AppViewModel) {
         return
     }
 
+    // Do All 1.4.0 (item 6) — first run: the notification
+    // permission is explained in Sentinel's own words BEFORE
+    // Android's system prompt is ever shown, and only once.
+    // "Not now" is remembered (SettingsStore) and the explanation
+    // stays re-openable from Settings → Notifications. This is
+    // the only place in the app that requests the permission.
+    val notifSettings = viewModel.settings
+    var notifGranted by remember { mutableStateOf(notificationsPermissionGranted(context)) }
+    var notifPromptDismissed by remember {
+        mutableStateOf(notifSettings.notifyPermissionExplainerDismissed)
+    }
+    var notifAskedThisSession by remember { mutableStateOf(false) }
+    val notifLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        notifGranted = granted
+        notifAskedThisSession = true
+        if (granted) {
+            notifSettings.notifyPermissionExplainerDismissed = false
+            notifPromptDismissed = false
+        }
+    }
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+        !notifGranted && !notifPromptDismissed && !notifAskedThisSession
+    ) {
+        NotificationPermissionExplainerDialog(
+            onAllow = {
+                notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            },
+            onNotNow = {
+                notifSettings.notifyPermissionExplainerDismissed = true
+                notifPromptDismissed = true
+            },
+        )
+    }
+
     val role = user?.role ?: "OWNER"
     when (MirrorNav.shellKind(role, me?.portal ?: false)) {
         MirrorNav.ShellKind.TOURIST_REFUSED -> {
@@ -265,6 +314,22 @@ private fun AppShell(viewModel: AppViewModel) {
     val startRoute = landing
 
     val nav = rememberNavController()
+
+    // Expansion A1: a notification tap's route arrives via
+    // MainActivity's intent extras — navigate to the exact
+    // record, then consume it so a recomposition never
+    // re-navigates. An unresolvable route is dropped quietly.
+    LaunchedEffect(deepLinkNonce) {
+        val route = deepLinkRoute
+        if (!route.isNullOrBlank()) {
+            try {
+                nav.navigate(route) { launchSingleTop = true }
+            } catch (ignored: Exception) {
+            }
+            onDeepLinkConsumed()
+        }
+    }
+
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route ?: landing
@@ -765,18 +830,72 @@ private fun ForcedFlowNotice(title: String, body: String, viewModel: AppViewMode
  */
 @Composable
 fun AdminConsoleScreen(nav: androidx.navigation.NavController) {
+    // Do All 1.4.0 tool deck (Skyler: "More functional tools, not
+    // flat"): the App Command Center lands as grouped tool cards —
+    // one deck card per group, one tile per tool with its purpose
+    // in a line. Every tool is ONE tap from this deck (two from
+    // the drawer), with the M-09 stagger + M-01 press-sink the
+    // rest of the app uses. No tile is decorative: every tile
+    // opens its section.
     androidx.compose.foundation.lazy.LazyColumn {
         item { MirrorHeader("Admin") }
         MirrorNav.ADMIN_GROUPS.forEach { group ->
-            item { SectionHeader(group.label) }
-            group.views.forEach { section ->
-                item {
-                    ItemRow(section.label) { nav.navigate("adminsec/${section.key}") }
+            item {
+                MirrorCard(group.label) {
+                    group.views.forEachIndexed { index, section ->
+                        Column(Modifier.listEntrance(index)) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .sentinelClickable {
+                                        nav.navigate("adminsec/${section.key}")
+                                    }
+                                    .padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        section.label,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                    )
+                                    Text(
+                                        adminToolPurpose(section.key),
+                                        color = SentinelMuted,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                                Text(
+                                    "›",
+                                    color = SentinelMuted,
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
     }
+}
+
+/** One plain line per admin tool: what it does, from what the
+ *  section itself does (AdminScreens.kt) — no invented scope. */
+private fun adminToolPurpose(key: String): String = when (key) {
+    "overview" -> "Users by role, workspace settings, estate health, recent admin activity."
+    "report" -> "The monthly operations report, ready to share."
+    "roles" -> "Roles and tab permissions — who can do what."
+    "members" -> "Member accounts: create, invite, set passphrases."
+    "invites" -> "Open invitations and when they expire."
+    "sessions" -> "Active sessions, and revoke-all in one tap."
+    "security" -> "Sign-in protection, lockdown, and recovery codes."
+    "oversight" -> "Retention, the audit explorer, exports, and login security."
+    "audit" -> "The full audit feed and Security Oversight."
+    "lawai" -> "Law AI provider, daily cap, and its API key."
+    "backups" -> "Server backup bundles — request, download, discard."
+    "dmarc" -> "DMARC reports by source and domain. Read-only."
+    "danger" -> "Workspace exports and revoke-all. Handle with care."
+    else -> "Open this admin tool."
 }
 
 /**

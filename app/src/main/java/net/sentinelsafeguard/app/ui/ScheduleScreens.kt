@@ -107,20 +107,15 @@ fun ScheduleScreen(viewModel: AppViewModel, nav: NavController) {
         MirrorHeader("Schedule", MirrorCopy.subtitle("schedule")) {
             Button(onClick = { nav.navigate("jobNew") }) { Text("+ New job") }
         }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            SchedMode.values().forEach { m ->
-                FilterChip(
-                    selected = mode == m,
-                    onClick = { mode = m },
-                    label = { Text(m.label()) },
-                )
-            }
-        }
+        // Lane B / scope generalization (1.4.0): Schedule's
+        // distinct tools - Month, Week, People, Agenda and
+        // the Booking admin panel - broken out as a deck of
+        // Sentinel cards riding the same mode state.
+        ToolDeck(
+            entries = SchedMode.values().map { m ->
+                ToolDeckEntry(label = m.label(), selected = mode == m) { mode = m }
+            },
+        )
         if (mode == SchedMode.Booking) {
             BookingAdminPanel(viewModel)
         } else {
@@ -425,7 +420,6 @@ private fun EntryForm(
     var endTime by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var saveError by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
     val meId = viewModel.me?.user?.id
     LaunchedEffect(meId) {
         if (userId == 0 && meId != null) userId = meId
@@ -484,30 +478,31 @@ private fun EntryForm(
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                enabled = !busy && userId != 0 && workDate.isNotBlank(),
-                onClick = {
-                    busy = true
-                    scope.launch {
-                        try {
-                            viewModel.api.saveScheduleEntry(
-                                ScheduleEntryRequest(
-                                    userId = userId,
-                                    entryType = entryType.trim(),
-                                    workDate = workDate.trim(),
-                                    startTime = startTime.trim(),
-                                    endTime = endTime.trim(),
-                                    notes = notes,
-                                )
+            MorphSubmitButton(text = "Save entry", enabled = userId != 0 && workDate.isNotBlank()) {
+                val dateError = FieldValidators.date(workDate)
+                if (dateError != null) {
+                    saveError = dateError
+                    false
+                } else {
+                    try {
+                        viewModel.api.saveScheduleEntry(
+                            ScheduleEntryRequest(
+                                userId = userId,
+                                entryType = entryType.trim(),
+                                workDate = workDate.trim(),
+                                startTime = startTime.trim(),
+                                endTime = endTime.trim(),
+                                notes = notes,
                             )
-                            onDone()
-                        } catch (e: Exception) {
-                            busy = false
-                            saveError = plainError(e, "The entry could not be saved. Try again.")
-                        }
+                        )
+                        onDone()
+                        true
+                    } catch (e: Exception) {
+                        saveError = plainError(e, "The entry could not be saved. Try again.")
+                        false
                     }
-                },
-            ) { Text(if (busy) "Saving…" else "Save entry") }
+                }
+            }
             OutlinedButton(onClick = onCancel) { Text("Cancel") }
         }
     }
@@ -659,8 +654,8 @@ fun JobFormScreen(viewModel: AppViewModel, nav: NavController, jobId: Int?, pres
     var assigneeIds by remember { mutableStateOf<List<Int>>(emptyList()) }
     var notes by remember { mutableStateOf("") }
     var titleError by remember { mutableStateOf<String?>(null) }
+    var dateError by remember { mutableStateOf<String?>(null) }
     var saveError by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
 
     LaunchedEffect(jobId) {
         try {
@@ -721,7 +716,7 @@ fun JobFormScreen(viewModel: AppViewModel, nav: NavController, jobId: Int?, pres
             else -> Column(Modifier.padding(horizontal = 16.dp)) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it; titleError = null },
+                    onValueChange = { title = it; if (titleError != null) titleError = FieldValidators.required(it, "A job title") },
                     label = { Text("Job title") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -764,7 +759,10 @@ fun JobFormScreen(viewModel: AppViewModel, nav: NavController, jobId: Int?, pres
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(12.dp))
-                DateFieldRow("Date", workDate) { workDate = it }
+                DateFieldRow("Date", workDate) { workDate = it; if (dateError != null) dateError = FieldValidators.dateIfPresent(it) }
+                if (dateError != null) {
+                    Text(dateError!!, color = MaterialTheme.colorScheme.error)
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = allDay, onCheckedChange = { allDay = it })
                     Text("All-day job")
@@ -822,44 +820,41 @@ fun JobFormScreen(viewModel: AppViewModel, nav: NavController, jobId: Int?, pres
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = !busy,
-                        onClick = {
-                            if (title.isBlank()) {
-                                titleError = "A job title is required."
-                            } else {
-                                busy = true
-                                scope.launch {
-                                    try {
-                                        val edit = JobFullEdit(
-                                            title = title.trim(),
-                                            clientId = clientId,
-                                            caseId = caseId,
-                                            location = location,
-                                            workDate = workDate.trim(),
-                                            startTime = if (allDay) "" else startTime.trim(),
-                                            endTime = if (allDay) "" else endTime.trim(),
-                                            allDay = allDay,
-                                            status = status,
-                                            notes = notes,
-                                            assigneeIds = assigneeIds,
-                                        )
-                                        if (jobId == null) {
-                                            val created = viewModel.api.createJob(edit)
-                                            nav.popBackStack()
-                                            nav.navigate("job/${created.id}")
-                                        } else {
-                                            viewModel.api.patchJob(jobId, edit)
-                                            nav.popBackStack()
-                                        }
-                                    } catch (e: Exception) {
-                                        busy = false
-                                        saveError = plainError(e, "The job could not be saved. Try again.")
-                                    }
+                    MorphSubmitButton(text = "Save job") {
+                        titleError = FieldValidators.required(title, "A job title")
+                        dateError = FieldValidators.dateIfPresent(workDate)
+                        if (FieldValidators.firstError(titleError, dateError) != null) {
+                            false
+                        } else {
+                            try {
+                                val edit = JobFullEdit(
+                                    title = title.trim(),
+                                    clientId = clientId,
+                                    caseId = caseId,
+                                    location = location,
+                                    workDate = workDate.trim(),
+                                    startTime = if (allDay) "" else startTime.trim(),
+                                    endTime = if (allDay) "" else endTime.trim(),
+                                    allDay = allDay,
+                                    status = status,
+                                    notes = notes,
+                                    assigneeIds = assigneeIds,
+                                )
+                                if (jobId == null) {
+                                    val created = viewModel.api.createJob(edit)
+                                    nav.popBackStack()
+                                    nav.navigate("job/${created.id}")
+                                } else {
+                                    viewModel.api.patchJob(jobId, edit)
+                                    nav.popBackStack()
                                 }
+                                true
+                            } catch (e: Exception) {
+                                saveError = plainError(e, "The job could not be saved. Try again.")
+                                false
                             }
-                        },
-                    ) { Text(if (busy) "Saving…" else "Save job") }
+                        }
+                    }
                     OutlinedButton(onClick = { nav.popBackStack() }) { Text("Cancel") }
                 }
                 Spacer(Modifier.height(24.dp))

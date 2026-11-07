@@ -403,6 +403,10 @@ private fun PhotosCard(viewModel: AppViewModel, ticket: Ticket) {
 private fun VoiceNotesCard(viewModel: AppViewModel, ticket: Ticket) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    // Item 10 (1.4.0): in-app playback — one player for the
+    // whole card; Download/Share below stay as the secondary
+    // actions they have always been.
+    val player = rememberVoicePlayer()
     var caption by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var reloadRef by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -433,7 +437,33 @@ private fun VoiceNotesCard(viewModel: AppViewModel, ticket: Ticket) {
         if (notes.isEmpty()) Text("No voice notes on this ticket.", color = SentinelMuted)
         notes.forEach { note ->
             val nid = Phase3Logic.int(note, "id")
+            val isActive = nid != null && player.activeKey == nid
             Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.IconButton(
+                    enabled = nid != null,
+                    onClick = {
+                        if (nid == null) return@IconButton
+                        if (player.activeKey == nid) {
+                            player.togglePause()
+                        } else {
+                            scope.launch {
+                                try {
+                                    val bytes = viewModel.api.downloadAll("/api/app/audio/$nid/download")
+                                    val ext = VoicePlayerLogic.extensionFor(
+                                        Phase3Logic.str(note, "fileName"),
+                                    )
+                                    if (!player.play(nid, bytes, ext)) {
+                                        error = "The voice note could not be played. Try again."
+                                    }
+                                } catch (e: Exception) {
+                                    error = plainError(e, "The voice note could not be downloaded. Try again.")
+                                }
+                            }
+                        }
+                    },
+                ) {
+                    PlayPauseMorphIcon(playing = isActive && player.isPlaying)
+                }
                 Text(
                     listOfNotNull(
                         Phase3Logic.str(note, "caption").takeIf { it.isNotBlank() },
@@ -452,6 +482,21 @@ private fun VoiceNotesCard(viewModel: AppViewModel, ticket: Ticket) {
                         }
                     }
                 }) { Text("Download") }
+            }
+            if (isActive) {
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = {
+                        VoicePlayerLogic.progressFraction(player.positionMs, player.durationMs)
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                )
+                Text(
+                    "${VoicePlayerLogic.clockText(player.positionMs)} / " +
+                        VoicePlayerLogic.clockText(player.durationMs),
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
             }
         }
         TextFieldRow("Caption for the next upload", caption, { caption = it })

@@ -123,6 +123,17 @@ fun CasesScreen(viewModel: AppViewModel, nav: NavController) {
         MirrorHeader("Cases", MirrorCopy.subtitle("cases")) {
             Button(onClick = { nav.navigate("caseNew") }) { Text("+ New case") }
         }
+        // Lane B / scope generalization (1.4.0): Board and
+        // Directory are this screen's own modes and New case
+        // is its route - broken out as a deck of Sentinel
+        // cards instead of one flat chip row.
+        ToolDeck(
+            entries = listOf(
+                ToolDeckEntry("Board", selected = !directoryMode) { directoryMode = false },
+                ToolDeckEntry("Directory", selected = directoryMode) { directoryMode = true },
+                ToolDeckEntry("+ New case") { nav.navigate("caseNew") },
+            ),
+        )
         when {
             error != null && all == null -> ErrorBox(error!!) { reloadKey++ }
             all == null -> SkeletonList(6)
@@ -163,28 +174,11 @@ fun CasesScreen(viewModel: AppViewModel, nav: NavController) {
                     )
                     StatCard("Total cases", total.toString(), Modifier.weight(1f))
                 }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FilterChip(
-                        selected = !directoryMode,
-                        onClick = { directoryMode = false },
-                        label = { Text("Board") },
-                    )
-                    FilterChip(
-                        selected = directoryMode,
-                        onClick = { directoryMode = true },
-                        label = { Text("Directory") },
-                    )
-                    Text(
-                        "$total case(s)",
-                        color = SentinelMuted,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                }
+                Text(
+                    "$total case(s)",
+                    color = SentinelMuted,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
                 if (directoryMode) {
                     CaseDirectory(
                         viewModel = viewModel,
@@ -196,9 +190,12 @@ fun CasesScreen(viewModel: AppViewModel, nav: NavController) {
                         onNew = { nav.navigate("caseNew") },
                     )
                 } else {
+                    val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
                     androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                         isRefreshing = refreshing,
                         onRefresh = { refreshing = true; reloadKey++ },
+                        state = pullState,
+                        indicator = { DampedPullIndicator(pullState, refreshing, Modifier.align(Alignment.TopCenter)) },
                     ) {
                     LazyColumn {
                         MirrorVocab.groupCaseBoard(cases).forEach { (stage, cards) ->
@@ -367,9 +364,12 @@ private fun CaseDirectory(
         }
     }
 
+    val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
     androidx.compose.material3.pulltorefresh.PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = { refreshing = true; refreshKey++ },
+        state = pullState,
+        indicator = { DampedPullIndicator(pullState, refreshing, Modifier.align(Alignment.TopCenter)) },
     ) {
     LazyColumn {
         item {
@@ -682,8 +682,8 @@ fun CaseFormScreen(viewModel: AppViewModel, nav: NavController, caseId: Int?) {
     var notes by remember { mutableStateOf("") }
     var adMaterial by remember { mutableStateOf(false) }
     var titleError by remember { mutableStateOf<String?>(null) }
+    var dueError by remember { mutableStateOf<String?>(null) }
     var saveError by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
 
     LaunchedEffect(caseId) {
         try {
@@ -734,7 +734,7 @@ fun CaseFormScreen(viewModel: AppViewModel, nav: NavController, caseId: Int?) {
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it; titleError = null },
+                    onValueChange = { title = it; if (titleError != null) titleError = FieldValidators.required(it, "A case title") },
                     label = { Text("Title") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -778,7 +778,10 @@ fun CaseFormScreen(viewModel: AppViewModel, nav: NavController, caseId: Int?) {
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                DateFieldRow("Due date", dueDate) { dueDate = it }
+                DateFieldRow("Due date", dueDate) { dueDate = it; if (dueError != null) dueError = FieldValidators.dateIfPresent(it) }
+                if (dueError != null) {
+                    Text(dueError!!, color = MaterialTheme.colorScheme.error)
+                }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = notes,
@@ -799,42 +802,39 @@ fun CaseFormScreen(viewModel: AppViewModel, nav: NavController, caseId: Int?) {
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = !busy,
-                        onClick = {
-                            if (title.isBlank()) {
-                                titleError = "A case title is required."
-                            } else {
-                                busy = true
-                                scope.launch {
-                                    try {
-                                        val edit = CaseFullEdit(
-                                            clientId = clientId,
-                                            assignedUserId = assignedUserId,
-                                            title = title.trim(),
-                                            status = status,
-                                            priority = priority,
-                                            category = category,
-                                            dueDate = dueDate.ifBlank { null },
-                                            notes = notes,
-                                            adMaterial = adMaterial,
-                                        )
-                                        if (caseId == null) {
-                                            val created = viewModel.api.createCase(edit)
-                                            nav.popBackStack()
-                                            nav.navigate("case/${created.id}")
-                                        } else {
-                                            viewModel.api.patchCase(caseId, edit)
-                                            nav.popBackStack()
-                                        }
-                                    } catch (e: Exception) {
-                                        busy = false
-                                        saveError = plainError(e, "The case could not be saved. Try again.")
-                                    }
+                    MorphSubmitButton(text = "Save case") {
+                        titleError = FieldValidators.required(title, "A case title")
+                        dueError = FieldValidators.dateIfPresent(dueDate)
+                        if (FieldValidators.firstError(titleError, dueError) != null) {
+                            false
+                        } else {
+                            try {
+                                val edit = CaseFullEdit(
+                                    clientId = clientId,
+                                    assignedUserId = assignedUserId,
+                                    title = title.trim(),
+                                    status = status,
+                                    priority = priority,
+                                    category = category,
+                                    dueDate = dueDate.ifBlank { null },
+                                    notes = notes,
+                                    adMaterial = adMaterial,
+                                )
+                                if (caseId == null) {
+                                    val created = viewModel.api.createCase(edit)
+                                    nav.popBackStack()
+                                    nav.navigate("case/${created.id}")
+                                } else {
+                                    viewModel.api.patchCase(caseId, edit)
+                                    nav.popBackStack()
                                 }
+                                true
+                            } catch (e: Exception) {
+                                saveError = plainError(e, "The case could not be saved. Try again.")
+                                false
                             }
-                        },
-                    ) { Text(if (busy) "Saving…" else "Save case") }
+                        }
+                    }
                     OutlinedButton(onClick = { nav.popBackStack() }) { Text("Cancel") }
                 }
                 Spacer(Modifier.height(24.dp))

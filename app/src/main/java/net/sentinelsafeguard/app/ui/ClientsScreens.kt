@@ -98,22 +98,22 @@ fun ClientsScreen(viewModel: AppViewModel, nav: NavController) {
                 modifier = Modifier.padding(start = 8.dp),
             ) { Text("+ New client") }
         }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(selected = mode == "Directory", onClick = { mode = "Directory" }, label = { Text("Directory") })
-            FilterChip(selected = mode == "Pipeline", onClick = { mode = "Pipeline" }, label = { Text("Pipeline") })
-            if (isOwner) {
-                FilterChip(
-                    selected = mode == "Duplicates",
-                    onClick = { mode = "Duplicates" },
-                    label = { Text("Duplicates") },
-                )
-            }
-        }
+        // Lane B / scope generalization (1.4.0): the area's
+        // distinct tools as a deck of Sentinel cards instead
+        // of one flat chip row - Directory, Pipeline and
+        // (OWNER) Duplicates are the file's own modes, and
+        // Sentinel Verified / New client are its real routes.
+        ToolDeck(
+            entries = buildList {
+                add(ToolDeckEntry("Directory", selected = mode == "Directory") { mode = "Directory" })
+                add(ToolDeckEntry("Pipeline", selected = mode == "Pipeline") { mode = "Pipeline" })
+                if (isOwner) {
+                    add(ToolDeckEntry("Duplicates", selected = mode == "Duplicates") { mode = "Duplicates" })
+                }
+                add(ToolDeckEntry("Sentinel Verified") { nav.navigate("verified") })
+                add(ToolDeckEntry("+ New client") { nav.navigate("clientNew") })
+            },
+        )
         when (mode) {
             "Pipeline" -> PipelineBoard(viewModel, nav)
             "Duplicates" -> DuplicatesMode(viewModel, nav)
@@ -187,9 +187,12 @@ private fun ClientDirectory(viewModel: AppViewModel, nav: NavController) {
                 },
                 sort,
             )
+            val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
             androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = { refreshing = true; reloadKey++ },
+                state = pullState,
+                indicator = { DampedPullIndicator(pullState, refreshing, Modifier.align(Alignment.TopCenter)) },
             ) {
             LazyColumn {
                 item {
@@ -515,22 +518,19 @@ private fun ClientViewsBar(
         }
         TextFieldRow("Name for the current stage filter", name, { name = it })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                enabled = name.isNotBlank(),
-                onClick = {
-                    scope.launch {
-                        try {
-                            val criteria = buildJsonObject {
-                                put("stage", currentStage ?: "")
-                            }
-                            viewModel.api.saveClientFilterPreset(name.trim(), criteria)
-                            name = ""; reload()
-                        } catch (e: Exception) {
-                            error = plainError(e, "The preset could not be saved. Try again.")
-                        }
+            MorphSubmitButton(text = "Save preset", enabled = name.isNotBlank()) {
+                try {
+                    val criteria = buildJsonObject {
+                        put("stage", currentStage ?: "")
                     }
-                },
-            ) { Text("Save preset") }
+                    viewModel.api.saveClientFilterPreset(name.trim(), criteria)
+                    name = ""; reload()
+                    true
+                } catch (e: Exception) {
+                    error = plainError(e, "The preset could not be saved. Try again.")
+                    false
+                }
+            }
             OutlinedButton(
                 enabled = name.isNotBlank(),
                 onClick = {
@@ -713,9 +713,12 @@ private fun PipelineBoard(viewModel: AppViewModel, nav: NavController) {
             if (banner != null) {
                 ErrorBanner(banner!!, onRetry = { banner = null; reloadKey++ }, onDismiss = { banner = null })
             }
+            val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
             androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = { refreshing = true; reloadKey++ },
+                state = pullState,
+                indicator = { DampedPullIndicator(pullState, refreshing, Modifier.align(Alignment.TopCenter)) },
             ) {
             LazyColumn {
                 MirrorVocab.CLIENT_STAGES.forEach { stageName ->
@@ -1097,8 +1100,11 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
     var friends by remember { mutableStateOf(false) }
     var notes by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf<String?>(null) }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var phoneError by remember { mutableStateOf<String?>(null) }
+    var valueError by remember { mutableStateOf<String?>(null) }
+    var followUpError by remember { mutableStateOf<String?>(null) }
     var saveError by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
 
     LaunchedEffect(clientId) {
         if (clientId == null) {
@@ -1132,7 +1138,7 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
             else -> Column(Modifier.padding(horizontal = 16.dp)) {
                 OutlinedTextField(
                     value = legalName,
-                    onValueChange = { legalName = it; nameError = null },
+                    onValueChange = { legalName = it; if (nameError != null) nameError = FieldValidators.required(it, "Legal name") },
                     label = { Text("Legal name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -1153,12 +1159,15 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
                 ChoiceMenu("Pipeline stage", stage, MirrorVocab.CLIENT_STAGES) { stage = it }
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
-                    value = valueText, onValueChange = { valueText = it },
+                    value = valueText,
+                    onValueChange = { valueText = it; if (valueError != null) valueError = FieldValidators.positiveMoneyIfPresent(it) },
                     label = { Text("Pipeline / contract value ($)") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (valueError != null) Text(valueError!!, color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(10.dp))
-                DateFieldRow("Next follow-up", nextFollowUp) { nextFollowUp = it }
+                DateFieldRow("Next follow-up", nextFollowUp) { nextFollowUp = it; if (followUpError != null) followUpError = FieldValidators.dateIfPresent(it) }
+                if (followUpError != null) Text(followUpError!!, color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(10.dp))
                 ChoiceMenu(
                     "How did they find us?",
@@ -1191,16 +1200,20 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
                 )
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
-                    value = email, onValueChange = { email = it },
+                    value = email,
+                    onValueChange = { email = it; if (emailError != null) emailError = FieldValidators.emailIfPresent(it) },
                     label = { Text("Email") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (emailError != null) Text(emailError!!, color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
-                    value = phone, onValueChange = { phone = it },
+                    value = phone,
+                    onValueChange = { phone = it; if (phoneError != null) phoneError = FieldValidators.phoneIfPresent(it) },
                     label = { Text("Phone") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (phoneError != null) Text(phoneError!!, color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = street, onValueChange = { street = it },
@@ -1249,43 +1262,47 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = !busy,
-                        onClick = {
-                            if (legalName.isBlank()) {
-                                nameError = "Legal name is required."
-                            } else {
-                                busy = true
-                                scope.launch {
-                                    try {
-                                        val request = ClientWriteRequest(
-                                            legalName = legalName.trim(),
-                                            dba = dba, type = type, status = status,
-                                            stage = stage,
-                                            value = valueText.toDoubleOrNull(),
-                                            nextFollowUp = nextFollowUp.ifBlank { null },
-                                            source = source, sourceDetail = sourceDetail,
-                                            industry = industry,
-                                            contactName = contactName, contactTitle = contactTitle,
-                                            email = email, phone = phone,
-                                            street = street, city = city, state = state, zip = zip,
-                                            tags = tags, friends = friends, notes = notes,
-                                        )
-                                        val saved = if (clientId == null) {
-                                            viewModel.api.createClient(request)
-                                        } else {
-                                            viewModel.api.patchClient(clientId, request)
-                                        }
-                                        nav.popBackStack()
-                                        if (clientId == null) nav.navigate("client/${saved.id}")
-                                    } catch (e: Exception) {
-                                        busy = false
-                                        saveError = plainError(e, "The client could not be saved. Try again.")
-                                    }
+                    MorphSubmitButton(text = "Save client") {
+                        // Lane B item 2: inline validation at the
+                        // fields on submit (each error renders
+                        // under its own field above); the server
+                        // error line below is unchanged.
+                        nameError = FieldValidators.required(legalName, "Legal name")
+                        emailError = FieldValidators.emailIfPresent(email)
+                        phoneError = FieldValidators.phoneIfPresent(phone)
+                        valueError = FieldValidators.positiveMoneyIfPresent(valueText)
+                        followUpError = FieldValidators.dateIfPresent(nextFollowUp)
+                        if (FieldValidators.firstError(nameError, emailError, phoneError, valueError, followUpError) != null) {
+                            false
+                        } else {
+                            try {
+                                val request = ClientWriteRequest(
+                                    legalName = legalName.trim(),
+                                    dba = dba, type = type, status = status,
+                                    stage = stage,
+                                    value = valueText.toDoubleOrNull(),
+                                    nextFollowUp = nextFollowUp.ifBlank { null },
+                                    source = source, sourceDetail = sourceDetail,
+                                    industry = industry,
+                                    contactName = contactName, contactTitle = contactTitle,
+                                    email = email, phone = phone,
+                                    street = street, city = city, state = state, zip = zip,
+                                    tags = tags, friends = friends, notes = notes,
+                                )
+                                val saved = if (clientId == null) {
+                                    viewModel.api.createClient(request)
+                                } else {
+                                    viewModel.api.patchClient(clientId, request)
                                 }
+                                nav.popBackStack()
+                                if (clientId == null) nav.navigate("client/${saved.id}")
+                                true
+                            } catch (e: Exception) {
+                                saveError = plainError(e, "The client could not be saved. Try again.")
+                                false
                             }
-                        },
-                    ) { Text(if (busy) "Saving…" else "Save client") }
+                        }
+                    }
                     OutlinedButton(onClick = { nav.popBackStack() }) { Text("Cancel") }
                 }
                 Spacer(Modifier.height(24.dp))

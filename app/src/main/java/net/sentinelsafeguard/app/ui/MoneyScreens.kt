@@ -76,24 +76,24 @@ fun InvoicesScreen(viewModel: AppViewModel, nav: NavController) {
         MirrorHeader("Invoices", MirrorCopy.subtitle("invoices")) {
             Button(onClick = { nav.navigate("invoiceNew") }) { Text("+ New invoice") }
         }
-        Row(Modifier.padding(horizontal = 16.dp)) {
-            InvMode.values().forEach { m ->
-                FilterChip(
-                    selected = mode == m,
-                    onClick = { mode = m },
-                    label = {
-                        Text(
-                            when (m) {
-                                InvMode.PriceBook -> "Price Book"
-                                InvMode.Plans -> "Plans & Overdue"
-                                else -> m.name
-                            }
-                        )
+        // Lane B / scope generalization (1.4.0): Money's five
+        // distinct tools - Directory, Board, Quotes, Price
+        // Book, Plans & Overdue - were flattened into one chip
+        // row; they are broken out here as a deck of Sentinel
+        // cards, each one tap from the area home, riding the
+        // same mode state the chips used.
+        ToolDeck(
+            entries = InvMode.values().map { m ->
+                ToolDeckEntry(
+                    label = when (m) {
+                        InvMode.PriceBook -> "Price Book"
+                        InvMode.Plans -> "Plans & Overdue"
+                        else -> m.name
                     },
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            }
-        }
+                    selected = mode == m,
+                ) { mode = m }
+            },
+        )
         when (mode) {
             InvMode.Board -> InvoiceBoard(viewModel, nav)
             InvMode.Directory -> InvoiceDirectory(viewModel, nav)
@@ -448,6 +448,9 @@ private fun PaymentsCard(
         Button(onClick = {
             val cents = Phase4Logic.dollarsToCents(amount)
             if (cents == null) onError("Enter the payment amount as dollars, for example 50.00.")
+            else if (FieldValidators.positiveMoney(amount) != null) {
+                onError(FieldValidators.POSITIVE_MONEY_MESSAGE)
+            }
             else act { viewModel.api.recordInvoicePayment(invoiceId, cents, method, date) }
         }) { Text("Record payment") }
     }
@@ -516,6 +519,9 @@ fun InvoiceFormScreen(viewModel: AppViewModel, nav: NavController, invoiceId: In
     var notes by remember { mutableStateOf("") }
     var lines by remember { mutableStateOf(listOf(Triple("", "1", ""))) }
     var error by remember { mutableStateOf<String?>(null) }
+    var emailError by remember { mutableStateOf<String?>(null) }
+    var issueError by remember { mutableStateOf<String?>(null) }
+    var dueError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         clients = try { viewModel.api.clients().items } catch (e: Exception) { emptyList() }
         if (invoiceId != null) {
@@ -552,9 +558,12 @@ fun InvoiceFormScreen(viewModel: AppViewModel, nav: NavController, invoiceId: In
                     clients.firstOrNull { it.legalName == picked }?.let { clientId = it.id }
                 }
             }
-            DateFieldRow("Issue date", issueDate, { issueDate = it })
-            DateFieldRow("Due date", dueDate, { dueDate = it })
-            TextFieldRow("Recipient email", recipientEmail, { recipientEmail = it })
+            DateFieldRow("Issue date", issueDate, { issueDate = it; if (issueError != null) issueError = FieldValidators.dateIfPresent(it) })
+            if (issueError != null) Text(issueError!!, color = MaterialTheme.colorScheme.error)
+            DateFieldRow("Due date", dueDate, { dueDate = it; if (dueError != null) dueError = FieldValidators.dateIfPresent(it) })
+            if (dueError != null) Text(dueError!!, color = MaterialTheme.colorScheme.error)
+            TextFieldRow("Recipient email", recipientEmail, { v -> recipientEmail = v; if (emailError != null) emailError = FieldValidators.emailIfPresent(v) })
+            if (emailError != null) Text(emailError!!, color = MaterialTheme.colorScheme.error)
             TextFieldRow("Tax rate (%)", taxRate, { taxRate = it })
             Text("Line items", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
             lines.forEachIndexed { idx, (desc, qty, rate) ->
@@ -579,20 +588,24 @@ fun InvoiceFormScreen(viewModel: AppViewModel, nav: NavController, invoiceId: In
             DetailLine("Total", MirrorVocab.formatCents(total))
             TextFieldRow("Notes", notes, { notes = it }, singleLine = false, minLines = 3)
             Spacer(Modifier.height(12.dp))
-            Button(onClick = {
+            MorphSubmitButton(text = "Save invoice") {
+                emailError = FieldValidators.emailIfPresent(recipientEmail)
+                issueError = FieldValidators.dateIfPresent(issueDate)
+                dueError = FieldValidators.dateIfPresent(dueDate)
                 val cid = clientId ?: clients.firstOrNull()?.id
-                if (cid == null) {
+                if (FieldValidators.firstError(emailError, issueError, dueError) != null) {
+                    false
+                } else if (cid == null) {
                     error = "Choose a client first."
-                    return@Button
-                }
-                val items = buildJsonArray {
-                    parsed.filter { it.first.isNotBlank() }.forEach { (d, q, r) ->
-                        add(buildJsonObject {
-                            put("description", d); put("quantity", q); put("unitRateCents", r)
-                        })
+                    false
+                } else {
+                    val items = buildJsonArray {
+                        parsed.filter { it.first.isNotBlank() }.forEach { (d, q, r) ->
+                            add(buildJsonObject {
+                                put("description", d); put("quantity", q); put("unitRateCents", r)
+                            })
+                        }
                     }
-                }
-                scope.launch {
                     try {
                         if (invoiceId == null) {
                             viewModel.api.createInvoice(buildJsonObject {
@@ -611,11 +624,13 @@ fun InvoiceFormScreen(viewModel: AppViewModel, nav: NavController, invoiceId: In
                             )
                         }
                         nav.popBackStack()
+                        true
                     } catch (e: Exception) {
                         error = plainError(e, "This invoice could not be saved. Try again.")
+                        false
                     }
                 }
-            }) { Text("Save invoice") }
+            }
             OutlinedButton(onClick = { nav.popBackStack() }) { Text("Cancel") }
             Spacer(Modifier.height(24.dp))
         }
@@ -742,6 +757,7 @@ fun QuoteFormScreen(viewModel: AppViewModel, nav: NavController, quoteId: Int?) 
     var notes by remember { mutableStateOf("") }
     var picked by remember { mutableStateOf(setOf<Int>()) }
     var error by remember { mutableStateOf<String?>(null) }
+    var expiresError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         clients = try { viewModel.api.clients().items } catch (e: Exception) { emptyList() }
         priceItems = try { Phase3Logic.arr(viewModel.api.priceBook(), "items") } catch (e: Exception) { emptyList() }
@@ -776,7 +792,8 @@ fun QuoteFormScreen(viewModel: AppViewModel, nav: NavController, quoteId: Int?) 
             TextFieldRow("Title", title, { title = it })
             ChoiceMenu("Convert to", convertTo, Phase4Logic.QUOTE_CONVERT_TO) { convertTo = it }
             TextFieldRow("Tax rate (%)", taxRate, { taxRate = it })
-            DateFieldRow("Expires date", expiresDate, { expiresDate = it })
+            DateFieldRow("Expires date", expiresDate, { expiresDate = it; if (expiresError != null) expiresError = FieldValidators.dateIfPresent(it) })
+            if (expiresError != null) Text(expiresError!!, color = MaterialTheme.colorScheme.error)
             Text("Price book lines", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp))
             priceItems.forEach { item ->
                 val id = Phase3Logic.int(item, "id") ?: return@forEach
@@ -790,16 +807,18 @@ fun QuoteFormScreen(viewModel: AppViewModel, nav: NavController, quoteId: Int?) 
             }
             TextFieldRow("Notes", notes, { notes = it }, singleLine = false, minLines = 3)
             Spacer(Modifier.height(12.dp))
-            Button(onClick = {
+            MorphSubmitButton(text = "Save quote") {
+                expiresError = FieldValidators.dateIfPresent(expiresDate)
                 val cid = clientId ?: clients.firstOrNull()?.id
-                if (cid == null) {
+                if (expiresError != null) {
+                    false
+                } else if (cid == null) {
                     error = "Choose a client first."
-                    return@Button
-                }
-                val lines = buildJsonArray {
-                    picked.forEach { pid -> add(buildJsonObject { put("priceItemId", pid); put("quantity", 1) }) }
-                }
-                scope.launch {
+                    false
+                } else {
+                    val lines = buildJsonArray {
+                        picked.forEach { pid -> add(buildJsonObject { put("priceItemId", pid); put("quantity", 1) }) }
+                    }
                     try {
                         if (quoteId == null) {
                             viewModel.api.createQuote(buildJsonObject {
@@ -818,11 +837,13 @@ fun QuoteFormScreen(viewModel: AppViewModel, nav: NavController, quoteId: Int?) 
                             )
                         }
                         nav.popBackStack()
+                        true
                     } catch (e: Exception) {
                         error = plainError(e, "This quote could not be saved. Try again.")
+                        false
                     }
                 }
-            }) { Text("Save quote") }
+            }
             OutlinedButton(onClick = { nav.popBackStack() }) { Text("Cancel") }
             Spacer(Modifier.height(24.dp))
         }
@@ -844,25 +865,39 @@ private fun PriceBookSection(viewModel: AppViewModel) {
     Column {
         ActionErrorText(error)
         MirrorCard(if (editingId == null) "New price item" else "Edit price item") {
-            TextFieldRow("Name", name, { name = it })
+            TextFieldRow("Name", name, { v -> name = v; if (error == "Name is required.") error = FieldValidators.required(v, "Name") })
             TextFieldRow("Description", description, { description = it })
-            TextFieldRow("Rate ($)", rate, { rate = it })
+            TextFieldRow("Rate ($)", rate, { v -> rate = v; if (error == FieldValidators.POSITIVE_MONEY_MESSAGE || error == "Enter the rate as dollars, for example 500.00.") error = FieldValidators.positiveMoney(v) })
             TextFieldRow("Unit", unit, { unit = it })
-            Button(onClick = {
+            MorphSubmitButton(text = "Save price item") {
                 val cents = Phase4Logic.dollarsToCents(rate)
-                if (name.isBlank()) error = "Name is required."
-                else if (cents == null) error = "Enter the rate as dollars, for example 500.00."
-                else act {
-                    viewModel.api.savePriceItem(
-                        buildJsonObject {
-                            put("name", name); put("description", description)
-                            put("rateCents", cents); put("unit", unit); put("active", true)
-                        },
-                        editingId,
-                    )
-                    name = ""; description = ""; rate = ""; editingId = null
+                if (FieldValidators.required(name, "Name") != null) {
+                    error = "Name is required."
+                    false
+                } else if (cents == null) {
+                    error = "Enter the rate as dollars, for example 500.00."
+                    false
+                } else if (FieldValidators.positiveMoney(rate) != null) {
+                    error = FieldValidators.POSITIVE_MONEY_MESSAGE
+                    false
+                } else {
+                    try {
+                        viewModel.api.savePriceItem(
+                            buildJsonObject {
+                                put("name", name); put("description", description)
+                                put("rateCents", cents); put("unit", unit); put("active", true)
+                            },
+                            editingId,
+                        )
+                        name = ""; description = ""; rate = ""; editingId = null
+                        state.reloadKey++
+                        true
+                    } catch (e: Exception) {
+                        error = plainError(e, "That could not be done. Try again.")
+                        false
+                    }
                 }
-            }) { Text("Save price item") }
+            }
             if (editingId != null) {
                 TextButton(onClick = { editingId = null; name = ""; description = ""; rate = "" }) { Text("Cancel edit") }
             }

@@ -2,7 +2,11 @@ package net.sentinelsafeguard.app.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -294,20 +298,89 @@ fun ChipRow(
     selected: String?,
     onPick: (String?) -> Unit,
 ) {
-    FlowRow(
-        modifier = Modifier
+    // Lane B (1.4.0) M-14: a sliding pill rides behind the
+    // selected chip. Chip positions are measured with
+    // onGloballyPositioned (relative to this row's box, which
+    // the FlowRow also fills from the same origin) and the
+    // pill's offset + size spring between them. The selected
+    // chip's own container is transparent so the pill shows
+    // through; labels, picks, and the haptic tick are exactly
+    // as before. Under reduced motion the pill snaps.
+    val reduced = rememberReducedMotion()
+    val tick = rememberHapticTick()
+    var layouts by remember {
+        mutableStateOf<Map<String, Pair<androidx.compose.ui.unit.IntOffset, androidx.compose.ui.unit.IntSize>>>(emptyMap())
+    }
+    val targetLayout = selected?.let { layouts[it] }
+    val pillSpec = if (reduced) {
+        androidx.compose.animation.core.tween<androidx.compose.ui.unit.IntOffset>(0)
+    } else {
+        androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntOffset>(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+        )
+    }
+    val pillSizeSpec = if (reduced) {
+        androidx.compose.animation.core.tween<androidx.compose.ui.unit.IntSize>(0)
+    } else {
+        androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntSize>(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+        )
+    }
+    val pillOffset by androidx.compose.animation.core.animateIntOffsetAsState(
+        targetValue = targetLayout?.first ?: androidx.compose.ui.unit.IntOffset.Zero,
+        animationSpec = pillSpec,
+        label = "chipPillOffset",
+    )
+    val pillSize by androidx.compose.animation.core.animateIntSizeAsState(
+        targetValue = targetLayout?.second ?: androidx.compose.ui.unit.IntSize.Zero,
+        animationSpec = pillSizeSpec,
+        label = "chipPillSize",
+    )
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    Box(
+        Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        val tick = rememberHapticTick()
-        options.forEach { (key, label) ->
-            FilterChip(
-                selected = selected == key,
-                onClick = { tick(); onPick(if (key == "all") null else key) },
-                label = { Text(label) },
+        if (targetLayout != null) {
+            Box(
+                Modifier
+                    .offset { pillOffset }
+                    .size(
+                        width = with(density) { pillSize.width.toDp() },
+                        height = with(density) { pillSize.height.toDp() },
+                    )
+                    .background(SentinelGreen.copy(alpha = 0.16f), RoundedCornerShape(8.dp))
+                    .border(
+                        1.dp,
+                        SentinelGreen.copy(alpha = 0.45f),
+                        RoundedCornerShape(8.dp),
+                    ),
             )
+        }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            options.forEach { (key, label) ->
+                FilterChip(
+                    selected = selected == key,
+                    onClick = { tick(); onPick(if (key == "all") null else key) },
+                    label = { Text(label) },
+                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color.Transparent,
+                    ),
+                    modifier = Modifier.onGloballyPositioned { coords ->
+                        val entry = coords.positionInParent() to coords.size
+                        if (layouts[key] != entry) {
+                            layouts = layouts + (key to entry)
+                        }
+                    },
+                )
+            }
         }
     }
 }

@@ -71,17 +71,20 @@ android {
         applicationId = "net.sentinelsafeguard.app"
         minSdk = 26
         targetSdk = 35
-        // 1.3.0 RELEASE (Icon State-Morph Program, M-18,
-        // 2026-11-07): the icon morph layer over the 1.2.0
-        // motion tree — Search↔X on the live search fields,
-        // send arc on the three genuine send controls,
-        // download story-arc on the Settings update download,
-        // unlock spring on the Lock screen; play/pause and
-        // theme switch honestly skipped (no media playback
-        // control exists; the app is dark-only). versionCode
-        // 103 steps over 1.2.0's 102 so it upgrades in place.
-        versionCode = 103
-        versionName = "1.3.0"
+        // 1.4.0 RELEASE (Do All Program, 2026-11-07): the full
+        // polish + features + security build over 1.3.0 — wider
+        // M-08 morphs, inline validation, pull damping, sliding
+        // chip indicator, swipe surfaces, notification-permission
+        // explanation, draft preservation, offline sync queue,
+        // selfhost push consumption, voice-note playback,
+        // backup-bundle download, U-04 updater verification,
+        // phone-automation surfaces, native Live Intel maps
+        // (OSMDroid), and the alive/premium design elevation
+        // (Skyler's mid-run correction: not flat — alive,
+        // premium, professional, Sentinel). versionCode 104
+        // steps over 1.3.0's 103 so it upgrades in place.
+        versionCode = 104
+        versionName = "1.4.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")
@@ -321,6 +324,12 @@ dependencies {
 
     // Notification polling
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Live Intel maps (1.4.0): OSMDroid — native map view, keyless
+    // tile layers (OSM streets / Esri satellite / CARTO dark),
+    // Apache-2.0. Hash-locked in gradle/verification-metadata.xml
+    // like every other dependency.
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

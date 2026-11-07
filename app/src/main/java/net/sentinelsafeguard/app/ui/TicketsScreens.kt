@@ -57,8 +57,10 @@ import net.sentinelsafeguard.app.data.api.saveSavedView
 import net.sentinelsafeguard.app.data.api.savedViews
 import net.sentinelsafeguard.app.ui.theme.SentinelAmber
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
+import net.sentinelsafeguard.app.ui.theme.SentinelGreen
 import net.sentinelsafeguard.app.ui.theme.SentinelGreenDim
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
+import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceHigh
 import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceLow
 
 /**
@@ -116,6 +118,20 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
         }
     }
 
+    fun assignToMe(ticket: Ticket) {
+        // The same assign-to-me the Today screen uses
+        // (TicketPatchRequest.assignToMe, resolved server-side
+        // to the signed-in account) - no new backend call.
+        scope.launch {
+            try {
+                viewModel.api.patchTicket(ticket.id, TicketPatchRequest(assignToMe = true))
+                reloadKey++
+            } catch (e: Exception) {
+                banner = plainError(e, "That could not be saved. Try again.")
+            }
+        }
+    }
+
     fun moveStage(ticket: Ticket, stage: String) {
         // hunt16: optimistic move — the card steps immediately;
         // on failure it rolls back and the banner says so plainly.
@@ -139,6 +155,16 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
         ) {
             Button(onClick = { nav.navigate("ticketNew") }) { Text("+ New ticket") }
         }
+        // Lane B / scope generalization (1.4.0): the queue's
+        // distinct tools as a deck - Board and Directory are
+        // this screen's own modes; New ticket is its route.
+        ToolDeck(
+            entries = listOf(
+                ToolDeckEntry("Board", selected = !directoryMode) { directoryMode = false },
+                ToolDeckEntry("Directory", selected = directoryMode) { directoryMode = true },
+                ToolDeckEntry("+ New ticket") { nav.navigate("ticketNew") },
+            ),
+        )
         when {
             error != null && all == null -> ErrorBox(error!!) { reloadKey++ }
             all == null -> SkeletonList(6)
@@ -181,28 +207,11 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
                         Modifier.weight(1f),
                     )
                 }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FilterChip(
-                        selected = !directoryMode,
-                        onClick = { directoryMode = false },
-                        label = { Text("Board") },
-                    )
-                    FilterChip(
-                        selected = directoryMode,
-                        onClick = { directoryMode = true },
-                        label = { Text("Directory") },
-                    )
-                    Text(
-                        "$total ticket(s)",
-                        color = SentinelMuted,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                }
+                Text(
+                    "$total ticket(s)",
+                    color = SentinelMuted,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
                 if (directoryMode) {
                     TicketDirectory(
                         viewModel = viewModel,
@@ -216,9 +225,12 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
                 } else {
                     // hunt16: pull-to-refresh on the board list —
                     // web's mental model for a work queue.
+                    val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
                     androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                         isRefreshing = refreshing,
                         onRefresh = { refreshing = true; reloadKey++ },
+                        state = pullState,
+                        indicator = { DampedPullIndicator(pullState, refreshing, Modifier.align(Alignment.TopCenter)) },
                     ) {
                     LazyColumn {
                         MirrorVocab.groupBoard(tickets).forEach { (stage, cards) ->
@@ -241,16 +253,24 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
                                         )
                                     }
                                     cards.forEach { ticket ->
-                                        TicketCard(
+                                        SwipeTicketActions(
                                             ticket = ticket,
-                                            roster = roster,
-                                            todayStr = todayStr,
-                                            onOpen = { nav.navigate("ticket/${ticket.id}") },
-                                            onStage = { moveStage(ticket, it) },
-                                            onCase = ticket.caseId?.let { cid ->
-                                                { nav.navigate("case/$cid") }
+                                            onAssign = { assignToMe(ticket) },
+                                            onAdvance = MirrorVocab.stepStage(ticket.status, +1)?.let { next ->
+                                                { moveStage(ticket, next) }
                                             },
-                                        )
+                                        ) {
+                                            TicketCard(
+                                                ticket = ticket,
+                                                roster = roster,
+                                                todayStr = todayStr,
+                                                onOpen = { nav.navigate("ticket/${ticket.id}") },
+                                                onStage = { moveStage(ticket, it) },
+                                                onCase = ticket.caseId?.let { cid ->
+                                                    { nav.navigate("case/$cid") }
+                                                },
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -441,22 +461,19 @@ private fun TicketViewsBar(viewModel: AppViewModel) {
             statusChoice,
             listOf("Any status") + MirrorVocab.TICKET_STAGES,
         ) { statusChoice = it }
-        Button(
-            enabled = name.isNotBlank(),
-            onClick = {
-                scope.launch {
-                    try {
-                        val criteria = buildJsonObject {
-                            put("status", if (statusChoice == "Any status") "" else statusChoice)
-                        }
-                        viewModel.api.saveSavedView("tickets", name.trim(), criteria)
-                        name = ""; reload()
-                    } catch (e: Exception) {
-                        error = plainError(e, "The view could not be saved. Try again.")
-                    }
+        MorphSubmitButton(text = "Save view", enabled = name.isNotBlank()) {
+            try {
+                val criteria = buildJsonObject {
+                    put("status", if (statusChoice == "Any status") "" else statusChoice)
                 }
-            },
-        ) { Text("Save view") }
+                viewModel.api.saveSavedView("tickets", name.trim(), criteria)
+                name = ""; reload()
+                true
+            } catch (e: Exception) {
+                error = plainError(e, "The view could not be saved. Try again.")
+                false
+            }
+        }
         ActionErrorText(error)
     }
 }
@@ -517,9 +534,12 @@ private fun TicketDirectory(
         }
     }
 
+    val pullState = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
     androidx.compose.material3.pulltorefresh.PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = { refreshing = true; refreshKey++ },
+        state = pullState,
+        indicator = { DampedPullIndicator(pullState, refreshing, Modifier.align(Alignment.TopCenter)) },
     ) {
     LazyColumn {
         item {
@@ -630,28 +650,62 @@ private fun TicketDirectory(
                 ) { Text("Reset search & filters") }
             }
             else -> itemsIndexed(results!!) { index, ticket ->
-                TicketCard(
-                    entranceIndex = index,
+                SwipeTicketActions(
                     ticket = ticket,
-                    roster = roster,
-                    todayStr = todayStr,
-                    onOpen = { onOpen(ticket) },
-                    onCase = ticket.caseId?.let { cid ->
-                        { onCase(cid) }
-                    },
-                    onStage = { stageName ->
+                    onAssign = {
                         scope.launch {
                             try {
-                                viewModel.api.patchTicket(ticket.id, TicketPatchRequest(status = stageName))
+                                viewModel.api.patchTicket(ticket.id, TicketPatchRequest(assignToMe = true))
                                 results = results!!.map {
-                                    if (it.id == ticket.id) it.copy(status = stageName) else it
+                                    if (it.id == ticket.id) {
+                                        it.copy(assignedUserId = viewModel.me?.user?.id ?: it.assignedUserId)
+                                    } else {
+                                        it
+                                    }
                                 }
                             } catch (e: Exception) {
-                                dirError = plainError(e, "That stage move could not be saved. Try again.")
+                                dirError = plainError(e, "That could not be saved. Try again.")
                             }
                         }
                     },
-                )
+                    onAdvance = MirrorVocab.stepStage(ticket.status, +1)?.let { next ->
+                        {
+                            scope.launch {
+                                try {
+                                    viewModel.api.patchTicket(ticket.id, TicketPatchRequest(status = next))
+                                    results = results!!.map {
+                                        if (it.id == ticket.id) it.copy(status = next) else it
+                                    }
+                                } catch (e: Exception) {
+                                    dirError = plainError(e, "That stage move could not be saved. Try again.")
+                                }
+                            }
+                        }
+                    },
+                ) {
+                    TicketCard(
+                        entranceIndex = index,
+                        ticket = ticket,
+                        roster = roster,
+                        todayStr = todayStr,
+                        onOpen = { onOpen(ticket) },
+                        onCase = ticket.caseId?.let { cid ->
+                            { onCase(cid) }
+                        },
+                        onStage = { stageName ->
+                            scope.launch {
+                                try {
+                                    viewModel.api.patchTicket(ticket.id, TicketPatchRequest(status = stageName))
+                                    results = results!!.map {
+                                        if (it.id == ticket.id) it.copy(status = stageName) else it
+                                    }
+                                } catch (e: Exception) {
+                                    dirError = plainError(e, "That stage move could not be saved. Try again.")
+                                }
+                            }
+                        },
+                    )
+                }
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
@@ -889,20 +943,17 @@ fun TicketProfileScreen(viewModel: AppViewModel, nav: NavController, ticketId: I
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
                     )
-                    Button(
-                        enabled = noteText.isNotBlank(),
-                        onClick = {
-                            scope.launch {
-                                try {
-                                    viewModel.api.addTicketNote(t.id, noteText.trim())
-                                    noteText = ""
-                                    reloadKey++
-                                } catch (e: Exception) {
-                                    actionError = plainError(e, "The note could not be saved. Try again.")
-                                }
-                            }
-                        },
-                    ) { Text("Add note") }
+                    MorphSubmitButton(text = "Add note", enabled = noteText.isNotBlank()) {
+                        try {
+                            viewModel.api.addTicketNote(t.id, noteText.trim())
+                            noteText = ""
+                            reloadKey++
+                            true
+                        } catch (e: Exception) {
+                            actionError = plainError(e, "The note could not be saved. Try again.")
+                            false
+                        }
+                    }
                 }
 
                 MirrorCard("Case") {
@@ -967,8 +1018,8 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
     var notes by remember { mutableStateOf("") }
     var adMaterial by remember { mutableStateOf(false) }
     var titleError by remember { mutableStateOf<String?>(null) }
+    var dueError by remember { mutableStateOf<String?>(null) }
     var saveError by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
 
     LaunchedEffect(ticketId) {
         try {
@@ -1044,7 +1095,7 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it; titleError = null },
+                    onValueChange = { title = it; if (titleError != null) titleError = FieldValidators.required(it, "Title") },
                     label = { Text("Title") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -1088,7 +1139,10 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                DateFieldRow("Due date", dueDate) { dueDate = it }
+                DateFieldRow("Due date", dueDate) { dueDate = it; if (dueError != null) dueError = FieldValidators.dateIfPresent(it) }
+                if (dueError != null) {
+                    Text(dueError!!, color = MaterialTheme.colorScheme.error)
+                }
                 Spacer(Modifier.height(12.dp))
                 val caseOptions = listOf("No case") + cases.map { "#${it.id} · ${it.title}" }
                 ChoiceMenu(
@@ -1122,67 +1176,140 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = !busy,
-                        onClick = {
-                            if (title.isBlank()) {
-                                titleError = "Title is required."
-                            } else {
-                            busy = true
-                            scope.launch {
-                                try {
-                                    if (ticketId == null) {
-                                        val created = viewModel.api.createTicket(
-                                            TicketCreateRequest(
-                                                title = title.trim(),
-                                                notes = notes,
-                                                priority = priority,
-                                                clientId = clientId,
-                                                caseId = caseId,
-                                                assignedUserId = assignedUserId,
-                                                category = category,
-                                                status = status,
-                                                dueDate = dueDate.ifBlank { null },
-                                            )
+                    MorphSubmitButton(text = "Save ticket") {
+                        titleError = FieldValidators.required(title, "Title")
+                        dueError = FieldValidators.dateIfPresent(dueDate)
+                        if (FieldValidators.firstError(titleError, dueError) != null) {
+                            false
+                        } else {
+                            try {
+                                if (ticketId == null) {
+                                    val created = viewModel.api.createTicket(
+                                        TicketCreateRequest(
+                                            title = title.trim(),
+                                            notes = notes,
+                                            priority = priority,
+                                            clientId = clientId,
+                                            caseId = caseId,
+                                            assignedUserId = assignedUserId,
+                                            category = category,
+                                            status = status,
+                                            dueDate = dueDate.ifBlank { null },
                                         )
-                                        if (adMaterial) {
-                                            viewModel.api.patchTicket(
-                                                created.id,
-                                                TicketPatchRequest(adMaterial = true),
-                                            )
-                                        }
-                                        nav.popBackStack()
-                                        nav.navigate("ticket/${created.id}")
-                                    } else {
-                                        viewModel.api.patchTicketFull(
-                                            ticketId,
-                                            TicketFullEdit(
-                                                title = title.trim(),
-                                                status = status,
-                                                priority = priority,
-                                                assignedUserId = assignedUserId,
-                                                category = category,
-                                                dueDate = dueDate.ifBlank { null },
-                                                clientId = clientId,
-                                                caseId = caseId,
-                                                adMaterial = adMaterial,
-                                                notes = notes,
-                                            ),
+                                    )
+                                    if (adMaterial) {
+                                        viewModel.api.patchTicket(
+                                            created.id,
+                                            TicketPatchRequest(adMaterial = true),
                                         )
-                                        nav.popBackStack()
                                     }
-                                } catch (e: Exception) {
-                                    busy = false
-                                    saveError = plainError(e, "The ticket could not be saved. Try again.")
+                                    nav.popBackStack()
+                                    nav.navigate("ticket/${created.id}")
+                                } else {
+                                    viewModel.api.patchTicketFull(
+                                        ticketId,
+                                        TicketFullEdit(
+                                            title = title.trim(),
+                                            status = status,
+                                            priority = priority,
+                                            assignedUserId = assignedUserId,
+                                            category = category,
+                                            dueDate = dueDate.ifBlank { null },
+                                            clientId = clientId,
+                                            caseId = caseId,
+                                            adMaterial = adMaterial,
+                                            notes = notes,
+                                        ),
+                                    )
+                                    nav.popBackStack()
                                 }
+                                true
+                            } catch (e: Exception) {
+                                saveError = plainError(e, "The ticket could not be saved. Try again.")
+                                false
                             }
-                            }
-                        },
-                    ) { Text(if (busy) "Saving…" else "Save ticket") }
+                        }
+                    }
                     OutlinedButton(onClick = { nav.popBackStack() }) { Text("Cancel") }
                 }
                 Spacer(Modifier.height(24.dp))
             }
         }
     }
+}
+
+
+/**
+ * Lane B (1.4.0) M-10 for ticket rows: swipe right assigns
+ * the ticket to me, swipe left advances its status one
+ * stage - both are actions this file already performs
+ * elsewhere (TicketPatchRequest.assignToMe from the Today
+ * screen's pattern; MirrorVocab.stepStage behind the card's
+ * own StageStepper). The row always settles back afterwards
+ * (confirmValueChange returns false): the swipe is a quick
+ * action trigger, never a dismissal, and the card's data
+ * updates through the caller's own state. The threshold
+ * pass fires the primary haptic.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeTicketActions(
+    ticket: Ticket,
+    onAssign: () -> Unit,
+    onAdvance: (() -> Unit)?,
+    content: @Composable () -> Unit,
+) {
+    val primaryHaptic = rememberPrimaryHaptic()
+    val state = androidx.compose.material3.rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> {
+                    primaryHaptic(); onAssign()
+                }
+                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> {
+                    if (onAdvance != null) {
+                        primaryHaptic(); onAdvance()
+                    }
+                }
+                else -> {}
+            }
+            false
+        },
+    )
+    androidx.compose.material3.SwipeToDismissBox(
+        state = state,
+        enableDismissFromEndToStart = onAdvance != null,
+        backgroundContent = {
+            val direction = state.dismissDirection
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .background(
+                        if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                            SentinelSurfaceHigh
+                        } else {
+                            SentinelGreen.copy(alpha = 0.18f)
+                        },
+                        RoundedCornerShape(16.dp),
+                    )
+                    .padding(horizontal = 16.dp),
+                contentAlignment = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                    Alignment.CenterEnd
+                } else {
+                    Alignment.CenterStart
+                },
+            ) {
+                Text(
+                    if (direction == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                        MirrorVocab.stepStage(ticket.status, +1) ?: ticket.status
+                    } else {
+                        "Assign to me"
+                    },
+                    color = SentinelGreen,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+        },
+    ) { content() }
 }

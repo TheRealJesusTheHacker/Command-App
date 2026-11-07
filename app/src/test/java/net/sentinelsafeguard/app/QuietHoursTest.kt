@@ -64,6 +64,57 @@ class QuietHoursTest {
         assertFalse(QuietHours.isQuiet(12 * 60, wrapStart, wrapEnd))
     }
 
+    // ---- Do All 1.4.0 (Expansion A1): the automation categories.
+    // Quiet-exempt: CRITICAL + ESTATE_DOWN (with SIGN_IN_ALERT).
+    // Quiet-bound: MONEY + DIGEST (with TICKETS + MAIL).
+
+    @Test
+    fun criticalAndEstateDownAreExemptFromQuietHours() {
+        val afternoon = LocalTime.of(14, 30)
+        assertTrue(
+            QuietHours.shouldNotify(NotifyCategory.CRITICAL, afternoon, start, end, true)
+        )
+        assertTrue(
+            QuietHours.shouldNotify(NotifyCategory.ESTATE_DOWN, afternoon, start, end, true)
+        )
+    }
+
+    @Test
+    fun moneyAndDigestAreSilentDuringQuietHours() {
+        val afternoon = LocalTime.of(14, 30)
+        assertFalse(
+            QuietHours.shouldNotify(NotifyCategory.MONEY, afternoon, start, end, true)
+        )
+        assertFalse(
+            QuietHours.shouldNotify(NotifyCategory.DIGEST, afternoon, start, end, true)
+        )
+        val evening = LocalTime.of(21, 0)
+        assertTrue(QuietHours.shouldNotify(NotifyCategory.MONEY, evening, start, end, true))
+        assertTrue(QuietHours.shouldNotify(NotifyCategory.DIGEST, evening, start, end, true))
+    }
+
+    @Test
+    fun exemptCategoriesStillRespectTheToggle() {
+        val afternoon = LocalTime.of(14, 30)
+        assertFalse(
+            QuietHours.shouldNotify(NotifyCategory.CRITICAL, afternoon, start, end, false)
+        )
+        assertFalse(
+            QuietHours.shouldNotify(NotifyCategory.ESTATE_DOWN, afternoon, start, end, false)
+        )
+    }
+
+    @Test
+    fun quietExemptSetIsExactlyTheThree() {
+        assertTrue(QuietHours.isQuietExempt(NotifyCategory.SIGN_IN_ALERT))
+        assertTrue(QuietHours.isQuietExempt(NotifyCategory.CRITICAL))
+        assertTrue(QuietHours.isQuietExempt(NotifyCategory.ESTATE_DOWN))
+        assertFalse(QuietHours.isQuietExempt(NotifyCategory.TICKETS))
+        assertFalse(QuietHours.isQuietExempt(NotifyCategory.MAIL))
+        assertFalse(QuietHours.isQuietExempt(NotifyCategory.MONEY))
+        assertFalse(QuietHours.isQuietExempt(NotifyCategory.DIGEST))
+    }
+
     @Test
     fun timeParsingAndFormatting() {
         assertEquals(11 * 60, QuietHours.parseTime("11:00"))

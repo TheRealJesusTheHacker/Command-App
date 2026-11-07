@@ -161,6 +161,26 @@ object IconMorphLogic {
 
     fun downloadRingFraction(progress: Float): Float =
         ((progress.coerceIn(0f, 1f) - 0.25f) / 0.55f).coerceIn(0f, 1f)
+
+    /** (g) Play/pause: one 300 ms morph (1.4.0 item 10 — the
+     *  app gained a genuine playback control, ticket voice
+     *  notes, so the honest-fit rule now admits the pattern
+     *  the header records as previously unshipped). */
+    const val PLAY_PAUSE_MORPH_MS: Int = 300
+
+    /**
+     * (g) The play triangle collapses horizontally into the
+     * left pause bar as progress runs 0 → 1.
+     */
+    fun playCollapseFraction(progress: Float): Float =
+        1f - progress.coerceIn(0f, 1f)
+
+    /**
+     * (g) The pause bars grow from the vertical center over
+     * the same motion (bar height fraction + alpha).
+     */
+    fun pauseBarFraction(progress: Float): Float =
+        progress.coerceIn(0f, 1f)
 }
 
 /** The phases the Settings update download actually owns. */
@@ -525,4 +545,66 @@ fun UnlockSpringIcon(
 /** How long the unlock spring plays before the shell unlocks. */
 suspend fun unlockSpringSettle(reduced: Boolean) {
     if (!reduced) delay(IconMorphLogic.UNLOCK_SPRING_MS.toLong())
+}
+
+/**
+ * (g) Play/pause morph icon for the voice-note player (1.4.0
+ * item 10). [playing] is the player's real state: false draws
+ * the play triangle; true draws the pause bars; between them
+ * the triangle collapses into the left bar while both bars
+ * grow from the center — one 300 ms motion, forward and
+ * reverse. Under reduced motion the swap is instant. The
+ * hosting control owns the tap and the content description.
+ */
+@Composable
+fun PlayPauseMorphIcon(
+    playing: Boolean,
+    modifier: Modifier = Modifier,
+    tint: Color = SentinelGreen,
+) {
+    val reduced = rememberReducedMotion()
+    val progress by animateFloatAsState(
+        targetValue = if (playing) 1f else 0f,
+        animationSpec = if (reduced) {
+            tween(0)
+        } else {
+            tween(IconMorphLogic.PLAY_PAUSE_MORPH_MS)
+        },
+        label = "playPauseMorph",
+    )
+    Canvas(modifier.size(24.dp)) {
+        val u = size.minDimension / 24f
+        fun pt(x: Float, y: Float) = Offset(x * u, y * u)
+        val p = progress
+        // The triangle, collapsing toward its left edge.
+        val collapse = IconMorphLogic.playCollapseFraction(p)
+        if (collapse > 0.02f) {
+            val anchorX = 8f
+            fun cx(x: Float) = anchorX + (x - anchorX) * collapse
+            val triangle = Path().apply {
+                moveTo(pt(cx(8f), 5f).x, pt(cx(8f), 5f).y)
+                lineTo(pt(cx(19f), 12f).x, pt(cx(19f), 12f).y)
+                lineTo(pt(cx(8f), 19f).x, pt(cx(8f), 19f).y)
+                close()
+            }
+            drawPath(triangle, color = tint.copy(alpha = collapse))
+        }
+        // The pause bars, growing from the vertical center.
+        val bar = IconMorphLogic.pauseBarFraction(p)
+        if (bar > 0.02f) {
+            val half = 7f * bar
+            drawRoundRect(
+                color = tint.copy(alpha = bar),
+                topLeft = pt(7f, 12f - half),
+                size = Size(3.4f * u, 2f * half * u),
+                cornerRadius = CornerRadius(1.2f * u, 1.2f * u),
+            )
+            drawRoundRect(
+                color = tint.copy(alpha = bar),
+                topLeft = pt(13.6f, 12f - half),
+                size = Size(3.4f * u, 2f * half * u),
+                cornerRadius = CornerRadius(1.2f * u, 1.2f * u),
+            )
+        }
+    }
 }

@@ -2,15 +2,32 @@ package net.sentinelsafeguard.app.notify
 
 import java.time.LocalTime
 
-enum class NotifyCategory { TICKETS, MAIL, SIGN_IN_ALERT }
+enum class NotifyCategory {
+    TICKETS, MAIL, SIGN_IN_ALERT,
+    // Do All 1.4.0 (Expansion A1): the phone-automation categories.
+    CRITICAL, ESTATE_DOWN, MONEY, DIGEST,
+}
 
 /**
- * Quiet-hours rule (spec §6): during the sleep window, ticket and mail
- * notifications stay silent. Sign-in alerts are exempt by default —
- * a sign-in alert during sleep is exactly the one worth waking for.
- * Pure logic, unit-tested.
+ * Quiet-hours rule (spec §6 + automations list, 2026-11-07):
+ * during the sleep window, routine notifications stay silent.
+ * Quiet-exempt — the ones worth waking for: sign-in alerts,
+ * Critical Alerts, and estate-down (a Sentinel surface is down).
+ * Money and digest notifications are quiet-bound like tickets
+ * and mail. Pure logic, unit-tested.
  */
 object QuietHours {
+
+    /** Categories that arrive even during quiet hours. */
+    fun isQuietExempt(category: NotifyCategory): Boolean = when (category) {
+        NotifyCategory.SIGN_IN_ALERT,
+        NotifyCategory.CRITICAL,
+        NotifyCategory.ESTATE_DOWN -> true
+        NotifyCategory.TICKETS,
+        NotifyCategory.MAIL,
+        NotifyCategory.MONEY,
+        NotifyCategory.DIGEST -> false
+    }
 
     /** Minutes since midnight → true when [minuteOfDay] is inside the window. */
     fun isQuiet(minuteOfDay: Int, startMinutes: Int, endMinutes: Int): Boolean {
@@ -31,7 +48,7 @@ object QuietHours {
         categoryEnabled: Boolean,
     ): Boolean {
         if (!categoryEnabled) return false
-        if (category == NotifyCategory.SIGN_IN_ALERT) return true
+        if (isQuietExempt(category)) return true
         val minute = now.hour * 60 + now.minute
         return !isQuiet(minute, startMinutes, endMinutes)
     }

@@ -1,0 +1,96 @@
+package net.sentinelsafeguard.app.data.api
+
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+
+/**
+ * 1.4.0 ("Do All") endpoint methods: the offline-sync replay, the
+ * selfhost push consumption surface, and the backup-bundle file
+ * download. Like Phases 3–9 these ride the open-JSON verbs on
+ * [SentinelApi]; refusals surface the server's own message via
+ * [SentinelApi.callJson] — never a fake empty state.
+ */
+
+private fun SentinelApi.doAllQs(params: Map<String, String?>): String {
+    val parts = params.entries.filter { !it.value.isNullOrBlank() }
+        .map { "${it.key}=${encodeQuery(it.value!!)}" }
+    return if (parts.isEmpty()) "" else "?" + parts.joinToString("&")
+}
+
+// ---- Offline sync (POST /api/app/sync) ----
+
+/**
+ * Replays queued offline mutations. [body] is the exact contract
+ * shape {"mutations":[{key,kind,payload,baseUpdatedAt}]} — built by
+ * OfflineLogic.buildSyncBody — and the response carries the
+ * per-mutation results ({key,kind,status,id?,duplicate?,server?})
+ * that OfflineLogic.parseResults reads.
+ */
+suspend fun SentinelApi.syncMutations(body: JsonObject): JsonObject =
+    callJson("POST", "/api/app/sync", body.toString())
+
+// ---- Selfhost push (device long-poll + ACK) ----
+
+/**
+ * Registers this install's push token. In the selfhost design the
+ * server stores the token (hash + last4, plus an envelope-encrypted
+ * copy) and delivers by the device polling its outbox — no
+ * third-party push service is involved. [token] is the stable
+ * per-install token from PushStore.
+ */
+suspend fun SentinelApi.pushRegister(token: String): JsonObject =
+    callJson(
+        "POST", "/api/app/push/register",
+        buildJsonObject {
+            put("platform", "android")
+            put("token", token)
+        }.toString(),
+    )
+
+/** Removes this device's push registration (sign-out). */
+suspend fun SentinelApi.pushUnregister(): JsonObject =
+    callJson("POST", "/api/app/push/unregister", "{}")
+
+/**
+ * Polls this device's outbox for events after [since] (the PushStore
+ * cursor). [wait] is the server's long-poll hold in seconds; the
+ * WorkManager consumer passes 0 — see PushWorker for why.
+ */
+suspend fun SentinelApi.pushPoll(since: Long, wait: Int = 0): JsonObject =
+    callJson(
+        "GET", "/api/app/push/poll" + doAllQs(
+            mapOf("since" to since.toString(), "wait" to wait.toString())
+        )
+    )
+
+/**
+ * Acknowledges delivery of the outbox events [ids]; the server marks
+ * them sent so they are not redelivered. Numeric ids are sent as
+ * numbers, matching the server's outbox id type.
+ */
+suspend fun SentinelApi.pushAck(ids: List<String>): JsonObject =
+    callJson(
+        "POST", "/api/app/push/ack",
+        buildJsonObject {
+            put("ids", JsonArray(ids.map { id ->
+                id.toLongOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(id)
+            }))
+        }.toString(),
+    )
+
+// ---- Backup bundle download ----
+
+/**
+ * Downloads the backup bundle file to [sink]; returns the HTTP
+ * status. [urlPath] is the downloadUrl from adminBackupStatus —
+ * a path like "/backup/download?t=..." carrying a single-use token.
+ * Honest gate note: that single-use token IS the gate for this
+ * file route (it is minted by the OWNER-only status handler and
+ * dies after one use); this call adds the device-token headers via
+ * [SentinelApi.downloadBytes] and no other credential.
+ */
+suspend fun SentinelApi.backupDownload(urlPath: String, sink: (ByteArray) -> Unit): Int =
+    downloadBytes(urlPath, sink)

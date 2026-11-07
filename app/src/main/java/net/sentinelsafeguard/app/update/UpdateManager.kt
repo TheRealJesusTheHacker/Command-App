@@ -12,10 +12,81 @@ import net.sentinelsafeguard.app.data.api.SentinelApi
 import net.sentinelsafeguard.app.data.api.VersionResponse
 import net.sentinelsafeguard.app.util.VersionCompare
 import java.io.File
+import java.security.MessageDigest
 
 sealed interface UpdateState {
     data object UpToDate : UpdateState
     data class Available(val info: VersionResponse) : UpdateState
+}
+
+/** The downloaded update did not match what the server said it sent. */
+class UpdateVerificationException(message: String) : Exception(message)
+
+/**
+ * Pure update decisions + integrity checks (U-04), kept free of
+ * Android and network types so they are unit-tested directly.
+ */
+object UpdateVerify {
+
+    /**
+     * An update is offered only when the signals the server sent
+     * agree it is newer. When the server sends a versionCode it is
+     * authoritative for ordering (a name alone can be relabelled):
+     * the code must be greater than the installed code, and the
+     * name — when also sent — must not be older than the installed
+     * name (a staged rollback is never offered as an "update").
+     * When no code is sent, the name comparison decides, as before.
+     */
+    fun isUpdateAvailable(
+        remoteVersionCode: Int?,
+        remoteVersion: String?,
+        currentVersionCode: Int,
+        currentVersion: String,
+    ): Boolean {
+        if (remoteVersionCode != null) {
+            if (remoteVersionCode <= currentVersionCode) return false
+            if (remoteVersion != null &&
+                VersionCompare.isNewer(currentVersion, remoteVersion)
+            ) {
+                return false
+            }
+            return true
+        }
+        return remoteVersion != null &&
+            VersionCompare.isNewer(remoteVersion, currentVersion)
+    }
+
+    /** Lowercase hex SHA-256 of [data]. */
+    fun sha256Hex(data: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(data)
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    /**
+     * Returns a plain-language reason the downloaded bytes do NOT
+     * match the server's stated facts, or null when they match (or
+     * when the server stated nothing to check against).
+     */
+    fun mismatchReason(
+        actualSizeBytes: Long,
+        expectedSizeBytes: Long?,
+        actualSha256: String,
+        expectedSha256: String?,
+    ): String? {
+        if (expectedSizeBytes != null && actualSizeBytes != expectedSizeBytes) {
+            return "The update download did not finish correctly " +
+                "(got $actualSizeBytes of $expectedSizeBytes bytes). " +
+                "Nothing was installed. Please try the update again."
+        }
+        if (expectedSha256 != null &&
+            !actualSha256.equals(expectedSha256.trim(), ignoreCase = true)
+        ) {
+            return "The update download did not match the file the server sent " +
+                "(its security fingerprint differs). Nothing was installed. " +
+                "Please try the update again."
+        }
+        return null
+    }
 }
 
 /**
@@ -28,9 +99,13 @@ class UpdateManager(private val api: SentinelApi) {
 
     suspend fun check(): UpdateState {
         val remote = api.version()
-        val staged = remote.version
-        return if (remote.available && staged != null &&
-            VersionCompare.isNewer(staged, BuildConfig.VERSION_NAME)
+        return if (remote.available &&
+            UpdateVerify.isUpdateAvailable(
+                remoteVersionCode = remote.versionCode,
+                remoteVersion = remote.version,
+                currentVersionCode = BuildConfig.VERSION_CODE,
+                currentVersion = BuildConfig.VERSION_NAME,
+            )
         ) {
             UpdateState.Available(remote)
         } else {
@@ -38,15 +113,48 @@ class UpdateManager(private val api: SentinelApi) {
         }
     }
 
-    /** Downloads the update APK into app-private cache. Returns the file. */
-    suspend fun download(context: Context): File = withContext(Dispatchers.IO) {
-        val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-        val file = File(dir, "sentinel-app-update.apk")
-        file.outputStream().use { out ->
-            api.downloadUpdate { chunk -> out.write(chunk) }
+    /**
+     * Downloads the update APK into app-private cache and verifies it
+     * against [expected] (the VersionResponse check() returned)
+     * before handing it back: the byte count must equal sizeBytes
+     * and the SHA-256 of the downloaded bytes must equal sha256,
+     * whenever the server stated them. The hash is computed while
+     * streaming, so the file is never re-read. On any mismatch the
+     * partial/wrong file is deleted and an
+     * [UpdateVerificationException] with a plain-language message is
+     * thrown — a bad download is never offered to the installer.
+     */
+    suspend fun download(context: Context, expected: VersionResponse): File =
+        withContext(Dispatchers.IO) {
+            val dir = File(context.cacheDir, "updates").apply { mkdirs() }
+            val file = File(dir, "sentinel-app-update.apk")
+            val digest = MessageDigest.getInstance("SHA-256")
+            var total = 0L
+            try {
+                file.outputStream().use { out ->
+                    api.downloadUpdate { chunk ->
+                        digest.update(chunk)
+                        total += chunk.size
+                        out.write(chunk)
+                    }
+                }
+            } catch (e: Exception) {
+                file.delete()
+                throw e
+            }
+            val actualSha256 = digest.digest().joinToString("") { "%02x".format(it) }
+            val reason = UpdateVerify.mismatchReason(
+                actualSizeBytes = total,
+                expectedSizeBytes = expected.sizeBytes,
+                actualSha256 = actualSha256,
+                expectedSha256 = expected.sha256,
+            )
+            if (reason != null) {
+                file.delete()
+                throw UpdateVerificationException(reason)
+            }
+            file
         }
-        file
-    }
 
     /** Hands the downloaded APK to the Android installer. */
     fun install(context: Context, apk: File) {

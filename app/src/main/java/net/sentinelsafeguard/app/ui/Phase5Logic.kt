@@ -22,6 +22,24 @@ object Phase5Logic {
         "Inactive" to "Inactive",
     )
 
+    /**
+     * Scan-to-asset (1.4.0): what the operator typed, pasted, or
+     * scanned off a printed label → the bare code the resolver
+     * takes. Label payloads are
+     * https://sentinelsafeguard.net/a/<SCA-code>; a bare code
+     * passes through untouched. (The `#asset=<id>` label form is
+     * a web-route shape the app resolver doesn't take — it is
+     * returned as-is and the server answers honestly.)
+     */
+    fun assetCodeFromInput(raw: String): String {
+        val trimmed = raw.trim()
+        return if ("/a/" in trimmed) {
+            trimmed.trimEnd('/').substringAfterLast("/a/").substringBefore('?')
+        } else {
+            trimmed
+        }
+    }
+
     /** Web empIsTeam: team = every staff-side role. */
     private val TEAM_EXCLUDE = setOf("Client", "Family", "Tourist")
 

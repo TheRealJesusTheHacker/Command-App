@@ -305,11 +305,17 @@ fun MorphSubmitButton(
 ) {
     val reduced = rememberReducedMotion()
     val scope = rememberCoroutineScope()
+    // Lane B (1.4.0) item 6: haptics on the primary action —
+    // the light tick on tap, the confirming haptic when the
+    // morph resolves into the drawn tick on success.
+    val tick = rememberHapticTick()
+    val primaryHaptic = rememberPrimaryHaptic()
     // 0 idle · 1 working · 2 done
     var phase by remember { mutableStateOf(0) }
     Button(
         onClick = {
             if (phase == 0) {
+                tick()
                 phase = 1
                 scope.launch {
                     val ok = try {
@@ -318,6 +324,7 @@ fun MorphSubmitButton(
                         false
                     }
                     if (ok) {
+                        primaryHaptic()
                         phase = 2
                         delay(if (reduced) 400L else MotionLogic.MORPH_HOLD_MS)
                     }

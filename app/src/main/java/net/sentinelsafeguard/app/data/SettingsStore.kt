@@ -29,6 +29,22 @@ class SettingsStore(context: Context) {
         get() = prefs.getBoolean(KEY_NOTIFY_ALERTS, true)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFY_ALERTS, value).apply()
 
+    /** Do All 1.4.0 (item 6): critical alerts — Command's Critical
+     *  Alert channel. Exempt from quiet hours, like sign-in alerts. */
+    var notifyCritical: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFY_CRITICAL, true)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFY_CRITICAL, value).apply()
+
+    /** Do All 1.4.0 (item 6): the notification-permission
+     *  explanation was shown and the owner tapped "Not now".
+     *  The explanation is never nagged again on first run; it
+     *  stays re-openable from Settings → Notifications. Set back
+     *  to false when the permission is granted, so a later
+     *  revocation re-offers the explanation once. */
+    var notifyPermissionExplainerDismissed: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFY_EXPLAINER_DISMISSED, false)
+        set(value) = prefs.edit().putBoolean(KEY_NOTIFY_EXPLAINER_DISMISSED, value).apply()
+
     /** Quiet hours default to the owner's sleep window (spec §6). */
     var quietStartMinutes: Int
         get() = prefs.getInt(KEY_QUIET_START, 11 * 60)
@@ -66,6 +82,8 @@ class SettingsStore(context: Context) {
         private const val KEY_NOTIFY_TICKETS = "notify_tickets"
         private const val KEY_NOTIFY_MAIL = "notify_mail"
         private const val KEY_NOTIFY_ALERTS = "notify_signin_alerts"
+        private const val KEY_NOTIFY_CRITICAL = "notify_critical"
+        private const val KEY_NOTIFY_EXPLAINER_DISMISSED = "notify_permission_explainer_dismissed"
         private const val KEY_QUIET_START = "quiet_start_minutes"
         private const val KEY_QUIET_END = "quiet_end_minutes"
         private const val KEY_LAST_TICKETS = "last_new_ticket_count"

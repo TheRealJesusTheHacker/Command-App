@@ -30,6 +30,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import net.sentinelsafeguard.app.data.api.CalendarSyncResponse
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 
@@ -109,6 +110,77 @@ private fun PanelRows(objs: List<JsonObject>, nav: NavController, emptyText: Str
             onClick = if (route != null) ({ nav.navigate(route) }) else null,
         )
     }
+}
+
+// ---- Do All 1.4.0 (Expansion A2/A3) helpers ----
+
+/** A rolling count: animates from the old value to the new one
+ *  (M-rolling digits); under reduced motion it snaps. */
+@Composable
+private fun RollingCount(value: Int) {
+    val reduced = rememberReducedMotion()
+    val animated by androidx.compose.animation.core.animateIntAsState(
+        targetValue = value,
+        animationSpec = if (reduced) {
+            androidx.compose.animation.core.snap()
+        } else {
+            androidx.compose.animation.core.tween(durationMillis = 600)
+        },
+        label = "rollingCount",
+    )
+    Text(animated.toString())
+}
+
+@Composable
+private fun RollingCountLine(label: String, count: Int) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(label, modifier = Modifier.weight(1f))
+        RollingCount(count)
+    }
+}
+
+/** The client tier a draft payload carries, when it carries one
+ *  (Command's draft rows name their client; tier exposure is a
+ *  backend contract — see the 1.4.0 lane report). */
+private fun JsonObject.clientTier(): String? =
+    listOf("clientTier", "tier", "clientType", "tierName")
+        .firstNotNullOfOrNull { str(it) }?.lowercase()
+
+/** Family records are never charged (standing law): a money
+ *  approval for a Family-marked record does not belong in the
+ *  approvals inbox at all. Only payload-exposed markers count —
+ *  nothing is inferred. */
+private fun JsonObject.isFamilyRecord(): Boolean {
+    clientTier()?.let { if (it.contains("family")) return true }
+    val family = (this["family"] as? JsonPrimitive)?.booleanOrNull
+    val isFamily = (this["isFamily"] as? JsonPrimitive)?.booleanOrNull
+    return family == true || isFamily == true
+}
+
+private fun JsonObject.isFriendsRecord(): Boolean =
+    clientTier()?.contains("friend") == true
+
+/** The Friends discount a draft payload already exposes, in
+ *  cents — rendered only when the payload carries it; amounts
+ *  are never computed or invented in the app. */
+private fun JsonObject.friendsDiscountCents(): Long? =
+    listOf("friendsDiscountCents", "discountCents")
+        .firstNotNullOfOrNull { (this[it] as? JsonPrimitive)?.longOrNull }
+
+/** A cents figure from this object or one level of nesting
+ *  (the reports-summary payload groups its sections). */
+private fun JsonObject.centsDeep(vararg keys: String): Long? {
+    for (key in keys) {
+        (this[key] as? JsonPrimitive)?.longOrNull?.let { return it }
+    }
+    for ((_, value) in entries) {
+        if (value is JsonObject) {
+            for (key in keys) {
+                (value[key] as? JsonPrimitive)?.longOrNull?.let { return it }
+            }
+        }
+    }
+    return null
 }
 
 @Composable
@@ -211,6 +283,100 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
                 color = SentinelMuted,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
+        }
+
+        // Needs your tap (Expansion A2): the approvals inbox.
+        // Draft-only law — Command's automations draft, NOTHING
+        // auto-sends; every send below is the owner's own tap on
+        // the same endpoints the Weekly digest queue uses
+        // (POST /api/app/today/digests/{id}/send + /discard).
+        // Automation draft KINDS whose payloads are counts only
+        // (ticket drafts, review drafts, postmortems, lead
+        // packets) have no per-draft send endpoint in the API
+        // layer, so they list read-only with their counts.
+        val tapDigests = (digests?.arr("digests")?.mapNotNull { it as? JsonObject }
+            ?: emptyList()).filter { digest ->
+            val status = digest.str("status")?.lowercase() ?: ""
+            status != "sent" && status != "discarded" && !digest.isFamilyRecord()
+        }
+        val autoForTap = automations?.obj("today") ?: p?.obj("b3eAutomation")
+        val tapCounts = listOf(
+            "Ticket drafts" to (autoForTap?.int("ticketDrafts") ?: 0),
+            "Review drafts" to (autoForTap?.int("reviewDrafts") ?: 0),
+            "Postmortems" to (autoForTap?.int("postmortems") ?: 0),
+            "Lead packets" to (autoForTap?.int("leadPackets") ?: 0),
+        ).filter { it.second > 0 }
+        MirrorCard(
+            "Needs your tap",
+            tapDigests.size + tapCounts.sumOf { it.second },
+            topTier = true,
+        ) {
+            if (tapDigests.isEmpty() && tapCounts.isEmpty()) {
+                Text("Nothing is waiting on your tap.", color = SentinelMuted)
+            }
+            tapDigests.forEach { digest ->
+                Column(Modifier.padding(vertical = 4.dp)) {
+                    Text(
+                        listOfNotNull(
+                            digest.str("clientName") ?: digest.int("clientId")?.let { "Client #$it" },
+                            digest.str("status"),
+                            digest.str("weekStart") ?: digest.str("week"),
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    if (digest.isFriendsRecord()) {
+                        val discount = digest.friendsDiscountCents()
+                        Text(
+                            if (discount != null) {
+                                "Friends client — 20% Friends line on this draft: " +
+                                    MirrorVocab.formatCents(discount)
+                            } else {
+                                "Friends client — the 20% Friends line rides the draft from Command."
+                            },
+                            color = SentinelMuted,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    val did = digest.int("id")
+                    if (did != null) {
+                        Row {
+                            Button(onClick = {
+                                scope.launch {
+                                    try {
+                                        viewModel.api.sendDigest(did)
+                                        actionNote = "Digest sent."
+                                        reloadKey++
+                                    } catch (e: Exception) {
+                                        actionNote = plainError(e, "The digest could not be sent. Try again.")
+                                    }
+                                }
+                            }) { Text("Approve & send") }
+                            TextButton(onClick = {
+                                scope.launch {
+                                    try {
+                                        viewModel.api.discardDigest(did)
+                                        actionNote = "Digest discarded."
+                                        reloadKey++
+                                    } catch (e: Exception) {
+                                        actionNote = plainError(e, "The digest could not be discarded. Try again.")
+                                    }
+                                }
+                            }) { Text("Discard") }
+                        }
+                    }
+                }
+            }
+            tapCounts.forEach { (label, count) ->
+                CountLine("$label — waiting in Command", count)
+            }
+            if (tapCounts.isNotEmpty()) {
+                Text(
+                    "These draft kinds have no phone send yet — they are " +
+                        "reviewed and sent from Command. Nothing sends itself.",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
 
         // Ask Command (b3f)
@@ -559,6 +725,173 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
                     }
                 }
             }) { Text("Run all scans") }
+        }
+    }
+}
+
+/**
+ * Expansion A3: Today's three digest cards — three DISTINCT
+ * tools, kept distinct (Skyler's scope note): the morning brief
+ * (the day at a glance), the shift card (the platform digest +
+ * urgent delta, for before/after a shift), and the money card
+ * (paid / overdue / unbilled). Fed by the existing endpoints
+ * todayPlatformDigest + todayReportsSummary + todayUrgent, plus
+ * the already-loaded TodayResponse. Staggered entrance (M-09)
+ * and rolling digits; honest empty states — a figure the
+ * payload does not carry is named as missing, never invented.
+ */
+@Composable
+fun TodayDigestCards(
+    viewModel: AppViewModel,
+    today: net.sentinelsafeguard.app.data.api.TodayResponse,
+    nav: NavController,
+) {
+    var platform by remember { mutableStateOf<JsonObject?>(null) }
+    var reportsSummary by remember { mutableStateOf<JsonObject?>(null) }
+    var urgent by remember { mutableStateOf<JsonObject?>(null) }
+    var loaded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        platform = try {
+            viewModel.api.todayPlatformDigest()
+        } catch (e: Exception) {
+            null
+        }
+        reportsSummary = try {
+            viewModel.api.todayReportsSummary()
+        } catch (e: Exception) {
+            null
+        }
+        urgent = try {
+            viewModel.api.todayUrgent().obj("urgent")
+        } catch (e: Exception) {
+            null
+        }
+        loaded = true
+    }
+    if (!loaded) return
+
+    Column {
+        // (1) Morning brief
+        Column(Modifier.listEntrance(0)) {
+            MirrorCard("Morning brief", topTier = true) {
+                if (today.briefing.isNotBlank()) {
+                    Text(today.briefing, style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.height(6.dp))
+                }
+                RollingCountLine("Follow-ups due today", today.followUps.total)
+                RollingCountLine("New tickets waiting", today.newTickets.total)
+                RollingCountLine("Overdue cases", today.overdueCases.total)
+                RollingCountLine("Urgent right now", urgent?.totalOf() ?: 0)
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text("Money overdue", modifier = Modifier.weight(1f))
+                    Text(
+                        "${MirrorVocab.formatCents(today.money.overdue.totalCents)} · " +
+                            "${today.money.overdue.count} invoice(s)",
+                    )
+                }
+            }
+        }
+
+        // (2) Shift card — the platform digest + urgent delta,
+        // for the before/after-shift check.
+        Column(Modifier.listEntrance(1)) {
+            MirrorCard("Shift digest — while you're away") {
+                val digest = platform?.obj("digest") ?: platform
+                val lines = digest?.arr("lines")
+                    ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                    ?: emptyList()
+                val day = digest?.str("day") ?: digest?.str("title")
+                if (digest == null) {
+                    Text(
+                        "The platform digest could not be loaded.",
+                        color = SentinelMuted,
+                    )
+                } else if (lines.isEmpty()) {
+                    Text(
+                        "No platform digest yet${day?.let { " for $it" } ?: ""}.",
+                        color = SentinelMuted,
+                    )
+                } else {
+                    if (day != null) {
+                        Text(day, style = MaterialTheme.typography.titleSmall)
+                    }
+                    lines.forEach { line -> Text(line) }
+                    val emailed = (digest["emailed"] as? JsonPrimitive)?.booleanOrNull
+                    Text(
+                        if (emailed == true) {
+                            "Digest emailed to the owner mailbox."
+                        } else {
+                            "Digest stored — not yet emailed."
+                        },
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                RollingCountLine("Urgent waiting", urgent?.totalOf() ?: 0)
+                urgent?.str("latencyNote")?.let {
+                    Text(it, color = SentinelMuted, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        // (3) Money card
+        Column(Modifier.listEntrance(2)) {
+            MirrorCard(
+                "Money — today",
+                footerLabel = "Show all → Money Desk",
+                onFooter = { nav.navigate("b3money") },
+            ) {
+                val paid = reportsSummary?.centsDeep("paidTodayCents", "paidCents")
+                val unbilled = reportsSummary?.centsDeep(
+                    "unbilledCents", "unbilledWorkCents", "unbilledTotalCents",
+                )
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text("Paid", modifier = Modifier.weight(1f))
+                    Text(
+                        if (paid != null) {
+                            MirrorVocab.formatCents(paid)
+                        } else {
+                            "Not in today's summary"
+                        },
+                        color = if (paid != null) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            SentinelMuted
+                        },
+                    )
+                }
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text("Overdue", modifier = Modifier.weight(1f))
+                    Text(
+                        "${MirrorVocab.formatCents(today.money.overdue.totalCents)} · " +
+                            "${today.money.overdue.count} invoice(s)",
+                    )
+                }
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text("Unbilled work", modifier = Modifier.weight(1f))
+                    Text(
+                        if (unbilled != null) {
+                            MirrorVocab.formatCents(unbilled)
+                        } else {
+                            "Not in today's summary"
+                        },
+                        color = if (unbilled != null) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            SentinelMuted
+                        },
+                    )
+                }
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text("Outstanding", modifier = Modifier.weight(1f))
+                    Text(
+                        "${MirrorVocab.formatCents(today.money.outstanding.totalCents)} · " +
+                            "${today.money.outstanding.count} invoice(s)",
+                    )
+                }
+            }
         }
     }
 }

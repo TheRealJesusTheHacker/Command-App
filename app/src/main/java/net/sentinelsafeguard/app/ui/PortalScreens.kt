@@ -122,6 +122,21 @@ private fun UnlinkedNotice() {
 @Composable
 fun PortalProfileScreen(viewModel: AppViewModel, nav: NavController) {
     PortalScreenShell("My Profile", "portal_profile") {
+        // Lane B / scope generalization (1.4.0): the portal's
+        // distinct tools were only reachable through the
+        // drawer; the portal home now breaks the main ones
+        // out as a deck of Sentinel cards, one tap away.
+        // Labels and routes are MirrorNav's own.
+        ToolDeck(
+            entries = listOf(
+                ToolDeckEntry("Messages") { nav.navigate("portal_messages") },
+                ToolDeckEntry("Critical Alert") { nav.navigate("portal_alert") },
+                ToolDeckEntry("Contracts & Reports") { nav.navigate("portal_contracts") },
+                ToolDeckEntry("My Files & Packets") { nav.navigate("portal_files") },
+                ToolDeckEntry("Progress") { nav.navigate("portal_progress") },
+                ToolDeckEntry("Your Documents") { nav.navigate("portal_documents") },
+            ),
+        )
         AsyncCard("Profile", loader = { viewModel.api.portalHome() }) { home, reload ->
             if (Phase3Logic.bool(home, "linked") == false) {
                 UnlinkedNotice()

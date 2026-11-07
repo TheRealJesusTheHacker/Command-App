@@ -1,8 +1,12 @@
 package net.sentinelsafeguard.app.ui
 
+import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -77,6 +82,23 @@ fun SettingsScreen(
     var devices by remember { mutableStateOf<List<DeviceInfo>?>(null) }
     var accountName by remember { mutableStateOf<String?>(null) }
     var confirmSignOut by remember { mutableStateOf(false) }
+
+    // Do All 1.4.0 (item 6): the notification permission is only
+    // ever requested from the explanation surface below (first
+    // run shows the same explanation in AppShell) — never cold.
+    var notifPermissionGranted by remember {
+        mutableStateOf(notificationsPermissionGranted(context))
+    }
+    var showNotifyExplainer by remember {
+        mutableStateOf(!settings.notifyPermissionExplainerDismissed)
+    }
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        notifPermissionGranted = granted
+        if (granted) settings.notifyPermissionExplainerDismissed = false
+    }
+    var notifyCritical by remember { mutableStateOf(settings.notifyCritical) }
 
     var updateBusy by remember { mutableStateOf(false) }
     var updateNote by remember { mutableStateOf<String?>(null) }
@@ -149,6 +171,38 @@ fun SettingsScreen(
         }
 
         SectionHeader("Notifications")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (notifPermissionGranted) {
+                Text(
+                    "Android notifications are on for this app.",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+            } else if (showNotifyExplainer) {
+                NotificationPermissionExplainerCard(
+                    onAllow = {
+                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    },
+                    onNotNow = {
+                        settings.notifyPermissionExplainerDismissed = true
+                        showNotifyExplainer = false
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+            } else {
+                Text(
+                    "Android notifications are off for this app, so the alerts below " +
+                        "cannot reach you until the permission is on.",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(onClick = { showNotifyExplainer = true }) {
+                    Text("Turn on notifications")
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+        }
         Text(
             "The app checks for new tickets and mail about every 15 minutes.",
             color = SentinelMuted,
@@ -166,6 +220,14 @@ fun SettingsScreen(
             notifyAlerts,
         ) {
             notifyAlerts = it; settings.notifySignInAlerts = it
+        }
+        ToggleRow(
+            "Critical alerts",
+            "A Critical Alert in Command, or a Sentinel site going down. " +
+                "These come through even during quiet hours.",
+            notifyCritical,
+        ) {
+            notifyCritical = it; settings.notifyCritical = it
         }
 
         Spacer(Modifier.height(12.dp))
@@ -273,7 +335,7 @@ fun SettingsScreen(
                                 updateNote = "Sentinel App ${state.info.version} is ready." +
                                     (state.info.notes.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
                                 updatePhase = DownloadPhase.ACTIVE
-                                val file = viewModel.updates.download(context)
+                                val file = viewModel.updates.download(context, state.info)
                                 updatePhase = DownloadPhase.DONE
                                 viewModel.updates.install(context, file)
                             }
@@ -362,6 +424,124 @@ private fun signerFingerprint(context: Context): String? = try {
     }
 } catch (e: Exception) {
     null
+}
+
+/** True when Android will actually show this app's notifications:
+ *  before Android 13 there is no runtime permission to ask for. */
+fun notificationsPermissionGranted(context: Context): Boolean =
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        true
+    } else {
+        ContextCompat.checkSelfPermission(
+            context, Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+/**
+ * Do All 1.4.0 (item 6): what each notification channel is for,
+ * in plain words — the body shared by the Settings card and the
+ * first-run dialog. The privacy line is literally true of this
+ * app: notifications are built on the phone from the app's own
+ * poll of the owner's self-hosted Command + mailbox; nothing
+ * leaves the phone and no third-party service is involved.
+ */
+@Composable
+private fun NotificationExplainerBody() {
+    Column {
+        NotifyChannelLine(
+            "New tickets",
+            "A ticket lands, or a client replies to one.",
+        )
+        NotifyChannelLine(
+            "New mail",
+            "New messages in your Sentinel mailbox.",
+        )
+        NotifyChannelLine(
+            "Sign-in alerts",
+            "Someone signs in to Sentinel Command. These come through even during quiet hours.",
+        )
+        NotifyChannelLine(
+            "Critical alerts",
+            "A Critical Alert in Command, or a Sentinel site going down. These also come through during quiet hours.",
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Quiet hours hold the routine ones — tickets, mail, money, digests — " +
+                "until the window ends. Sign-in alerts, critical alerts, and " +
+                "estate-down alerts still come through.",
+            color = SentinelMuted,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Notifications are made on this phone. The app checks your own " +
+                "Sentinel server about every 15 minutes — nothing leaves your " +
+                "phone and no third party is involved.",
+            color = SentinelMuted,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun NotifyChannelLine(name: String, what: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        SectionTick()
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(name, style = MaterialTheme.typography.bodyLarge)
+            Text(what, color = SentinelMuted, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+/** The explanation as a Settings card (top-tier Sentinel plate:
+ *  SurfaceTop gradient, emerald gradient hairline, top highlight). */
+@Composable
+fun NotificationPermissionExplainerCard(
+    onAllow: () -> Unit,
+    onNotNow: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(1.dp, gradientHairlineBrush()),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(sentinelCardBrush(SentinelSurfaceTop), RoundedCornerShape(16.dp)),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Notifications, in plain words", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            NotificationExplainerBody()
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = onAllow) { Text("Allow") }
+                OutlinedButton(onClick = onNotNow) { Text("Not now") }
+            }
+        }
+    }
+}
+
+/** The same explanation as the first-run dialog (AppShell shows
+ *  this before the system prompt, once, until it is answered). */
+@Composable
+fun NotificationPermissionExplainerDialog(
+    onAllow: () -> Unit,
+    onNotNow: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onNotNow,
+        title = { Text("Notifications, in plain words") },
+        text = { NotificationExplainerBody() },
+        confirmButton = {
+            Button(onClick = onAllow) { Text("Allow") }
+        },
+        dismissButton = {
+            TextButton(onClick = onNotNow) { Text("Not now") }
+        },
+    )
 }
 
 @Composable

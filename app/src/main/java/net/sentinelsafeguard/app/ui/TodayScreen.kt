@@ -60,6 +60,10 @@ fun TodayScreen(viewModel: AppViewModel, nav: NavController) {
             LazyColumn {
                 item { MirrorHeader("Today", MirrorCopy.todaySubtitle()) }
                 item { UrgentBanner(viewModel, nav) }
+                // Expansion A3: the three digest cards (morning
+                // brief / shift digest / money) ride directly
+                // under the urgent banner, ahead of the core grid.
+                item { TodayDigestCards(viewModel, d, nav) }
                 item {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                         StatCard("Follow-ups due", d.followUps.total.toString(), Modifier.weight(1f))

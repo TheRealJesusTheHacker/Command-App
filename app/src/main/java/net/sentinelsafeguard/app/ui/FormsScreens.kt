@@ -4,6 +4,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,11 +57,33 @@ import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 
 @Composable
 fun FormsScreen(viewModel: AppViewModel, nav: NavController) {
+    // Lane B / scope generalization (1.4.0): Forms held two
+    // distinct tools flattened into one scroll - form records
+    // and the form documents vault (its section rode at the
+    // bottom of the records list). They are broken out as a
+    // deck of Sentinel cards, one tap apart, each tool now
+    // standing on its own.
+    var section by remember { mutableStateOf("records") }
     Column {
         MirrorHeader("Forms") {
             Button(onClick = { nav.navigate("formNew") }) { Text("+ New form record") }
         }
-        FormRecordsSection(viewModel, nav)
+        ToolDeck(
+            entries = listOf(
+                ToolDeckEntry("Form records", selected = section == "records") { section = "records" },
+                ToolDeckEntry("Form documents", selected = section == "documents") { section = "documents" },
+                ToolDeckEntry("+ New form record") { nav.navigate("formNew") },
+            ),
+        )
+        when (section) {
+            // The documents tool stands alone now, so it gets
+            // its own scroll (it used to ride the records
+            // list's LazyColumn).
+            "documents" -> Column(Modifier.verticalScroll(rememberScrollState())) {
+                FormDocumentsSection(viewModel) { }
+            }
+            else -> FormRecordsSection(viewModel, nav)
+        }
     }
 }
 
@@ -107,7 +131,6 @@ private fun FormRecordsSection(viewModel: AppViewModel, nav: NavController) {
                             onClick = { fid?.let { nav.navigate("formEdit/$it") } },
                         )
                     }
-                    item { FormDocumentsSection(viewModel) { reloadKey++ } }
                     item { Spacer(Modifier.height(16.dp)) }
                 }
             }
@@ -260,18 +283,29 @@ private fun FormFileRow(viewModel: AppViewModel, file: JsonObject, onChanged: ()
             Spacer(Modifier.height(6.dp))
             TextFieldRow("Display name", displayName, onChange = { displayName = it })
             TextFieldRow("Note", note, onChange = { note = it })
-            Button(onClick = {
-                run {
-                    viewModel.api.updateFormFile(
-                        fileId,
-                        buildJsonObject {
-                            put("displayName", displayName)
-                            put("note", note)
-                        },
-                    )
-                    editing = false
+            MorphSubmitButton(text = "Save") {
+                val nameError = FieldValidators.required(displayName, "Display name")
+                if (nameError != null) {
+                    error = nameError
+                    false
+                } else {
+                    try {
+                        viewModel.api.updateFormFile(
+                            fileId,
+                            buildJsonObject {
+                                put("displayName", displayName)
+                                put("note", note)
+                            },
+                        )
+                        editing = false
+                        onChanged()
+                        true
+                    } catch (e: Exception) {
+                        error = plainError(e, "That could not be done. Try again.")
+                        false
+                    }
                 }
-            }) { Text("Save") }
+            }
         }
         Text(
             "Update and delete are OWNER-gated, as in web Command.",
@@ -304,6 +338,8 @@ fun FormRecordFormScreen(viewModel: AppViewModel, nav: NavController, formId: In
     var clientName by remember { mutableStateOf("") }
     var confirmDelete by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var titleError by remember { mutableStateOf<String?>(null) }
+    var clientIdError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(formId) {
         if (formId != null) {
             try {
@@ -331,33 +367,41 @@ fun FormRecordFormScreen(viewModel: AppViewModel, nav: NavController, formId: In
                     if (clientName.isNotBlank()) {
                         DetailLine("Client", clientName)
                     }
-                    TextFieldRow("Title", title, onChange = { title = it })
+                    TextFieldRow("Title", title, onChange = { v -> title = v; if (titleError != null) titleError = FieldValidators.required(v, "Title") })
+                    if (titleError != null) Text(titleError!!, color = MaterialTheme.colorScheme.error)
                     TextFieldRow("Type", type, onChange = { type = it })
-                    TextFieldRow("Client ID (optional)", clientIdText, onChange = { clientIdText = it })
+                    TextFieldRow("Client ID (optional)", clientIdText, onChange = { v -> clientIdText = v; if (clientIdError != null) clientIdError = FieldValidators.wholeNumberIfPresent(v) })
+                    if (clientIdError != null) Text(clientIdError!!, color = MaterialTheme.colorScheme.error)
                     TextFieldRow("Data (JSON)", dataJson, onChange = { dataJson = it }, singleLine = false, minLines = 4)
                     ActionErrorText(error)
                     Spacer(Modifier.height(10.dp))
                     Row {
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    try {
-                                        val body = buildJsonObject {
-                                            put("title", title)
-                                            put("type", type)
-                                            clientIdText.toIntOrNull()?.let { put("clientId", it) }
-                                            put("dataJson", dataJson)
-                                        }
-                                        if (formId == null) viewModel.api.createForm(body)
-                                        else viewModel.api.editForm(formId, body)
-                                        nav.popBackStack()
-                                    } catch (e: Exception) {
-                                        error = plainError(e, "That could not be saved. Try again.")
-                                    }
-                                }
-                            },
+                        MorphSubmitButton(
+                            text = "Save",
                             modifier = Modifier.padding(end = 8.dp),
-                        ) { Text("Save") }
+                        ) {
+                            titleError = FieldValidators.required(title, "Title")
+                            clientIdError = FieldValidators.wholeNumberIfPresent(clientIdText)
+                            if (FieldValidators.firstError(titleError, clientIdError) != null) {
+                                false
+                            } else {
+                                try {
+                                    val body = buildJsonObject {
+                                        put("title", title)
+                                        put("type", type)
+                                        clientIdText.toIntOrNull()?.let { put("clientId", it) }
+                                        put("dataJson", dataJson)
+                                    }
+                                    if (formId == null) viewModel.api.createForm(body)
+                                    else viewModel.api.editForm(formId, body)
+                                    nav.popBackStack()
+                                    true
+                                } catch (e: Exception) {
+                                    error = plainError(e, "That could not be saved. Try again.")
+                                    false
+                                }
+                            }
+                        }
                         if (formId != null) {
                             OutlinedButton(onClick = { confirmDelete = true }) { Text("Delete") }
                         }

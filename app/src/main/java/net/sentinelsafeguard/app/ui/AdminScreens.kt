@@ -29,6 +29,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import net.sentinelsafeguard.app.data.api.adminAuditExport
 import net.sentinelsafeguard.app.data.api.adminAuditLog
+import android.content.Context
+import android.content.Intent
+import java.io.File
+import net.sentinelsafeguard.app.data.api.backupDownload
 import net.sentinelsafeguard.app.data.api.adminBackupDiscard
 import net.sentinelsafeguard.app.data.api.adminBackupRequest
 import net.sentinelsafeguard.app.data.api.adminBackupStatus
@@ -692,16 +696,91 @@ private fun AdminBackups(viewModel: AppViewModel) {
     var confirmText by remember { mutableStateOf("") }
     AsyncCard("Backups", loader = { viewModel.api.adminBackupStatus() }) { data, reload ->
         val state = Phase3Logic.str(data, "state")
+        // Do All 1.4.0 (item 11): a ready bundle carries its
+        // download path in the status payload and downloads
+        // in-app; until the payload carries one, the bundle
+        // still comes from Command on the web, as before.
+        val downloadUrl = Phase3Logic.strOrNull(data, "downloadUrl")
+        val bundleReady = state.equals("ready", ignoreCase = true) && downloadUrl != null
         DetailLine("State", Phase8bLogic.backupStateLabel(state))
         AnyLines(data, "state")
         Text(
-            "The bundle file itself downloads from Command on the web " +
-                "with the single-use token this status issues — the app " +
-                "mirrors the full request / ready / discard state machine.",
+            if (bundleReady) {
+                "The bundle is ready — download it here, or discard it below."
+            } else {
+                "The bundle file itself downloads from Command on the web " +
+                    "with the single-use token this status issues — the app " +
+                    "mirrors the full request / ready / discard state machine."
+            },
             color = SentinelMuted, style = MaterialTheme.typography.bodySmall,
         )
         var error by remember { mutableStateOf<String?>(null) }
         val act = rememberAction({ error = it }, { reload() })
+        // Bundle download (streams to the share cache, then the
+        // share sheet — the JsonUi shareBytes pattern, file-sized).
+        val context = LocalContext.current
+        val dlScope = rememberCoroutineScope()
+        var downloading by remember { mutableStateOf(false) }
+        var downloadedBytes by remember { mutableStateOf(0L) }
+        var downloadNote by remember { mutableStateOf<String?>(null) }
+        var confirmDownload by remember { mutableStateOf(false) }
+        if (bundleReady) {
+            Spacer(Modifier.height(8.dp))
+            Button(
+                enabled = !downloading,
+                onClick = { confirmDownload = true },
+            ) {
+                Text(if (downloading) "Downloading…" else "Download bundle")
+            }
+            if (downloading) {
+                Text(
+                    "Downloading… ${downloadedBytes / 1024} KB so far. Keep the app open.",
+                    color = SentinelMuted, style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (downloadNote != null) {
+                Text(downloadNote!!, color = SentinelMuted, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        if (confirmDownload && downloadUrl != null) {
+            ConfirmGate(
+                "Download the full server backup?",
+                "This downloads the complete server backup bundle to this phone — " +
+                    "everything in Command in one file. Treat it like a credential: " +
+                    "keep it somewhere safe and do not forward it casually.",
+                "Download bundle",
+                onDismiss = { confirmDownload = false },
+                onConfirm = {
+                    confirmDownload = false
+                    downloading = true
+                    downloadedBytes = 0L
+                    downloadNote = null
+                    dlScope.launch {
+                        val dir = File(context.cacheDir, "updates").apply { mkdirs() }
+                        val file = File(dir, backupFileName(downloadUrl))
+                        try {
+                            file.outputStream().buffered().use { out ->
+                                viewModel.api.backupDownload(downloadUrl) { chunk ->
+                                    out.write(chunk)
+                                    downloadedBytes += chunk.size
+                                }
+                            }
+                            downloadNote = "Downloaded ${downloadedBytes / 1024} KB — " +
+                                "pick where to save it."
+                            shareBackupFile(context, file)
+                        } catch (e: Exception) {
+                            file.delete()
+                            downloadNote = null
+                            error = plainError(
+                                e, "The bundle could not be downloaded. Try again.",
+                            )
+                        } finally {
+                            downloading = false
+                        }
+                    }
+                },
+            )
+        }
         Spacer(Modifier.height(8.dp))
         TextFieldRow("Type the confirm text exactly as web asks", confirmText, { confirmText = it })
         Row {
@@ -818,4 +897,35 @@ private fun AdminDanger(viewModel: AppViewModel) {
             },
         )
     }
+}
+
+/** A safe on-disk name for a downloaded backup bundle: the
+ *  download path's last segment, stripped of anything that is
+ *  not a plain filename character. */
+private fun backupFileName(downloadUrl: String): String {
+    val raw = downloadUrl.substringBefore('?').substringAfterLast('/')
+        .ifBlank { "backup-bundle" }
+    return raw.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "backup-bundle" }
+}
+
+/** Shares a downloaded bundle file through the system share
+ *  sheet — the same FileProvider pattern as JsonUi.shareBytes
+ *  (authority "<package>.files", the exposed updates cache),
+ *  for a file too large to hold as a ByteArray. */
+private fun shareBackupFile(context: Context, file: File) {
+    val uri = androidx.core.content.FileProvider.getUriForFile(
+        context, context.packageName + ".files", file,
+    )
+    val mime = when {
+        file.name.endsWith(".zip", ignoreCase = true) -> "application/zip"
+        file.name.endsWith(".gz", ignoreCase = true) -> "application/gzip"
+        file.name.endsWith(".tar", ignoreCase = true) -> "application/x-tar"
+        else -> "application/octet-stream"
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = mime
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, file.name))
 }

@@ -41,6 +41,7 @@ import net.sentinelsafeguard.app.data.api.deleteAsset
 import net.sentinelsafeguard.app.data.api.editAsset
 import net.sentinelsafeguard.app.data.api.ensureAssetQr
 import net.sentinelsafeguard.app.data.api.regenerateAssetQr
+import net.sentinelsafeguard.app.data.api.resolveAssetQr
 import net.sentinelsafeguard.app.data.api.restoreAsset
 import net.sentinelsafeguard.app.data.api.setAssetStatus
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
@@ -55,7 +56,7 @@ import net.sentinelsafeguard.app.ui.theme.SentinelMuted
  * construction — Addendum 18 battery).
  */
 
-private enum class AssetMode { Directory, Board, Renewals, Labels }
+private enum class AssetMode { Directory, Board, Renewals, Labels, Resolve }
 
 @Composable
 fun AssetsScreen(viewModel: AppViewModel, nav: NavController) {
@@ -79,6 +80,78 @@ fun AssetsScreen(viewModel: AppViewModel, nav: NavController) {
             AssetMode.Board -> AssetsDirectory(viewModel, nav, board = true)
             AssetMode.Renewals -> AssetRenewalsSurface(viewModel, nav)
             AssetMode.Labels -> AssetLabelsSurface(viewModel)
+            AssetMode.Resolve -> AssetResolveSurface(viewModel, nav)
+        }
+    }
+}
+
+/**
+ * Scan-to-asset (1.4.0 breakout — Batch 4's web tool, mirrored):
+ * type or paste the code off a printed asset label and land on
+ * that asset. The camera is a pure input over this same entry on
+ * the web; here the field takes the bare SCA code or the full
+ * label URL. A code the server doesn't know answers in the
+ * server's own words ("No asset matches that code.") with zero
+ * state change — codes cannot be probed past that one shape.
+ */
+@Composable
+private fun AssetResolveSurface(viewModel: AppViewModel, nav: NavController) {
+    var input by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<JsonObject?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        SectionHeader("Resolve a label code")
+        Text(
+            "Enter the SCA code from a printed asset label (or paste the label's full URL).",
+            color = SentinelMuted,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = input,
+            onValueChange = { input = it },
+            label = { Text("Label code") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = {
+                val code = Phase5Logic.assetCodeFromInput(input)
+                if (code.isBlank() || busy) return@Button
+                busy = true
+                scope.launch {
+                    try {
+                        result = viewModel.api.resolveAssetQr(code)
+                        error = null
+                    } catch (e: Exception) {
+                        error = plainError(e, "Couldn't resolve that code. Try again.")
+                        result = null
+                    }
+                    busy = false
+                }
+            },
+        ) { Text(if (busy) "Resolving…" else "Resolve") }
+        val r = result
+        if (error != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(error!!, color = MaterialTheme.colorScheme.error)
+        }
+        if (r != null) {
+            Spacer(Modifier.height(8.dp))
+            val asset = r["asset"] as? JsonObject
+            if (Phase3Logic.bool(r, "found") == true && asset != null) {
+                val id = Phase3Logic.int(asset, "id")
+                Text("Found: ${Phase3Logic.str(asset, "name")}")
+                if (id != null) {
+                    TextButton(onClick = { nav.navigate("asset/$id") }) {
+                        Text("Open asset")
+                    }
+                }
+            } else {
+                Text(Phase3Logic.str(r, "message").ifBlank { "No asset matches that code." })
+            }
         }
     }
 }
