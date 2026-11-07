@@ -311,13 +311,11 @@ fun ChipRow(
     var layouts by remember {
         mutableStateOf<Map<String, Pair<androidx.compose.ui.unit.IntOffset, androidx.compose.ui.unit.IntSize>>>(emptyMap())
     }
-    // Chip offsets are measured in root coordinates minus the
-    // FlowRow's own root origin (the pill is laid out from that
-    // same origin). positionInParent() proved unreliable in this
-    // Compose version (CI: its result widened to Any and the map
-    // type would not unify), so the difference is computed from
-    // positionInRoot(), which is stable API.
-    var rowOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    // Chip offsets come from LayoutCoordinates.boundsInParent()
+    // (core API): its left/top is the chip's offset inside the
+    // FlowRow, which is the same origin the pill is laid out
+    // from. (positionInParent()/positionInRoot() both proved
+    // unreliable in this Compose version — CI-verified.)
     val targetLayout = selected?.let { layouts[it] }
     val pillSpec = if (reduced) {
         androidx.compose.animation.core.tween<androidx.compose.ui.unit.IntOffset>(0)
@@ -368,9 +366,7 @@ fun ChipRow(
             )
         }
         FlowRow(
-            modifier = Modifier.fillMaxWidth().onGloballyPositioned { coords ->
-                rowOrigin = coords.positionInRoot()
-            },
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -383,12 +379,10 @@ fun ChipRow(
                         selectedContainerColor = Color.Transparent,
                     ),
                     modifier = Modifier.onGloballyPositioned { coords ->
-                        val root = coords.positionInRoot()
+                        val bounds = coords.boundsInParent()
                         val entry: Pair<androidx.compose.ui.unit.IntOffset, androidx.compose.ui.unit.IntSize> =
-                            androidx.compose.ui.unit.IntOffset(
-                                (root.x - rowOrigin.x).toInt(),
-                                (root.y - rowOrigin.y).toInt(),
-                            ) to coords.size
+                            androidx.compose.ui.unit.IntOffset(bounds.left, bounds.top) to
+                                androidx.compose.ui.unit.IntSize(bounds.width, bounds.height)
                         if (layouts[key] != entry) {
                             layouts = layouts + (key to entry)
                         }
