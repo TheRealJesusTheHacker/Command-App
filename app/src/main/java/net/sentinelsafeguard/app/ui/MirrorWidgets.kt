@@ -380,8 +380,16 @@ fun ChipRow(
                         selectedContainerColor = Color.Transparent,
                     ),
                     modifier = Modifier.onGloballyPositioned { coords ->
+                        // positionInParent() returns geometry.Offset
+                        // (float) in this Compose version — convert.
+                        val pos = coords.positionInParent()
                         val entry: Pair<androidx.compose.ui.unit.IntOffset, androidx.compose.ui.unit.IntSize> =
-                            Pair(coords.positionInParent(), coords.size)
+                            Pair(
+                                androidx.compose.ui.unit.IntOffset(
+                                    pos.x.toInt(), pos.y.toInt(),
+                                ),
+                                coords.size,
+                            )
                         if (layouts[key] != entry) {
                             layouts = layouts + (key to entry)
                         }
