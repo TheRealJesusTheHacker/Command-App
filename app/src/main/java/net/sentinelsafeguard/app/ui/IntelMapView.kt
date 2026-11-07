@@ -77,8 +77,8 @@ private class EsriSatelliteSource : OnlineTileSourceBase(
 ) {
     override fun getTileURLString(pMapTileIndex: Long): String = IntelMapTiles.esriUrl(
         MapTileIndex.getZoom(pMapTileIndex),
-        MapTileIndex.getTileX(pMapTileIndex),
-        MapTileIndex.getTileY(pMapTileIndex),
+        MapTileIndex.getX(pMapTileIndex),
+        MapTileIndex.getY(pMapTileIndex),
     )
 }
 
@@ -89,8 +89,8 @@ private class CartoDarkSource : OnlineTileSourceBase(
 ) {
     override fun getTileURLString(pMapTileIndex: Long): String = IntelMapTiles.cartoUrl(
         MapTileIndex.getZoom(pMapTileIndex),
-        MapTileIndex.getTileX(pMapTileIndex),
-        MapTileIndex.getTileY(pMapTileIndex),
+        MapTileIndex.getX(pMapTileIndex),
+        MapTileIndex.getY(pMapTileIndex),
     )
 }
 

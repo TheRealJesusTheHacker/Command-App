@@ -59,6 +59,16 @@ object PushLogic {
             NotifyCategory.TICKETS -> settings.notifyTickets
             NotifyCategory.MAIL -> settings.notifyMail
             NotifyCategory.SIGN_IN_ALERT -> settings.notifySignInAlerts
+            // 1.4.0 enum growth (Lane D channels): push events never
+            // map to these today (categoryFor above), but the when
+            // must stay exhaustive — critical rides its own toggle,
+            // estate-down rides the alerts toggle, money/digest
+            // have no per-category toggle (quiet hours still gate
+            // them inside QuietHours.shouldNotify).
+            NotifyCategory.CRITICAL -> settings.notifyCritical
+            NotifyCategory.ESTATE_DOWN -> settings.notifySignInAlerts
+            NotifyCategory.MONEY -> true
+            NotifyCategory.DIGEST -> true
         }
 
     private fun JsonObject.stringField(vararg names: String): String? {

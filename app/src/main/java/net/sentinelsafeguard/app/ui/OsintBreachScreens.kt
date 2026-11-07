@@ -1389,8 +1389,11 @@ private val EXIF_TAGS: List<String> = listOf(
     ExifInterface.TAG_FOCAL_LENGTH, ExifInterface.TAG_FLASH,
     ExifInterface.TAG_WHITE_BALANCE, ExifInterface.TAG_ARTIST,
     ExifInterface.TAG_COPYRIGHT, ExifInterface.TAG_IMAGE_DESCRIPTION,
-    ExifInterface.TAG_CAMERA_OWNER_NAME, ExifInterface.TAG_BODY_SERIAL_NUMBER,
-    ExifInterface.TAG_LENS_MAKE, ExifInterface.TAG_LENS_MODEL,
+    // NOTE: TAG_CAMERA_OWNER_NAME / TAG_BODY_SERIAL_NUMBER /
+    // TAG_LENS_MAKE / TAG_LENS_MODEL exist only in the androidx
+    // ExifInterface, which is not a dependency of this app — the
+    // framework android.media.ExifInterface used here has no such
+    // constants (CI proved it), so they are not read.
 )
 
 @Composable

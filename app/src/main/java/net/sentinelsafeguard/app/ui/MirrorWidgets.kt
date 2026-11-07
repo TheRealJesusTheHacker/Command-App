@@ -311,6 +311,13 @@ fun ChipRow(
     var layouts by remember {
         mutableStateOf<Map<String, Pair<androidx.compose.ui.unit.IntOffset, androidx.compose.ui.unit.IntSize>>>(emptyMap())
     }
+    // Chip offsets are measured in root coordinates minus the
+    // FlowRow's own root origin (the pill is laid out from that
+    // same origin). positionInParent() proved unreliable in this
+    // Compose version (CI: its result widened to Any and the map
+    // type would not unify), so the difference is computed from
+    // positionInRoot(), which is stable API.
+    var rowOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     val targetLayout = selected?.let { layouts[it] }
     val pillSpec = if (reduced) {
         androidx.compose.animation.core.tween<androidx.compose.ui.unit.IntOffset>(0)
@@ -361,7 +368,9 @@ fun ChipRow(
             )
         }
         FlowRow(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().onGloballyPositioned { coords ->
+                rowOrigin = coords.positionInRoot()
+            },
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -374,7 +383,12 @@ fun ChipRow(
                         selectedContainerColor = Color.Transparent,
                     ),
                     modifier = Modifier.onGloballyPositioned { coords ->
-                        val entry = coords.positionInParent() to coords.size
+                        val root = coords.positionInRoot()
+                        val entry: Pair<androidx.compose.ui.unit.IntOffset, androidx.compose.ui.unit.IntSize> =
+                            androidx.compose.ui.unit.IntOffset(
+                                (root.x - rowOrigin.x).toInt(),
+                                (root.y - rowOrigin.y).toInt(),
+                            ) to coords.size
                         if (layouts[key] != entry) {
                             layouts = layouts + (key to entry)
                         }
