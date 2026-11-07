@@ -311,11 +311,12 @@ fun ChipRow(
     var layouts by remember {
         mutableStateOf<Map<String, Pair<androidx.compose.ui.unit.IntOffset, androidx.compose.ui.unit.IntSize>>>(emptyMap())
     }
-    // Chip offsets come from LayoutCoordinates.boundsInParent()
-    // (core API): its left/top is the chip's offset inside the
-    // FlowRow, which is the same origin the pill is laid out
-    // from. (positionInParent()/positionInRoot() both proved
-    // unreliable in this Compose version — CI-verified.)
+    // Chip offsets come from LayoutCoordinates.positionInParent()
+    // (the extension import at the top of this file) — the chip's
+    // offset inside the FlowRow, the same origin the pill is laid
+    // out from. The Pair is constructed with explicit types: the
+    // bare infix form let the compiler widen the offset to Any
+    // and the layouts map type would not unify (CI-verified).
     val targetLayout = selected?.let { layouts[it] }
     val pillSpec = if (reduced) {
         androidx.compose.animation.core.tween<androidx.compose.ui.unit.IntOffset>(0)
@@ -379,10 +380,8 @@ fun ChipRow(
                         selectedContainerColor = Color.Transparent,
                     ),
                     modifier = Modifier.onGloballyPositioned { coords ->
-                        val bounds = coords.boundsInParent()
                         val entry: Pair<androidx.compose.ui.unit.IntOffset, androidx.compose.ui.unit.IntSize> =
-                            androidx.compose.ui.unit.IntOffset(bounds.left, bounds.top) to
-                                androidx.compose.ui.unit.IntSize(bounds.width, bounds.height)
+                            Pair(coords.positionInParent(), coords.size)
                         if (layouts[key] != entry) {
                             layouts = layouts + (key to entry)
                         }
