@@ -88,6 +88,17 @@ import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceTop
  * data; presentation elevates), so server-side purpose notes
  * and activity logging hold exactly as before.
  *
+ * 1.5.0: the deck wires Command's nine new live server legs —
+ * subdomain / dns / site / archive / btc / eth / breach are
+ * identifier types on the same surface (no new endpoints);
+ * the IP tool carries the allocation & geo leg and plots it
+ * when the payload carries coordinates; the email breach tool
+ * runs the dedicated two-corpus "breach" battery; the username
+ * tool's variations are swept server-side inside its run (the
+ * old on-device batch tool was removed — see OsintLogic); the
+ * dork generator stays an explicitly labeled on-device preview
+ * fed by the server's templates, new type keys included.
+ *
  * Estate rails, in the UI and not just the docs:
  *  - a purpose note is required on EVERY run (owner included) —
  *    the field is on every run form and the server refuses
@@ -366,7 +377,6 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
         }
         when (toolId) {
             "username" -> UsernameToolScreen(viewModel, workspace, prefill, back, openReport)
-            "usernameVariations" -> UsernameVariationsScreen(viewModel, workspace, prefill, back)
             "email" -> EmailToolScreen(viewModel, workspace, prefill, back, openReport)
             "emailBreach" -> EmailBreachToolScreen(viewModel, workspace, prefill, back, openReport)
             "name" -> NameToolScreen(viewModel, workspace, prefill, back, openReport)
@@ -375,6 +385,12 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
             "peopleLinks" -> PeopleLinksToolScreen(viewModel, workspace, prefill, back, openReport)
             "domain" -> DomainToolScreen(viewModel, workspace, prefill, back, openReport)
             "ip" -> IpToolScreen(viewModel, workspace, prefill, back, openReport)
+            "subdomains" -> SubdomainsToolScreen(viewModel, workspace, prefill, back, openReport)
+            "dns" -> DnsToolScreen(viewModel, workspace, prefill, back, openReport)
+            "siteInspector" -> SiteInspectorToolScreen(viewModel, workspace, prefill, back, openReport)
+            "archive" -> ArchiveToolScreen(viewModel, workspace, prefill, back, openReport)
+            "btc" -> BtcToolScreen(viewModel, workspace, prefill, back, openReport)
+            "eth" -> EthToolScreen(viewModel, workspace, prefill, back, openReport)
             "dork" -> DorkToolScreen(viewModel, workspace, prefill, back, openReport)
             "plate" -> PlateToolScreen(viewModel, workspace, prefill, back, openReport)
             "vin" -> VinToolScreen(viewModel, workspace, prefill, back, openReport)
@@ -438,7 +454,7 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
                             if (detectCandidates.isNotEmpty()) {
                                 Spacer(Modifier.height(6.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    detectCandidates.take(4).forEach { cand ->
+                                    detectCandidates.take(5).forEach { cand ->
                                         OutlinedButton(onClick = {
                                             prefill = detectValue
                                             route = when (cand) {
@@ -453,6 +469,13 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
                                                 "vin" -> "vin"
                                                 "tail" -> "tail"
                                                 "callsign" -> "callsign"
+                                                "subdomain" -> "subdomains"
+                                                "dns" -> "dns"
+                                                "site" -> "siteInspector"
+                                                "archive" -> "archive"
+                                                "btc" -> "btc"
+                                                "eth" -> "eth"
+                                                "breach" -> "emailBreach"
                                                 else -> "username"
                                             }
                                         }) { Text(cand) }
@@ -608,9 +631,9 @@ private fun ToolCard(tool: OsintLogic.Tool, entranceIndex: Int, onClick: () -> U
                             Spacer(Modifier.width(8.dp))
                             MirrorChip("MANUAL")
                         }
-                        if (tool.id == "exif") {
+                        if (tool.chip != null) {
                             Spacer(Modifier.width(8.dp))
-                            MirrorChip("ON-DEVICE")
+                            MirrorChip(tool.chip!!)
                         }
                     }
                     Text(tool.subtitle, color = SentinelMuted, style = MaterialTheme.typography.bodyMedium)
@@ -634,6 +657,10 @@ private val OSINT_TYPE_LABELS: Map<String, String> = mapOf(
     "ip" to "IP address", "plate" to "License plate",
     "vin" to "VIN", "tail" to "Aircraft tail number",
     "callsign" to "Amateur radio callsign",
+    "subdomain" to "Subdomain enumeration", "dns" to "DNS explorer",
+    "site" to "Website (TLS / headers)", "archive" to "Web archive history",
+    "btc" to "Bitcoin address", "eth" to "Ethereum address",
+    "breach" to "Email breach check",
 )
 
 /**
@@ -790,6 +817,11 @@ private fun UsernameToolScreen(
         viewModel = viewModel,
         tool = OsintLogic.tool("username")!!, workspace = workspace,
         initialValue = initial, onBack = onBack, onOpenReport = onOpenReport,
+        banner = "The server sweeps handle variations inside this same run — " +
+            "separator swaps and common alternate forms, re-checked on the " +
+            "fast subset of sites — and reports them as their own graded " +
+            "entry (\"Username variations\") in the report. A matching " +
+            "variation is a different handle: a lead, not an identification.",
         runLabel = "Run username sweep",
     )
 }
@@ -816,11 +848,14 @@ private fun EmailBreachToolScreen(
         viewModel = viewModel,
         tool = OsintLogic.tool("emailBreach")!!, workspace = workspace,
         initialValue = initial, onBack = onBack, onOpenReport = onOpenReport,
-        focusSource = "XposedOrNot",
-        banner = "Breach-focused view of the email battery: the run is the ordinary " +
-            "email search (same endpoint, same purpose note, same activity log), and " +
-            "the report opens on its exposure leg — the XposedOrNot check — with the " +
-            "Have I Been Pwned manual step beside it.",
+        banner = "A dedicated breach battery on the server (type \"breach\") — " +
+            "not the general email check, and no profile leg. Two independent " +
+            "corpora are searched and graded separately in the report: the " +
+            "XposedOrNot breach index, enriched by its exposure analytics " +
+            "(breach names, years, exposed data classes — never password " +
+            "values), and the LeakCheck public index. A corpus that does " +
+            "not answer grades unavailable, never a negative. " +
+            OsintLogic.BREACH_COVERAGE_LINE,
         runLabel = "Check this email for breaches",
     )
 }
@@ -909,7 +944,126 @@ private fun IpToolScreen(
         viewModel = viewModel,
         tool = OsintLogic.tool("ip")!!, workspace = workspace,
         initialValue = initial, onBack = onBack, onOpenReport = onOpenReport,
+        banner = "Three legs in one run: the RDAP registration record, reverse " +
+            "DNS (PTR), and IP intelligence — allocation and geo from public " +
+            "registries. A resolver failure grades \"unavailable\", never as " +
+            "no-record. Allocation and geo data describe the network " +
+            "operator, not a person. When a result carries coordinates, " +
+            "the report plots them on the Sentinel map.",
         runLabel = "Run IP intel",
+    )
+}
+
+@Composable
+private fun SubdomainsToolScreen(
+    viewModel: AppViewModel, workspace: JsonObject?, initial: String,
+    onBack: () -> Unit, onOpenReport: (Int, String?, Boolean) -> Unit,
+) {
+    IdentifierRunScreen(
+        viewModel = viewModel,
+        tool = OsintLogic.tool("subdomains")!!, workspace = workspace,
+        initialValue = initial, onBack = onBack, onOpenReport = onOpenReport,
+        banner = "Two evidence sources merged into one graded entry: " +
+            "certificate-transparency logs (crt.sh + Certspotter) and a " +
+            "live DNS sweep of 70 common names. Every name found states " +
+            "its evidence — in the CT logs, resolving, or both. If the " +
+            "domain runs wildcard DNS, the report says so plainly: a name " +
+            "that answers only because everything answers is flagged.",
+        runLabel = "Enumerate subdomains",
+    )
+}
+
+@Composable
+private fun DnsToolScreen(
+    viewModel: AppViewModel, workspace: JsonObject?, initial: String,
+    onBack: () -> Unit, onOpenReport: (Int, String?, Boolean) -> Unit,
+) {
+    IdentifierRunScreen(
+        viewModel = viewModel,
+        tool = OsintLogic.tool("dns")!!, workspace = workspace,
+        initialValue = initial, onBack = onBack, onOpenReport = onOpenReport,
+        banner = "The full record battery over DNS-over-HTTPS: A, AAAA, " +
+            "CNAME, MX, NS, SOA, TXT and CAA, the SPF policy split out of " +
+            "TXT, DMARC, DKIM via the common selectors (labeled as " +
+            "guesses — selectors cannot be known from the domain alone), " +
+            "and the DNSSEC state. Hand it an IP address instead and it " +
+            "runs reverse DNS (PTR) plus IP intelligence.",
+        runLabel = "Explore DNS",
+    )
+}
+
+@Composable
+private fun SiteInspectorToolScreen(
+    viewModel: AppViewModel, workspace: JsonObject?, initial: String,
+    onBack: () -> Unit, onOpenReport: (Int, String?, Boolean) -> Unit,
+) {
+    IdentifierRunScreen(
+        viewModel = viewModel,
+        tool = OsintLogic.tool("siteInspector")!!, workspace = workspace,
+        initialValue = initial, onBack = onBack, onOpenReport = onOpenReport,
+        banner = "Facts only — no letter grades, no secure/insecure verdicts. " +
+            "The TLS leg shakes hands with the site directly and reports " +
+            "the certificate it is actually served (subject, SANs, issuer, " +
+            "validity, protocol, cipher); certificate transparency " +
+            "supplements it; the headers leg reports which response " +
+            "headers were sent, with their values. If an intermediary " +
+            "answers the handshake instead of the site, the TLS leg " +
+            "grades unavailable and says so — the CT facts stand in.",
+        runLabel = "Inspect site",
+    )
+}
+
+@Composable
+private fun ArchiveToolScreen(
+    viewModel: AppViewModel, workspace: JsonObject?, initial: String,
+    onBack: () -> Unit, onOpenReport: (Int, String?, Boolean) -> Unit,
+) {
+    IdentifierRunScreen(
+        viewModel = viewModel,
+        tool = OsintLogic.tool("archive")!!, workspace = workspace,
+        initialValue = initial, onBack = onBack, onOpenReport = onOpenReport,
+        banner = "The Wayback Machine's capture history for a domain or URL: " +
+            "total captures (\"at least N\" when the archive's answer is " +
+            "bounded — honesty over precision), earliest and latest " +
+            "captures, a per-year histogram, and sample captures with " +
+            "working replay links. Zero captures from an archive that " +
+            "answered is an honest not-found; an archive that does not " +
+            "answer grades unavailable, never a negative.",
+        runLabel = "Browse snapshots",
+    )
+}
+
+@Composable
+private fun BtcToolScreen(
+    viewModel: AppViewModel, workspace: JsonObject?, initial: String,
+    onBack: () -> Unit, onOpenReport: (Int, String?, Boolean) -> Unit,
+) {
+    IdentifierRunScreen(
+        viewModel = viewModel,
+        tool = OsintLogic.tool("btc")!!, workspace = workspace,
+        initialValue = initial, onBack = onBack, onOpenReport = onOpenReport,
+        banner = OsintLogic.WALLET_NOTE + " Balance and totals are stated in " +
+            "bitcoin and in raw satoshis — the smallest unit, exact. " +
+            "Public chain explorers are tried in order and the report " +
+            "names the one that answered.",
+        runLabel = "Look up Bitcoin address",
+    )
+}
+
+@Composable
+private fun EthToolScreen(
+    viewModel: AppViewModel, workspace: JsonObject?, initial: String,
+    onBack: () -> Unit, onOpenReport: (Int, String?, Boolean) -> Unit,
+) {
+    IdentifierRunScreen(
+        viewModel = viewModel,
+        tool = OsintLogic.tool("eth")!!, workspace = workspace,
+        initialValue = initial, onBack = onBack, onOpenReport = onOpenReport,
+        banner = OsintLogic.WALLET_NOTE + " Balance and totals are stated in " +
+            "ether and in raw wei — the smallest unit, exact. Public " +
+            "chain explorers are tried in order and the report names " +
+            "the one that answered.",
+        runLabel = "Look up Ethereum address",
     )
 }
 
@@ -1114,119 +1268,6 @@ private fun CriminalToolScreen(
 }
 
 // ---------------------------------------------------------------------
-// Username variation sweep (one purpose note, N sequential runs)
-// ---------------------------------------------------------------------
-
-@Composable
-private fun UsernameVariationsScreen(
-    viewModel: AppViewModel, workspace: JsonObject?, initial: String,
-    onBack: () -> Unit,
-) {
-    val tool = OsintLogic.tool("usernameVariations")!!
-    val scope = rememberCoroutineScope()
-    var handle by remember { mutableStateOf(initial) }
-    var purpose by remember { mutableStateOf("") }
-    var phase by remember { mutableStateOf(RunPhase.IDLE) }
-    var statusLine by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    var notice by remember { mutableStateOf<String?>(null) }
-    var doneCount by remember { mutableStateOf(0) }
-    val variants = remember(handle) { OsintLogic.usernameVariants(handle) }
-    ToolScaffold(tool.title, tool.subtitle, onBack) {
-        item {
-            MirrorCard("How the batch works", topTier = true) {
-                Text(
-                    "Variants are generated on-device by pattern (separator swaps, " +
-                        "joined and initial forms, common affixes). The endpoint runs " +
-                        "one identifier per search, so the batch is sequential ordinary " +
-                        "searches — ONE purpose note covers the batch, every variant run " +
-                        "is labeled with it and activity-logged like any other run, and " +
-                        "each variant compiles its own report under Reports.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
-        item {
-            MirrorCard("Run") {
-                TextFieldRow("Username / handle", handle, onChange = { handle = it })
-                if (variants.isNotEmpty()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Batch of ${variants.size} (one run):",
-                        color = SentinelMuted,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    variants.forEachIndexed { i, v ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                if (phase == RunPhase.RUNNING || phase == RunPhase.DONE) {
-                                    when {
-                                        i < doneCount -> "✓"
-                                        i == doneCount && phase == RunPhase.RUNNING -> "…"
-                                        else -> "·"
-                                    }
-                                } else {
-                                    "·"
-                                },
-                                color = SentinelGreen,
-                                modifier = Modifier.width(20.dp),
-                            )
-                            Text(v, fontFamily = FontFamily.Monospace)
-                        }
-                    }
-                }
-                PurposeRunPanel(
-                    purpose = purpose, onPurpose = { purpose = it },
-                    phase = phase, statusLine = statusLine,
-                    error = error, notice = notice,
-                    runLabel = "Run variation batch (${variants.size})",
-                    onRun = {
-                        if (variants.isEmpty()) {
-                            error = "Enter a handle of at least two characters."
-                            return@PurposeRunPanel
-                        }
-                        scope.launch {
-                            phase = RunPhase.SUBMITTING
-                            error = null
-                            notice = null
-                            doneCount = 0
-                            var queued = 0
-                            try {
-                                for ((i, variant) in variants.withIndex()) {
-                                    phase = RunPhase.RUNNING
-                                    statusLine = "Queueing variant ${i + 1} of ${variants.size}: $variant…"
-                                    val body = buildJsonObject {
-                                        put("purpose", purpose +
-                                            " — variation batch: $variant of $handle")
-                                        put("identifiers", JsonArray(listOf(buildJsonObject {
-                                            put("type", "username"); put("value", variant)
-                                        })))
-                                    }
-                                    viewModel.api.osintCreateSearch(body)
-                                    queued++
-                                    doneCount = queued
-                                }
-                                phase = RunPhase.DONE
-                                statusLine = "Batch queued: $queued variant runs."
-                                notice = "Each variant compiles its own report — watch " +
-                                    "Searches and Reports on the deck as they land."
-                            } catch (e: Exception) {
-                                phase = RunPhase.FAILED
-                                error = plainError(
-                                    e,
-                                    "The batch stopped after $queued queued runs. Try again.",
-                                )
-                            }
-                        }
-                    },
-                )
-            }
-        }
-        item { Spacer(Modifier.height(16.dp)) }
-    }
-}
-
-// ---------------------------------------------------------------------
 // Dork pack generator (per-target, from the workspace templates)
 // ---------------------------------------------------------------------
 
@@ -1273,10 +1314,13 @@ private fun DorkToolScreen(
                 TextFieldRow("City (optional)", city, onChange = { city = it })
                 TextFieldRow("State (optional, e.g. MO)", state, onChange = { state = it })
                 Text(
-                    "Generation is on-device from the server's own templates — the same " +
-                        "pack the toolkit embeds in every report for this type. Generating " +
-                        "is not a search and needs no purpose note; running the full search " +
-                        "below does.",
+                    "ON-DEVICE PREVIEW — generation happens on this phone from the " +
+                        "server's own templates (the new subdomain, DNS and wallet " +
+                        "types included). It is not a search: nothing is sent, " +
+                        "nothing is logged, and no purpose note is needed to " +
+                        "preview. The graded dork pack that ships inside every " +
+                        "search report is the server's own. Running the full " +
+                        "search below is a server run and does need one.",
                     color = SentinelMuted,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -1757,12 +1801,13 @@ private fun SourceResultCard(result: JsonObject, onOpenUrl: (String) -> Unit) {
                         fontFamily = FontFamily.Monospace,
                     )
                 }
-                val findings = Phase3Logic.arr(result, "findings")
+                val entry = OsintLogic.parseSourceEntry(result)
+                val findings = entry.findings
                 findings.forEach { f ->
                     Spacer(Modifier.height(8.dp))
-                    val fTitle = Phase3Logic.str(f, "title")
-                    val fDetail = Phase3Logic.strOrNull(f, "detail")
-                    val fUrl = Phase3Logic.strOrNull(f, "url")
+                    val fTitle = f.title
+                    val fDetail = f.detail
+                    val fUrl = f.url
                     if (fTitle.isNotBlank()) {
                         Text(fTitle, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                     }
@@ -1791,6 +1836,44 @@ private fun SourceResultCard(result: JsonObject, onOpenUrl: (String) -> Unit) {
                             }
                         }
                     }
+                }
+                // IP intelligence: plot ONLY when the payload itself
+                // carries coordinates (OsintLogic.ipIntelCoordinates) —
+                // the current server payload reports location as text,
+                // so this stays empty rather than inventing a pin.
+                val ipPoint = OsintLogic.ipIntelCoordinates(result)
+                if (ipPoint != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Payload coordinates — plotted exactly as reported",
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    SentinelMap(
+                        markers = listOf(
+                            IntelMapLogic.SimpleMarker(
+                                markerId = "ipintel",
+                                lat = ipPoint.first,
+                                lon = ipPoint.second,
+                                title = Phase3Logic.str(result, "source"),
+                                detailLines = listOf(
+                                    "Position" to OsintLogic.coordinateReadout(
+                                        ipPoint.first, ipPoint.second,
+                                    ),
+                                ),
+                                pulse = true,
+                                pulseBaseRadiusMeters = 20_000.0,
+                            ),
+                        ),
+                        onMarkerTap = {},
+                        accent = SentinelGreen,
+                        frameCenter = IntelMapLogic.MapPoint(ipPoint.first, ipPoint.second),
+                        frameZoom = 9.0,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .padding(top = 6.dp),
+                    )
                 }
                 val note = Phase3Logic.strOrNull(result, "note")
                 if (!note.isNullOrBlank()) {

@@ -40,6 +40,7 @@ class OsintLogicTest {
             listOf(
                 "name", "username", "email", "phone", "address",
                 "domain", "ip", "plate", "vin", "tail", "callsign",
+                "subdomain", "dns", "site", "archive", "btc", "eth", "breach",
             ),
             OsintLogic.SERVER_TYPES,
         )

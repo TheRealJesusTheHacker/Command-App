@@ -86,6 +86,21 @@ object IntelMapLogic {
         val alpha: Int = 170,
     )
 
+    /** A single caller-shaped point — e.g. an OSINT IP-intelligence
+     *  result whose payload carries coordinates (1.5.0). The caller
+     *  supplies coordinates only when a payload actually carries
+     *  them; this model never derives a position. */
+    data class SimpleMarker(
+        override val markerId: String,
+        override val lat: Double,
+        override val lon: Double,
+        override val title: String,
+        override val detailLines: List<Pair<String, String>> = emptyList(),
+        override val pulse: Boolean = false,
+        override val emergency: Boolean = false,
+        override val pulseBaseRadiusMeters: Double = 20_000.0,
+    ) : MapMarkerModel
+
     // ------------------------------------------------------- pinned numbers
 
     /** Per-attacker marker ground circle: base + sqrt scaling. */

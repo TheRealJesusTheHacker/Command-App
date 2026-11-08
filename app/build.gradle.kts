@@ -89,8 +89,16 @@ android {
         // settings instead of a prompt that never appears, and
         // the grant state is re-read on resume. versionCode 105
         // steps over 104 so it upgrades in place.
-        versionCode = 105
-        versionName = "1.4.1"
+        // 1.5.0 (2026-11-07): the OSINT deck wires Command's nine
+        // new live server legs — subdomain finder, DNS explorer,
+        // IP intelligence (map plot when the payload carries
+        // coordinates), site inspector, Wayback snapshot browser,
+        // BTC/ETH wallet lookups, the two-corpus email breach
+        // battery, server-side username variations and the new
+        // dork template keys. versionCode 106 steps over 105 so
+        // it upgrades in place.
+        versionCode = 106
+        versionName = "1.5.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")

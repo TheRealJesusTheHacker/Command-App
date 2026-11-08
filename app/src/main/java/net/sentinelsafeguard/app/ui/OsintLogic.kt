@@ -1,5 +1,7 @@
 package net.sentinelsafeguard.app.ui
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.util.Locale
 
 /**
@@ -8,13 +10,23 @@ import java.util.Locale
  * rule without a device.
  *
  * The deck mirrors the server toolkit exactly (Command
- * server.py, OSINT-2026-10-27): the eleven identifier types, the
+ * server.py, OSINT-2026-10-27): the identifier types, the
  * two run kinds (identifier / criminal), the per-source status
  * vocabulary (found / not_found / unavailable / manual) and the
  * confidence vocabulary (record / mention / possible / info).
  * Nothing here invents a source, a grade, or a label the server
  * does not already use — presentation elevates, data does not
  * change (mirror law).
+ *
+ * 1.5.0: the deck wires Command's nine new live server legs
+ * (contracts in sentinel-live-deploy/COMMAND-TOOLS-PROGRAM-
+ * 2026-11-07/contracts/): seven new identifier types
+ * (subdomain, dns, site, archive, btc, eth, breach) ride the
+ * same /api/app/osint surface, the IP battery gains its
+ * allocation & geo leg, the username battery gains its
+ * server-side variation sweep, and the dork templates gain
+ * the new type keys. Reconciliations are stated where the
+ * tools live, below.
  */
 object OsintLogic {
 
@@ -45,11 +57,30 @@ object OsintLogic {
             "itself, a lawful basis for employment, housing, or credit " +
             "eligibility decisions."
 
+    /** The server's standing wallet note (_WALLET_NOTE), verbatim.
+     *  Carried on every wallet result the server returns; the deck
+     *  states it up front, before the run. */
+    const val WALLET_NOTE =
+        "An address is not an identity. Only public chain facts are " +
+            "shown; no dollar value is stated anywhere in this result " +
+            "(no price source is consulted)."
+
+    /** The breach battery's coverage statement (email-breach
+     *  contract, verbatim): partial coverage stated plainly —
+     *  Have I Been Pwned, the largest corpus, is NOT covered. */
+    const val BREACH_COVERAGE_LINE =
+        "Corpora searched: XposedOrNot + LeakCheck public index. " +
+            "Have I Been Pwned is NOT covered — its account lookup " +
+            "requires a paid key."
+
+    /** The server's IP-intelligence source name, verbatim. */
+    const val IP_INTEL_SOURCE = "IP intelligence (allocation & geo)"
+
     // ---- Deck model -------------------------------------------------
 
     enum class Group(val title: String, val subtitle: String) {
         IDENTITY("Identity", "Handles, inboxes, people and places"),
-        NETWORK("Network", "Domains, addresses and search craft"),
+        NETWORK("Network", "Domains, addresses, chains and search craft"),
         VEHICLES_AIR("Vehicles & Air", "Plates, VINs, tails and callsigns"),
         BACKGROUND("Background", "Public-records background battery"),
         BREACH("Breach", "Exposure checks and the breach register"),
@@ -69,13 +100,14 @@ object OsintLogic {
         val typeKey: String? = null,
         val kind: String = "identifier",
         val manual: Boolean = false,
+        /** Corner chip for tools whose nature must be labeled on
+         *  the card itself (on-device tools). Null = no chip. */
+        val chip: String? = null,
     )
 
     val TOOLS: List<Tool> = listOf(
-        Tool("username", "Username sweep", "Profile checks across public sites",
-            Group.IDENTITY, typeKey = "username"),
-        Tool("usernameVariations", "Username variation sweep",
-            "One purpose note, a batch of handle variants",
+        Tool("username", "Username sweep",
+            "Profile checks across public sites — variations swept server-side",
             Group.IDENTITY, typeKey = "username"),
         Tool("email", "Email check", "Validation, exposure and profile traces",
             Group.IDENTITY, typeKey = "email"),
@@ -90,10 +122,26 @@ object OsintLogic {
             Group.IDENTITY, typeKey = "name", manual = true),
         Tool("domain", "Domain intel", "Registration, DNS, certificates, archive",
             Group.NETWORK, typeKey = "domain"),
-        Tool("ip", "IP intel", "Allocation holder and reverse DNS",
+        Tool("ip", "IP intel", "RDAP, reverse DNS, allocation & geo",
             Group.NETWORK, typeKey = "ip"),
-        Tool("dork", "Dork pack generator", "Targeted search queries, built per target",
-            Group.NETWORK),
+        Tool("subdomains", "Subdomain finder",
+            "Certificate transparency + live DNS wordlist sweep",
+            Group.NETWORK, typeKey = "subdomain"),
+        Tool("dns", "DNS explorer",
+            "Every record type, DMARC, DKIM guesses, DNSSEC state",
+            Group.NETWORK, typeKey = "dns"),
+        Tool("siteInspector", "Site inspector",
+            "TLS certificate, response headers and tech facts",
+            Group.NETWORK, typeKey = "site"),
+        Tool("btc", "Bitcoin wallet",
+            "Balance and totals in BTC and satoshis — never a dollar value",
+            Group.NETWORK, typeKey = "btc"),
+        Tool("eth", "Ethereum wallet",
+            "Balance and totals in ETH and wei — never a dollar value",
+            Group.NETWORK, typeKey = "eth"),
+        Tool("dork", "Dork pack generator",
+            "On-device preview — the graded pack ships inside server reports",
+            Group.NETWORK, chip = "ON-DEVICE PREVIEW"),
         Tool("plate", "License plate", "Format check and lawful official routes",
             Group.VEHICLES_AIR, typeKey = "plate"),
         Tool("vin", "VIN decode", "Factory build data from the VIN decoder",
@@ -105,14 +153,18 @@ object OsintLogic {
         Tool("criminal", "Criminal background",
             "Public-information battery — possible matches only",
             Group.BACKGROUND, kind = "criminal"),
-        Tool("emailBreach", "Email breach check", "One tap into the exposure leg",
-            Group.BREACH, typeKey = "email"),
+        Tool("archive", "Wayback snapshot browser",
+            "Capture history and replay links for a site, back to its first snapshot",
+            Group.BACKGROUND, typeKey = "archive"),
+        Tool("emailBreach", "Email breach check",
+            "Two corpora, graded separately — HIBP not covered",
+            Group.BREACH, typeKey = "breach"),
         Tool("breachRegister", "Breach Intel register",
             "The living breach register and circulation intel",
             Group.BREACH),
         Tool("exif", "Image EXIF viewer",
             "On-device only — photo metadata, nothing uploaded",
-            Group.ON_DEVICE),
+            Group.ON_DEVICE, chip = "ON-DEVICE"),
     )
 
     fun tool(id: String): Tool? = TOOLS.firstOrNull { it.id == id }
@@ -122,10 +174,12 @@ object OsintLogic {
     /** Groups in deck order, only those that carry tools. */
     val GROUPS: List<Group> = Group.entries.filter { g -> TOOLS.any { it.group == g } }
 
-    /** Server identifier types in the server's own order. */
+    /** Server identifier types in the server's own order
+     *  (OSINT_TYPES): the original eleven, then the 1.5.0 legs. */
     val SERVER_TYPES: List<String> = listOf(
         "name", "username", "email", "phone", "address",
         "domain", "ip", "plate", "vin", "tail", "callsign",
+        "subdomain", "dns", "site", "archive", "btc", "eth", "breach",
     )
 
     /** Every server type has a dedicated deck tool. */
@@ -168,17 +222,113 @@ object OsintLogic {
         return texts.any { it?.contains("POSSIBLE MATCH") == true }
     }
 
+    // ---- Server source entries (the _osint_src shape) -------------
+
+    data class SourceFinding(val title: String, val detail: String?, val url: String?)
+
+    data class SourceEntry(
+        val source: String,
+        val status: String,
+        val summary: String?,
+        val note: String?,
+        val confidence: String?,
+        val findings: List<SourceFinding>,
+    )
+
+    /**
+     * Shape one server per-source entry — the `_osint_src` shape
+     * every OSINT leg returns ({source, status, summary,
+     * findings[{title, url, detail}], url, confidence, note,
+     * retrievedAt}) — into the deck's model. Pure field reads:
+     * nothing is reworded, re-graded, or dropped.
+     */
+    fun parseSourceEntry(result: JsonObject): SourceEntry = SourceEntry(
+        source = Phase3Logic.str(result, "source"),
+        status = Phase3Logic.str(result, "status"),
+        summary = Phase3Logic.strOrNull(result, "summary"),
+        note = Phase3Logic.strOrNull(result, "note"),
+        confidence = Phase3Logic.strOrNull(result, "confidence"),
+        findings = Phase3Logic.arr(result, "findings").map { f ->
+            SourceFinding(
+                title = Phase3Logic.str(f, "title"),
+                detail = Phase3Logic.strOrNull(f, "detail"),
+                url = Phase3Logic.strOrNull(f, "url"),
+            )
+        },
+    )
+
+    /**
+     * Coordinates for the IP-intelligence entry, ONLY when the
+     * payload itself carries them: a structured lat/lon pair on
+     * the entry or one of its findings, or an explicit
+     * "lat, lon" pair in the entry's own text. The server's
+     * current payload reports location as text ("Location:
+     * City, Region, Country") with no coordinates — this
+     * returns null for it and the report shows no pin. Nothing
+     * is geocoded or invented here; if a future payload carries
+     * coordinates, they are plotted verbatim.
+     */
+    fun ipIntelCoordinates(result: JsonObject): Pair<Double, Double>? {
+        if (!Phase3Logic.str(result, "source")
+                .equals(IP_INTEL_SOURCE, ignoreCase = true)
+        ) {
+            return null
+        }
+        structuredPair(result)?.let { return it }
+        for (f in Phase3Logic.arr(result, "findings")) {
+            structuredPair(f)?.let { return it }
+        }
+        val texts = listOfNotNull(
+            Phase3Logic.strOrNull(result, "summary"),
+            Phase3Logic.strOrNull(result, "note"),
+        ) + Phase3Logic.arr(result, "findings").flatMap { f ->
+            listOfNotNull(
+                Phase3Logic.strOrNull(f, "title"),
+                Phase3Logic.strOrNull(f, "detail"),
+            )
+        }
+        for (t in texts) {
+            extractCoordinates(t)?.let { return it }
+        }
+        return null
+    }
+
+    private fun structuredPair(obj: JsonObject): Pair<Double, Double>? {
+        fun num(vararg keys: String): Double? {
+            for (k in keys) {
+                val p = obj[k] as? JsonPrimitive ?: continue
+                p.content.toDoubleOrNull()?.let { return it }
+            }
+            return null
+        }
+        val lat = num("lat", "latitude") ?: return null
+        val lon = num("lon", "lng", "longitude") ?: return null
+        return if (lat in -90.0..90.0 && lon in -180.0..180.0) {
+            lat to lon
+        } else {
+            null
+        }
+    }
+
     // ---- Username variants ------------------------------------------
 
     private val HANDLE_OK = Regex("^[a-z0-9][a-z0-9._-]{1,38}[a-z0-9]$|^[a-z0-9]{2,40}$")
 
     /**
-     * Deterministic handle variants for the variation sweep:
-     * separator swaps, joined forms, initial forms, and the
-     * common numeric / qualifier affixes. The handle itself is
-     * always first; output is de-duplicated, validity-filtered,
-     * and capped at [max]. Pure string logic — each variant is
-     * still run through the ordinary server search endpoint.
+     * Deterministic handle variants: separator swaps, joined
+     * forms, initial forms, and the common numeric / qualifier
+     * affixes. The handle itself is always first; output is
+     * de-duplicated, validity-filtered, and capped at [max].
+     *
+     * 1.5.0 reconciliation: the variation SWEEP itself moved
+     * server-side — Command generates its own bounded variant
+     * set (max 4) inside every username run and reports it as
+     * a graded, logged "Username variations" entry in the same
+     * report, so the deck's old standalone on-device batch tool
+     * (up to 12 sequential searches) was removed rather than
+     * duplicate the run. This generator stays as the pinned
+     * pattern reference for the variant family; it is not
+     * wired to any run.
      */
     fun usernameVariants(raw: String, max: Int = 12): List<String> {
         val base = raw.trim().removePrefix("@").lowercase()
