@@ -105,8 +105,17 @@ android {
         // unrecorded — every pre-1.5.1 install) registration
         // heals once per version, and sign-out resets the state.
         // versionCode 107 steps over 106 so it upgrades in place.
-        versionCode = 107
-        versionName = "1.5.1"
+        // 1.5.2 (2026-11-08): two features from Sentinel Live's
+        // Elevation Program relay bundle. F4: the app Settings
+        // mirror the server-side push event preferences
+        // (GET/POST /api/app/push/prefs — one store with the
+        // web actions; the server's values are rendered, never
+        // a local copy). F3: OSINT pivot actions in the deck —
+        // server-offered chained runs from a completed result,
+        // purpose carried by the server, lineage shown.
+        // versionCode 108 steps over 107 so it upgrades in place.
+        versionCode = 108
+        versionName = "1.5.2"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")

@@ -57,9 +57,12 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import net.sentinelsafeguard.app.BuildConfig
 import net.sentinelsafeguard.app.data.api.DeviceInfo
+import net.sentinelsafeguard.app.data.api.pushPrefs
+import net.sentinelsafeguard.app.data.api.pushPrefsSet
 import net.sentinelsafeguard.app.notify.NotifAllowAction
 import net.sentinelsafeguard.app.notify.NotifPermission
 import net.sentinelsafeguard.app.notify.NotifPermissionState
+import net.sentinelsafeguard.app.notify.PushPrefsLogic
 import net.sentinelsafeguard.app.notify.QuietHours
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
@@ -135,6 +138,65 @@ fun SettingsScreen(
         if (granted) settings.notifyPermissionExplainerDismissed = false
     }
     var notifyCritical by remember { mutableStateOf(settings.notifyCritical) }
+
+    // 1.5.2 (Elevation F4): the server-side push event
+    // preferences. These are read from GET /api/app/push/prefs
+    // on entry and written back per toggle — the values shown
+    // are always the SERVER's, never a local copy that could
+    // drift from Command on the web (one store, migration
+    // 0169). A failed load shows the failure and offers no
+    // toggles rather than rendering invented defaults.
+    var serverPushPrefs by remember { mutableStateOf<PushPrefsLogic.Prefs?>(null) }
+    var pushPrefsLoading by remember { mutableStateOf(true) }
+    var pushPrefsError by remember { mutableStateOf<String?>(null) }
+    var pushPrefsSaving by remember { mutableStateOf(false) }
+    var pushPrefsReload by remember { mutableStateOf(0) }
+    LaunchedEffect(pushPrefsReload) {
+        pushPrefsLoading = true
+        try {
+            val parsed = PushPrefsLogic.parse(viewModel.api.pushPrefs())
+            if (parsed == null) {
+                pushPrefsError = "The server answered, but its push choices " +
+                    "could not be read. Nothing is shown rather than a guess."
+            } else {
+                serverPushPrefs = parsed
+                pushPrefsError = null
+            }
+        } catch (e: Exception) {
+            pushPrefsError = plainError(
+                e, "Your server push choices could not be loaded.")
+        } finally {
+            pushPrefsLoading = false
+        }
+    }
+
+    fun onServerPushToggle(key: String, value: Boolean) {
+        if (serverPushPrefs == null || pushPrefsSaving) return
+        scope.launch {
+            pushPrefsSaving = true
+            try {
+                val out = viewModel.api.pushPrefsSet(
+                    PushPrefsLogic.writeBody(key, value))
+                val parsed = PushPrefsLogic.parse(out)
+                if (parsed == null) {
+                    // The write may have landed; re-read the
+                    // server's truth instead of guessing.
+                    pushPrefsError = "That change could not be confirmed — " +
+                        "reloading the server's values."
+                    pushPrefsReload++
+                } else {
+                    serverPushPrefs = parsed
+                    pushPrefsError = null
+                }
+            } catch (e: Exception) {
+                pushPrefsError = plainError(
+                    e, "That change could not be saved. " +
+                        "The switches still show the server's values.")
+            } finally {
+                pushPrefsSaving = false
+            }
+        }
+    }
 
     var updateBusy by remember { mutableStateOf(false) }
     var updateNote by remember { mutableStateOf<String?>(null) }
@@ -245,6 +307,57 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
             }
         }
+        Spacer(Modifier.height(12.dp))
+        Text("Push notifications", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "These choices live on your Sentinel server and apply " +
+                "everywhere you sign in — Command on the web shows the " +
+                "same switches. They decide which events the server " +
+                "sends to your devices at all. The switches further " +
+                "down are this phone's own display choices and are " +
+                "not changed by these.",
+            color = SentinelMuted,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(4.dp))
+        when {
+            pushPrefsLoading && serverPushPrefs == null -> Text(
+                "Loading your server choices…",
+                color = SentinelMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            serverPushPrefs == null -> {
+                if (pushPrefsError != null) {
+                    Text(
+                        pushPrefsError!!,
+                        color = SentinelDanger,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                OutlinedButton(onClick = { pushPrefsReload++ }) {
+                    Text("Try again")
+                }
+            }
+            else -> {
+                val prefs = serverPushPrefs!!
+                PushPrefsLogic.KEYS.forEach { key ->
+                    ToggleRow(
+                        PushPrefsLogic.label(key),
+                        PushPrefsLogic.note(key),
+                        prefs.value(key),
+                        enabled = !pushPrefsSaving,
+                    ) { picked -> onServerPushToggle(key, picked) }
+                }
+                if (pushPrefsError != null) {
+                    Text(
+                        pushPrefsError!!,
+                        color = SentinelDanger,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
         Text(
             "The app checks for new tickets and mail about every 15 minutes.",
             color = SentinelMuted,
@@ -678,6 +791,7 @@ private fun ToggleRow(
     title: String,
     body: String?,
     checked: Boolean,
+    enabled: Boolean = true,
     onChange: (Boolean) -> Unit,
 ) {
     Row(
@@ -692,6 +806,6 @@ private fun ToggleRow(
                 Text(body, color = SentinelMuted, style = MaterialTheme.typography.bodyMedium)
             }
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
 }

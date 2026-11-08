@@ -112,6 +112,16 @@ import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceTop
  *  - reports close with the FCRA footer;
  *  - breach circulation venue links are never stored (the
  *    server refuses them in its own words; the form says so).
+ *
+ * 1.5.2 (Elevation F3): pivot actions. Completed search rows
+ * and the full report view offer the server-computed pivots
+ * ({fromType, value, type, label} — ip → site/subdomain,
+ * domain → subdomains/DNS/Wayback, email → breach/username;
+ * nothing else offers any). One tap queues the chained run
+ * with NO purpose in the body — the server carries the
+ * parent run's purpose verbatim and ignores a sent one —
+ * and the child report names its parent (parentSearchId).
+ * No pivot is ever derived client-side.
  */
 
 // ---------------------------------------------------------------------
@@ -151,6 +161,54 @@ private suspend fun awaitSearch(
         }
     }
     return null to null
+}
+
+/**
+ * 1.5.2 (Elevation F3): submit ONE server-offered pivot and
+ * poll it to its report, exactly like a fresh run — except
+ * the body carries NO purpose (see OsintLogic.pivotRunBody):
+ * the server carries the parent run's purpose verbatim and
+ * says so in its response, which the run state repeats.
+ * Returns awaitSearch's (reportId, failureNote) pair.
+ */
+private suspend fun runPivotSearch(
+    viewModel: AppViewModel,
+    parentSearchId: Int,
+    pivot: OsintLogic.Pivot,
+    onStatus: (String) -> Unit,
+): Pair<Int?, String?> {
+    val out = viewModel.api.osintCreateSearch(
+        OsintLogic.pivotRunBody(parentSearchId, pivot))
+    val sid = Phase3Logic.int(out, "searchId")
+        ?: return null to "The server did not queue this pivot run. Try again."
+    val carried = Phase3Logic.strOrNull(out, "purpose")
+    onStatus(
+        "Pivot queued — running under the purpose carried from " +
+            "the parent run" + (carried?.let { ": \"$it\"" } ?: "") + "…",
+    )
+    return awaitSearch(viewModel, sid, onStatus)
+}
+
+/** The pivot buttons block, shared by the report view and the
+ *  deck's completed search rows: one button per server offer,
+ *  nothing offered that the server did not compute. */
+@Composable
+private fun PivotActions(
+    pivots: List<OsintLogic.Pivot>,
+    busy: Boolean,
+    statusLine: String,
+    error: String?,
+    onRun: (OsintLogic.Pivot) -> Unit,
+) {
+    pivots.forEach { pivot ->
+        OutlinedButton(
+            onClick = { onRun(pivot) },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        ) { Text(OsintLogic.pivotActionLabel(pivot)) }
+    }
+    if (busy) RunStateLine(RunPhase.RUNNING, statusLine)
+    ActionErrorText(error)
 }
 
 @Composable
@@ -349,6 +407,39 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
         }
     }
 
+    // 1.5.2 (Elevation F3): pivot runs launched from the deck's
+    // completed search rows. The offers ride the search objects
+    // themselves; one tap queues the chained run (no purpose —
+    // the server carries the parent's) and lands in its report.
+    var pivotBusyFor by remember { mutableStateOf<Int?>(null) }
+    var pivotStatus by remember { mutableStateOf("") }
+    var pivotError by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    fun runDeckPivot(parentSid: Int, pivot: OsintLogic.Pivot) {
+        if (pivotBusyFor != null) return
+        scope.launch {
+            pivotBusyFor = parentSid
+            pivotError = null
+            pivotStatus = "Submitting the pivot run…"
+            try {
+                val (rid, fail) = runPivotSearch(viewModel, parentSid, pivot) {
+                    pivotStatus = it
+                }
+                when {
+                    rid != null -> reportTarget = Triple(rid, null, false)
+                    fail != null -> pivotError = parentSid to fail
+                    else -> notice = "Pivot still running on the server — " +
+                        "watch Searches on the deck."
+                }
+            } catch (e: Exception) {
+                pivotError = parentSid to
+                    plainError(e, "That pivot could not be run. Try again.")
+            } finally {
+                pivotBusyFor = null
+                state.reloadKey++
+            }
+        }
+    }
+
     // A dedicated tool or the report view replaces the deck.
     reportTarget?.let { (id, focus, manualOnly) ->
         OsintReportView(
@@ -358,6 +449,9 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
             focusManual = manualOnly,
             onBack = { reportTarget = null; state.reloadKey++ },
             onDelete = { confirmDeleteReport = id; reportTarget = null },
+            onOpenChildReport = { childId ->
+                reportTarget = Triple(childId, null, false)
+            },
         )
         confirmDeleteReport?.let { rid ->
             ConfirmGate("Delete report", "This permanently deletes this OSINT report.", "Delete",
@@ -514,21 +608,60 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
                     }
                     itemsIndexed(searches) { i, search ->
                         val rid = Phase3Logic.int(search, "reportId")
-                        ItemRow(
-                            title = Phase3Logic.str(search, "subject"),
-                            subtitle = listOfNotNull(
-                                Phase3Logic.strOrNull(search, "status"),
-                                Phase3Logic.strOrNull(search, "purpose"),
-                                Phase3Logic.strOrNull(search, "requestedByName"),
-                            ).joinToString(" · "),
-                            badge = Phase3Logic.strOrNull(search, "status"),
-                            entranceIndex = i,
-                            onClick = if (rid != null) {
-                                { reportTarget = Triple(rid, null, false) }
+                        val sid = Phase3Logic.int(search, "id")
+                        val searchPivots =
+                            if (Phase3Logic.str(search, "status") == "done") {
+                                OsintLogic.parsePivots(search)
                             } else {
-                                null
-                            },
-                        )
+                                emptyList()
+                            }
+                        val searchParent =
+                            Phase3Logic.int(search, "parentSearchId")
+                        Column {
+                            ItemRow(
+                                title = Phase3Logic.str(search, "subject"),
+                                subtitle = listOfNotNull(
+                                    Phase3Logic.strOrNull(search, "status"),
+                                    if (searchParent != null) {
+                                        "Pivot of search #$searchParent"
+                                    } else {
+                                        null
+                                    },
+                                    Phase3Logic.strOrNull(search, "purpose"),
+                                    Phase3Logic.strOrNull(search, "requestedByName"),
+                                ).joinToString(" · "),
+                                badge = Phase3Logic.strOrNull(search, "status"),
+                                entranceIndex = i,
+                                onClick = if (rid != null) {
+                                    { reportTarget = Triple(rid, null, false) }
+                                } else {
+                                    null
+                                },
+                            )
+                            if (searchPivots.isNotEmpty() && sid != null) {
+                                MirrorCard("Pivot from this result") {
+                                    Text(
+                                        "One tap runs one related leg on the same " +
+                                            "identifier, under this search's own " +
+                                            "purpose — the server carries it over " +
+                                            "and logs the run as a pivot of this " +
+                                            "search, so no purpose note is asked " +
+                                            "for here.",
+                                        color = SentinelMuted,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    PivotActions(
+                                        pivots = searchPivots,
+                                        busy = pivotBusyFor == sid,
+                                        statusLine = pivotStatus,
+                                        error = pivotError
+                                            ?.takeIf { it.first == sid }?.second,
+                                        onRun = { runDeckPivot(sid, it) },
+                                    )
+                                }
+                            }
+                        }
                     }
                     val reports = Phase3Logic.arr(data, "reports")
                     item { SectionHeader("Reports", reports.size) }
@@ -1564,9 +1697,41 @@ private fun OsintReportView(
     focusManual: Boolean,
     onBack: () -> Unit,
     onDelete: () -> Unit,
+    onOpenChildReport: (Int) -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val state = rememberJsonScreen { viewModel.api.osintReport(reportId) }
+    // 1.5.2 (Elevation F3): a pivot launched from this report
+    // runs under this search's own purpose (carried by the
+    // server) and lands in the child run's report, which names
+    // this search as its parent.
+    var pivotBusy by remember { mutableStateOf(false) }
+    var pivotStatus by remember { mutableStateOf("") }
+    var pivotError by remember { mutableStateOf<String?>(null) }
+    fun runReportPivot(parentSid: Int, pivot: OsintLogic.Pivot) {
+        if (pivotBusy) return
+        scope.launch {
+            pivotBusy = true
+            pivotError = null
+            pivotStatus = "Submitting the pivot run…"
+            try {
+                val (rid, fail) = runPivotSearch(viewModel, parentSid, pivot) {
+                    pivotStatus = it
+                }
+                when {
+                    rid != null -> onOpenChildReport(rid)
+                    fail != null -> pivotError = fail
+                    else -> pivotStatus = "Still running on the server — " +
+                        "it lands under Searches on the deck."
+                }
+            } catch (e: Exception) {
+                pivotError = plainError(e, "That pivot could not be run. Try again.")
+            } finally {
+                pivotBusy = false
+            }
+        }
+    }
     Column {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1650,6 +1815,54 @@ private fun OsintReportView(
                                         "by hand. Nothing was scraped.",
                                     color = SentinelMuted,
                                     style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                    // 1.5.2 (Elevation F3): lineage + pivot offers,
+                    // both read from the report object itself —
+                    // the server adds purpose, parentSearchId and
+                    // pivots to the full report. A child report
+                    // names its parent; a completed parent offers
+                    // its pivots. Neither renders when absent.
+                    val reportPivots = OsintLogic.parsePivots(report)
+                    val reportSearchId = Phase3Logic.int(report, "searchId")
+                    val reportParentId = Phase3Logic.int(report, "parentSearchId")
+                    val reportPurpose = Phase3Logic.strOrNull(report, "purpose")
+                    if (reportParentId != null) {
+                        item {
+                            MirrorCard("A pivot run") {
+                                Text(
+                                    "This search is a pivot of search " +
+                                        "#$reportParentId. Its purpose was carried " +
+                                        "from the parent run by the server" +
+                                        (reportPurpose?.let { ": \"$it\"" } ?: "") +
+                                        " — a pivot never takes a new purpose " +
+                                        "of its own.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                        }
+                    }
+                    if (reportPivots.isNotEmpty() && reportSearchId != null) {
+                        item {
+                            MirrorCard("Pivot from this result") {
+                                Text(
+                                    "One tap runs one related leg on the same " +
+                                        "identifier. The run uses this search's " +
+                                        "purpose — carried over by the server " +
+                                        "and logged as a pivot of this search — " +
+                                        "so no purpose note is asked for here.",
+                                    color = SentinelMuted,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                PivotActions(
+                                    pivots = reportPivots,
+                                    busy = pivotBusy,
+                                    statusLine = pivotStatus,
+                                    error = pivotError,
+                                    onRun = { runReportPivot(reportSearchId, it) },
                                 )
                             }
                         }

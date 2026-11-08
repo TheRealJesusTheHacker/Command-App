@@ -67,6 +67,24 @@ suspend fun SentinelApi.pushPoll(since: Long, wait: Int = 0): JsonObject =
     )
 
 /**
+ * 1.5.2 (Elevation F4): reads this user's server-side push
+ * event preferences ({ok, prefs:{ticket_assigned,
+ * ticket_replied, critical_alert}}). One store backs the web
+ * actions and these endpoints (migration 0169), so what this
+ * returns is what Command on the web shows — no local copy.
+ */
+suspend fun SentinelApi.pushPrefs(): JsonObject =
+    callJson("GET", "/api/app/push/prefs")
+
+/**
+ * Writes a partial prefs change ({"prefs": {…}} — omitted
+ * kinds keep their value) and returns the same readback
+ * shape as [pushPrefs]: the server's full current state.
+ */
+suspend fun SentinelApi.pushPrefsSet(body: JsonObject): JsonObject =
+    callJson("POST", "/api/app/push/prefs", body.toString())
+
+/**
  * Acknowledges delivery of the outbox events [ids]; the server marks
  * them sent so they are not redelivered. Numeric ids are sent as
  * numbers, matching the server's outbox id type.

@@ -1,7 +1,10 @@
 package net.sentinelsafeguard.app.ui
 
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.util.Locale
 
 /**
@@ -363,6 +366,68 @@ object OsintLogic {
         add("its" + base)
         return out.take(max.coerceAtLeast(1))
     }
+
+    // ---- Pivot actions (Elevation F3) -------------------------------
+
+    /**
+     * One server-offered pivot action ({fromType, value, type,
+     * label}): from a completed result, run leg [type] on
+     * [value] — the target the server prefilled (for the
+     * email → username pivot, the address's local part; every
+     * other target verbatim). Offers are computed by the
+     * SERVER per identifier; the client never derives one.
+     */
+    data class Pivot(
+        val fromType: String,
+        val value: String,
+        val type: String,
+        val label: String,
+    )
+
+    /**
+     * Parse the `pivots` array the server adds to search
+     * objects (GET /api/app/osint) and full reports
+     * (GET /api/app/osint/reports/{id}). Entries missing a
+     * leg type or a target value are dropped; an object with
+     * no pivots field (or an empty array — every unmapped
+     * type, every criminal search, every unfinished run)
+     * yields an empty list, and the UI offers nothing.
+     */
+    fun parsePivots(obj: JsonObject?): List<Pivot> =
+        Phase3Logic.arr(obj, "pivots").mapNotNull { p ->
+            val type = Phase3Logic.strOrNull(p, "type")
+                ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val value = Phase3Logic.strOrNull(p, "value")
+                ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            Pivot(
+                fromType = Phase3Logic.str(p, "fromType"),
+                value = value,
+                type = type,
+                label = Phase3Logic.strOrNull(p, "label")
+                    ?.takeIf { it.isNotBlank() } ?: type,
+            )
+        }
+
+    /**
+     * The pivot run body for POST /api/app/osint/searches:
+     * {parentSearchId, identifiers: [{type, value}]} — exactly
+     * one offered pivot per call. There is deliberately NO
+     * purpose key: the server carries the parent run's
+     * purpose verbatim and ignores any purpose a caller sends,
+     * so the client never sends one (Elevation F3 contract).
+     */
+    fun pivotRunBody(parentSearchId: Int, pivot: Pivot): JsonObject =
+        buildJsonObject {
+            put("parentSearchId", parentSearchId)
+            put("identifiers", JsonArray(listOf(buildJsonObject {
+                put("type", pivot.type)
+                put("value", pivot.value)
+            })))
+        }
+
+    /** The plain-words action line for one pivot button. */
+    fun pivotActionLabel(pivot: Pivot): String =
+        "Pivot: run ${pivot.label} on ${pivot.value}"
 
     // ---- Dork pack ----------------------------------------------------
 
