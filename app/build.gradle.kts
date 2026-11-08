@@ -97,8 +97,16 @@ android {
         // battery, server-side username variations and the new
         // dork template keys. versionCode 106 steps over 105 so
         // it upgrades in place.
-        versionCode = 106
-        versionName = "1.5.0"
+        // Hotfix 1.5.1 (2026-11-08): the push-registration latch.
+        // A registration made against the pre-activation server
+        // latched registered=true forever, so the device never
+        // re-registered once push actually activated. Now the
+        // registration records its versionCode and a stale (or
+        // unrecorded — every pre-1.5.1 install) registration
+        // heals once per version, and sign-out resets the state.
+        // versionCode 107 steps over 106 so it upgrades in place.
+        versionCode = 107
+        versionName = "1.5.1"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")

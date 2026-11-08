@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
+import net.sentinelsafeguard.app.BuildConfig
 import net.sentinelsafeguard.app.config.AppConfig
 import net.sentinelsafeguard.app.data.PushStore
 import net.sentinelsafeguard.app.data.SecureStore
@@ -117,6 +118,40 @@ object PushLogic {
         return if (maxId != null) maxOf(current, maxId) else current
     }
 
+    /**
+     * Registration lifecycle (1.5.1): register when this install
+     * has never registered, OR when the recorded registration
+     * belongs to an older app version than the one running. A
+     * recorded version of 0 means no version was ever recorded —
+     * every pre-1.5.1 registration, including ones made against
+     * the server before push activation existed — and heals the
+     * same way: exactly once, by re-registering for the current
+     * version. A registration recorded at the current version
+     * latches: later runs do not re-register until sign-out
+     * resets the store or the next version bump.
+     */
+    fun needsRegistration(
+        registered: Boolean,
+        registeredVersionCode: Int,
+        currentVersionCode: Int,
+    ): Boolean = !registered || registeredVersionCode < currentVersionCode
+
+    /**
+     * The (registered, registeredVersionCode) state to persist
+     * after a registration attempt. Success records the current
+     * version, which is what latches the heal above. Failure
+     * persists the incoming state untouched — nothing latches,
+     * so the next worker run retries.
+     */
+    fun afterRegistrationAttempt(
+        succeeded: Boolean,
+        registered: Boolean,
+        registeredVersionCode: Int,
+        currentVersionCode: Int,
+    ): Pair<Boolean, Int> =
+        if (succeeded) true to currentVersionCode
+        else registered to registeredVersionCode
+
     /** Display title for an event whose payload left it blank. */
     fun fallbackTitle(kind: String): String = when {
         kind == "critical_alert" -> "Critical alert"
@@ -164,13 +199,32 @@ class PushWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         api.deviceToken = secure.deviceToken
 
         try {
-            // Register once per install/session: the flag lives in
-            // PushStore and sign-out resets it, so the next sign-in
-            // registers again (the server self-populates live tokens
-            // from re-registration).
-            if (!pushStore.registered) {
+            // Registration lifecycle (PushLogic.needsRegistration):
+            // register on first run, once more after sign-out
+            // (AppViewModel.signOut calls
+            // PushStore.resetDeliveryState), and exactly once per
+            // app version when the recorded registration predates
+            // the running build — the heal that lets a device
+            // registered against the pre-activation server
+            // re-register now that push is on (the server
+            // self-populates live tokens from re-registration).
+            // A failed attempt throws before any state is written,
+            // so nothing latches and the next run retries.
+            if (PushLogic.needsRegistration(
+                    pushStore.registered,
+                    pushStore.registeredVersionCode,
+                    BuildConfig.VERSION_CODE,
+                )
+            ) {
                 api.pushRegister(pushStore.pushToken)
-                pushStore.registered = true
+                val newState = PushLogic.afterRegistrationAttempt(
+                    succeeded = true,
+                    registered = pushStore.registered,
+                    registeredVersionCode = pushStore.registeredVersionCode,
+                    currentVersionCode = BuildConfig.VERSION_CODE,
+                )
+                pushStore.registered = newState.first
+                pushStore.registeredVersionCode = newState.second
             }
 
             val response = api.pushPoll(since = pushStore.cursor, wait = 0)

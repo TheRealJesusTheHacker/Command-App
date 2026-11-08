@@ -40,16 +40,32 @@ class PushStore(context: Context) {
         get() = prefs.getBoolean(KEY_REGISTERED, false)
         set(value) = prefs.edit().putBoolean(KEY_REGISTERED, value).apply()
 
+    /**
+     * The app versionCode whose registration succeeded, or 0 when
+     * no registration has ever recorded one (every install from
+     * before 1.5.1 — their registrations predate version
+     * recording, and at least one predates push activation
+     * itself). The worker heals a registration whose recorded
+     * version is older than the running build by re-registering
+     * once for the new version (see PushLogic.needsRegistration).
+     */
+    var registeredVersionCode: Int
+        get() = prefs.getInt(KEY_REGISTERED_VERSION_CODE, 0)
+        set(value) = prefs.edit().putInt(KEY_REGISTERED_VERSION_CODE, value).apply()
+
     /** Poll cursor: pass as `since` on the next poll. 0 = from the start. */
     var cursor: Long
         get() = prefs.getLong(KEY_CURSOR, 0L)
         set(value) = prefs.edit().putLong(KEY_CURSOR, value).apply()
 
-    /** Forgets registration and cursor (sign-out); the token itself
-     *  is kept — it identifies the install, not the session. */
+    /** Forgets registration, its version record, and the cursor
+     *  (sign-out); the token itself is kept — it identifies the
+     *  install, not the session. Called from AppViewModel.signOut
+     *  so the next sign-in's worker run registers fresh. */
     fun resetDeliveryState() {
         prefs.edit()
             .putBoolean(KEY_REGISTERED, false)
+            .putInt(KEY_REGISTERED_VERSION_CODE, 0)
             .putLong(KEY_CURSOR, 0L)
             .apply()
     }
@@ -58,6 +74,7 @@ class PushStore(context: Context) {
         const val FILE_NAME = "sentinel_push"
         private const val KEY_PUSH_TOKEN = "push_token"
         private const val KEY_REGISTERED = "push_registered"
+        private const val KEY_REGISTERED_VERSION_CODE = "push_registered_version_code"
         private const val KEY_CURSOR = "push_cursor"
     }
 }

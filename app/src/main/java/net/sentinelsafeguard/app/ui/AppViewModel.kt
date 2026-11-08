@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import net.sentinelsafeguard.app.BuildConfig
 import net.sentinelsafeguard.app.config.AppConfig
+import net.sentinelsafeguard.app.data.PushStore
 import net.sentinelsafeguard.app.data.SecureStore
 import net.sentinelsafeguard.app.data.SettingsStore
 import net.sentinelsafeguard.app.data.api.LoginResult
@@ -27,6 +28,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val secure = SecureStore(application)
     val settings = SettingsStore(application)
+    val pushStore = PushStore(application)
     val mail = MailService()
 
     val api = SentinelApi(AppConfig.api, OkHttpTransport(AppConfig.api.baseUrl))
@@ -200,6 +202,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             api.logout()
             secure.clearAll()
+            // Push registration belongs to the session, not the
+            // install: forget it (and its version record) so the
+            // next sign-in's PushWorker run registers fresh —
+            // the reset PushWorker's lifecycle has always assumed.
+            pushStore.resetDeliveryState()
             mail.clearCache()
             me = null
             meLoaded = false
