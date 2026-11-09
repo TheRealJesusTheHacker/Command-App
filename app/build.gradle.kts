@@ -114,8 +114,18 @@ android {
         // server-offered chained runs from a completed result,
         // purpose carried by the server, lineage shown.
         // versionCode 108 steps over 107 so it upgrades in place.
-        versionCode = 108
-        versionName = "1.5.2"
+        // 1.5.3 (2026-11-08, owner order — LOGO RULE): the launcher
+        // icon is now Skyler's real Sentinel Safeguard logo (the
+        // icon-sentinel-logo package, generated from
+        // your_files/brand/sentinel-safeguard-logo.jpg), replacing
+        // the drawn shield-and-checkmark vector foreground, which
+        // is retired and pinned absent by LauncherIconTest. The
+        // notification small icon likewise becomes a silhouette
+        // mechanically derived from the real logo's triangle
+        // emblem. versionCode 109 steps over 108 so it upgrades
+        // in place.
+        versionCode = 109
+        versionName = "1.5.3"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")
