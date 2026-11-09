@@ -206,7 +206,7 @@ class Wave161Test {
         assertEquals(40, h.oldestOpenTicketAgeDays)
         assertEquals(1, h.overdueInvoices)
         assertEquals(0, h.expiringAssets)
-        assertEquals(0, h.daysSinceContact)
+        assertEquals(0L, h.daysSinceContact)
         assertEquals(2, h.deductions.size)
         assertEquals("Open ticket age", h.deductions[0].label)
         assertEquals(-10, h.deductions[0].points)
