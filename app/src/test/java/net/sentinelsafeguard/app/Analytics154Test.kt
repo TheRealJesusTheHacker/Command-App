@@ -239,12 +239,14 @@ class Analytics154Test {
     @Test
     fun gate403ClassifiesUnauthorized() = runTest {
         val api = apiWith(403, FORBIDDEN)
-        val error = try {
+        var caught: ApiException? = null
+        try {
             api.analytics()
-            fail("expected ApiException")
         } catch (e: ApiException) {
-            e
+            caught = e
         }
+        assertTrue("expected ApiException", caught != null)
+        val error = caught!!
         assertEquals(403, error.status)
         assertEquals(AnalyticsLogic.State.Unauthorized, AnalyticsLogic.stateForError(error))
         // A non-gate failure is NOT a state — the caller shows
