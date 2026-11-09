@@ -1079,6 +1079,15 @@ private fun ReportsFeedbackScreen(viewModel: AppViewModel) {
                     Phase3Logic.str(brief, "state").ifBlank { Phase3Logic.str(brief, "status") },
                     color = SentinelMuted, style = MaterialTheme.typography.bodySmall,
                 )
+                // 1.5.5: an engine-delivered brief (state sent,
+                // sentBy null) is labeled as automation — never
+                // left blank, never given a fabricated sender.
+                Phase8bLogic.briefDeliveryNote(brief)?.let { note ->
+                    Text(
+                        note,
+                        color = SentinelMuted, style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (bid != null) {
                     Row {
                         TextButton(onClick = { act { viewModel.api.reportBriefMarkSent(bid) } }) {

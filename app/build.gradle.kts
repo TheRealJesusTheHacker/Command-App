@@ -142,8 +142,25 @@ android {
         // in ONE defensive default (the portal shell — least
         // privilege), logged, never the Command shell.
         // versionCode 110 steps over 109 so it upgrades in place.
-        versionCode = 110
-        versionName = "1.5.4"
+        // 1.5.5 (2026-11-09): client-portal parity for the
+        // Combined window's two delivered sections + honest
+        // auto-delivered brief labeling. (A) The getmyportal
+        // payload's threatBriefs ({id, period, title, body,
+        // deliveredAt}) and monthlyReports ({id, period, body,
+        // deliveredAt}) sections render natively in the portal's
+        // Your Documents view — read-only bodies, no download
+        // control (the payload carries no document field), the
+        // honest empty lines when nothing is delivered, absent
+        // keys degrading to the same empty state as web's
+        // `|| []` reads. (B) Staff brief rows: state "sent"
+        // with sentBy carried as an explicit null (the engine
+        // now delivers briefs to the portal at generation) is
+        // labeled "Delivered automatically" — never blank,
+        // never a fabricated sender; a real sentBy, a draft,
+        // or a payload with no sentBy key gets no note.
+        // versionCode 111 steps over 110 so it upgrades in place.
+        versionCode = 111
+        versionName = "1.5.5"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")

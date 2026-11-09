@@ -1,5 +1,6 @@
 package net.sentinelsafeguard.app.ui
 
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -57,6 +58,27 @@ object Phase8bLogic {
         val created = Phase3Logic.long(row, "createdAt")
         if (created != null && created > 0) parts += formatEpochMs(created)
         return parts.joinToString(" · ")
+    }
+
+    /** 1.5.5 — the threat-brief delivery note for staff rows.
+     *  Since the DRAFTSTORE window (2026-11-09) the brief
+     *  engine delivers briefs to the client portal itself at
+     *  generation: those rows arrive state "sent" with
+     *  sentBy NULL — no staff member sent them. A sent brief
+     *  whose payload CARRIES sentBy as an explicit null gets
+     *  the honest automation label; a sent brief with a real
+     *  sentBy keeps the existing rendering (null here — no
+     *  note); drafts and every other state get no note. A
+     *  payload with NO sentBy key at all (a pre-window server)
+     *  also gets no note: the app labels only what the payload
+     *  states, never what it merely omits, so no sender —
+     *  human or machine — is ever fabricated either way. */
+    fun briefDeliveryNote(brief: JsonObject): String? {
+        val state = Phase3Logic.str(brief, "state")
+            .ifBlank { Phase3Logic.str(brief, "status") }
+        if (state != "sent") return null
+        if (!brief.containsKey("sentBy")) return null
+        return if (brief["sentBy"] is JsonNull) "Delivered automatically" else null
     }
 
     /** The shown-once value in a create response, when the

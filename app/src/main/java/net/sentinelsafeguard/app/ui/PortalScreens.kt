@@ -337,6 +337,77 @@ fun PortalDocumentsScreen(viewModel: AppViewModel, nav: NavController) {
                 )
             }
         }
+        // 1.5.5 (DRAFTSTORE-2026-11-09): the portal payload's
+        // delivered sections. Web paints both sections always
+        // (its `|| []` reads degrade an absent key to the same
+        // empty state), so the app mirrors that: the section
+        // renders, empty means the honest empty line. Rows open
+        // read-only — the brief's body rides the payload; the
+        // report's body rides it too and the payload carries
+        // NO document/download field, so no download control
+        // exists here. Client-safe by construction: the rows
+        // are the server's portal whitelist shapes (id, period,
+        // title, body, deliveredAt) — nothing staff-side rides.
+        AsyncCard("Threat Briefs", loader = { viewModel.api.portalHome() }) { home, _ ->
+            if (Phase3Logic.bool(home, "linked") == false) {
+                UnlinkedNotice()
+            } else {
+                val rows = PortalBriefs155Logic.briefs(home)
+                if (rows.isEmpty()) {
+                    Text(PortalBriefs155Logic.BRIEFS_EMPTY, color = SentinelMuted)
+                }
+                var openId by remember { mutableStateOf<Int?>(null) }
+                rows.forEach { row ->
+                    val rid = Phase3Logic.int(row, "id")
+                    ItemRow(
+                        title = PortalBriefs155Logic.briefTitle(row),
+                        subtitle = PortalBriefs155Logic.briefMeta(row),
+                        onClick = if (PortalBriefs155Logic.body(row).isNotBlank()) {
+                            { openId = if (openId == rid) null else rid }
+                        } else {
+                            null
+                        },
+                    )
+                    if (rid != null && openId == rid) {
+                        Text(
+                            PortalBriefs155Logic.body(row),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+        }
+        AsyncCard("Monthly Reports", loader = { viewModel.api.portalHome() }) { home, _ ->
+            if (Phase3Logic.bool(home, "linked") == false) {
+                UnlinkedNotice()
+            } else {
+                val rows = PortalBriefs155Logic.reports(home)
+                if (rows.isEmpty()) {
+                    Text(PortalBriefs155Logic.REPORTS_EMPTY, color = SentinelMuted)
+                }
+                var openId by remember { mutableStateOf<Int?>(null) }
+                rows.forEach { row ->
+                    val rid = Phase3Logic.int(row, "id")
+                    ItemRow(
+                        title = PortalBriefs155Logic.reportTitle(row),
+                        subtitle = PortalBriefs155Logic.reportMeta(row),
+                        onClick = if (PortalBriefs155Logic.body(row).isNotBlank()) {
+                            { openId = if (openId == rid) null else rid }
+                        } else {
+                            null
+                        },
+                    )
+                    if (rid != null && openId == rid) {
+                        Text(
+                            PortalBriefs155Logic.body(row),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
