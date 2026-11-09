@@ -1,4 +1,4 @@
-# Sentinel App — R8 rules for release and hunt builds.
+# Command App — R8 rules for release and hunt builds.
 #
 # Every rule here is DELIBERATE: it names the exact reflection or
 # name-based lookup that would break without it. There is no blanket

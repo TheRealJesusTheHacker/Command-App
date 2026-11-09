@@ -291,7 +291,7 @@ fun LockScreen(viewModel: AppViewModel) {
             },
         )
         val info = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock Sentinel App")
+            .setTitle("Unlock Command App")
             .setSubtitle("Use your fingerprint to continue")
             .setAllowedAuthenticators(
                 BiometricManager.Authenticators.BIOMETRIC_STRONG or
@@ -313,7 +313,7 @@ fun LockScreen(viewModel: AppViewModel) {
     ) {
         UnlockSpringIcon(unlocked = unlockedVisual)
         Spacer(Modifier.height(16.dp))
-        Text("Sentinel App is locked", style = MaterialTheme.typography.headlineMedium)
+        Text("Command App is locked", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(
             "Your sign-in is still saved on this phone. Unlock to continue.",

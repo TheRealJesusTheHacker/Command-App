@@ -480,8 +480,8 @@ fun SettingsScreen(
                 .background(sentinelCardBrush(SentinelSurface), RoundedCornerShape(16.dp)),
         ) {
             Column(Modifier.padding(16.dp)) {
-                IdentityLine("App", "Sentinel App")
-                IdentityLine("Version", viewModel.versionLabel.removePrefix("Sentinel App "))
+                IdentityLine("App", "Command App")
+                IdentityLine("Version", viewModel.versionLabel.removePrefix("Command App "))
                 IdentityLine(
                     "Signed by",
                     "Sentinel Safeguard LLC — the owner's custodied release key",
@@ -514,7 +514,7 @@ fun SettingsScreen(
                         when (val state = viewModel.updates.check()) {
                             UpdateState.UpToDate -> updateNote = "You have the newest version."
                             is UpdateState.Available -> {
-                                updateNote = "Sentinel App ${state.info.version} is ready." +
+                                updateNote = "Command App ${state.info.version} is ready." +
                                     (state.info.notes.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
                                 updatePhase = DownloadPhase.ACTIVE
                                 val file = viewModel.updates.download(context, state.info)

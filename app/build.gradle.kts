@@ -11,7 +11,7 @@ plugins {
 
 // ---------------------------------------------------------------------------
 // Release signing — the owner's custodied key only, never the debug key
-// (Sphinx pattern, secret names per the Sentinel App repo's CI secrets).
+// (Sphinx pattern, secret names per the Command App repo's CI secrets).
 //
 // Signing material comes ONLY from the environment; nothing secret is
 // stored in this repo:
@@ -38,7 +38,7 @@ val releaseSigningReady = presentSigningEnv.size == signingEnvNames.size
 
 if (presentSigningEnv.isNotEmpty() && !releaseSigningReady) {
     throw GradleException(
-        "Sentinel App release signing is only partly configured. Set all four of " +
+        "Command App release signing is only partly configured. Set all four of " +
             signingEnvNames.joinToString(", ") + " — or none of them. " +
             "A signed build needs the owner's custodied keystore; there is no fallback key."
     )
@@ -68,7 +68,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "net.sentinelsafeguard.app"
+        applicationId = "net.sentinelsafeguard.commandapp"
         minSdk = 26
         targetSdk = 35
         // 1.4.0 RELEASE (Do All Program, 2026-11-07): the full
@@ -159,8 +159,22 @@ android {
         // never a fabricated sender; a real sentBy, a draft,
         // or a payload with no sentBy key gets no note.
         // versionCode 111 steps over 110 so it upgrades in place.
-        versionCode = 111
-        versionName = "1.5.5"
+        // 1.6.0 (2026-11-09, owner order — THE RENAME): the app
+        // is renamed completely, repo and all: Sentinel App ->
+        // Command App. GitHub repo TheRealJesusTheHacker/Sentinel-App
+        // -> TheRealJesusTheHacker/Command-App; applicationId
+        // net.sentinelsafeguard.app -> net.sentinelsafeguard.commandapp
+        // (same custody signer — this is a new package identity,
+        // NOT an in-place upgrade: it installs fresh beside the old
+        // app, and old-package data does not migrate); launcher
+        // label + all app chrome now read "Command App"; the
+        // hosted file pattern is Command-App-<version>.apk. The
+        // Kotlin namespace/source package stays
+        // net.sentinelsafeguard.app — internal organization only;
+        // Android identity is the applicationId. Full mapping in
+        // the PROGRAM-RECORD rename addendum. versionCode 112.
+        versionCode = 112
+        versionName = "1.6.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")
@@ -181,11 +195,11 @@ android {
     productFlavors {
         create("standard") {
             dimension = "line"
-            applicationId = "net.sentinelsafeguard.app"
+            applicationId = "net.sentinelsafeguard.commandapp"
         }
         create("hunt") {
             dimension = "line"
-            applicationId = "net.sentinelsafeguard.app.hunt"
+            applicationId = "net.sentinelsafeguard.commandapp.hunt"
             // hunt18 TEST build (GUI elevation): installs as an
             // update over every earlier hunt build — the pre-release
             // hunt series ran versionCode 1..17 and the 1.0.0 head's
@@ -344,7 +358,7 @@ val verifyReleaseSigning by tasks.registering {
     doLast {
         if (!releaseSigningReady) {
             throw GradleException(
-                "No signed Sentinel App build can be made here: the signing environment is not set. " +
+                "No signed Command App build can be made here: the signing environment is not set. " +
                     "Set SENTINEL_APP_KEYSTORE, SENTINEL_APP_KEYSTORE_PASSWORD, " +
                     "SENTINEL_APP_KEY_ALIAS and SENTINEL_APP_KEY_PASSWORD from the owner's " +
                     "custodied keystore secrets, then run the signed task again. Unsigned and " +

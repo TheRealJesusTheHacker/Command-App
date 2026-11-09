@@ -28,8 +28,8 @@ object Notifier {
      *  id it points at. AppRoot consumes them on launch and on
      *  onNewIntent — a tap lands on the exact record, never just
      *  the app's home screen (automations list rule). */
-    const val EXTRA_ROUTE = "net.sentinelsafeguard.app.extra.ROUTE"
-    const val EXTRA_REF_ID = "net.sentinelsafeguard.app.extra.REF_ID"
+    const val EXTRA_ROUTE = "net.sentinelsafeguard.commandapp.extra.ROUTE"
+    const val EXTRA_REF_ID = "net.sentinelsafeguard.commandapp.extra.REF_ID"
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return

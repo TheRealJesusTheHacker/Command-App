@@ -127,7 +127,7 @@ class UpdateManager(private val api: SentinelApi) {
     suspend fun download(context: Context, expected: VersionResponse): File =
         withContext(Dispatchers.IO) {
             val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-            val file = File(dir, "sentinel-app-update.apk")
+            val file = File(dir, "command-app-update.apk")
             val digest = MessageDigest.getInstance("SHA-256")
             var total = 0L
             try {

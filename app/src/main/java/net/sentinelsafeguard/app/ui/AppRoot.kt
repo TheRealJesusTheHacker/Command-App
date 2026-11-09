@@ -182,7 +182,7 @@ private fun AppShell(
             title = { Text("A new version is ready") },
             text = {
                 Text(
-                    "Sentinel App ${available.info.version} is ready." +
+                    "Command App ${available.info.version} is ready." +
                         (available.info.notes.takeIf { it.isNotBlank() }?.let { "\n\n$it" } ?: "") +
                         "\n\nUpdate now? The app will download it and Android will ask you to confirm the install."
                 )

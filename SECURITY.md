@@ -1,6 +1,6 @@
 # Security Policy
 
-Sentinel App is a private, owner-only application for Sentinel Safeguard LLC.
+Command App is a private, owner-only application for Sentinel Safeguard LLC.
 
 ## Reporting a vulnerability
 

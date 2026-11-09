@@ -1,4 +1,4 @@
-# Sentinel App — hardening notes
+# Command App — hardening notes
 
 What was hardened, how it works, how to operate it, and — just as
 important — what each measure does **not** do. Read this before

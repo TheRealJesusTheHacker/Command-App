@@ -236,5 +236,5 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         updateAvailable = null
     }
 
-    val versionLabel: String get() = "Sentinel App ${BuildConfig.VERSION_NAME}"
+    val versionLabel: String get() = "Command App ${BuildConfig.VERSION_NAME}"
 }

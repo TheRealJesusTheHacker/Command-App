@@ -1,9 +1,9 @@
-# Building Sentinel App
+# Building Command App
 
 Kotlin + Jetpack Compose, one app module, two flavors:
 
-- **standard** — `net.sentinelsafeguard.app` (the release line)
-- **hunt** — `net.sentinelsafeguard.app.hunt` (pre-release builds that
+- **standard** — `net.sentinelsafeguard.commandapp` (the release line)
+- **hunt** — `net.sentinelsafeguard.commandapp.hunt` (pre-release builds that
   can sit beside the release line on the same phone)
 
 ## Commands
