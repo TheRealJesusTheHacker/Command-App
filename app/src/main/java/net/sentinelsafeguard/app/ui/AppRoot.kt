@@ -53,6 +53,7 @@ import net.sentinelsafeguard.app.notify.NotifAllowAction
 import net.sentinelsafeguard.app.notify.NotifPermission
 import net.sentinelsafeguard.app.notify.NotifPermissionState
 import net.sentinelsafeguard.app.ui.theme.SentinelGreen
+import net.sentinelsafeguard.app.util.Diagnostics
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceTop
 
@@ -119,7 +120,7 @@ private fun navPopExit(reduced: Boolean = false): androidx.compose.animation.Exi
  * owner default in web Command; Dashboard for STAFF, whose
  * drawer is exactly the web STAFF subset). As of Phase 9 every
  * Command view is built — no placeholder screens remain.
- * Client/Family sign-ins get the separate portal shell
+ * Client-structure sign-ins get the separate portal shell
  * ([PortalShell]). Mail + Settings live in the Command drawer's
  * utility row: app-only entries, never Command views (§2.2).
  */
@@ -318,24 +319,24 @@ private fun AppShell(
     }
 
     val role = user?.role ?: "OWNER"
-    when (MirrorNav.shellKind(role, me?.portal ?: false)) {
-        MirrorNav.ShellKind.TOURIST_REFUSED -> {
-            // By design the demo is a separate instance: Tourist
-            // accounts never receive a production device token,
-            // so a Tourist sign-in attempt is refused plainly
-            // with the server's own refusal, never a shell.
-            ForcedFlowNotice(
-                "Demo accounts use the demo",
-                "This is a demo (Tourist) account. The demo lives on its own " +
-                    "instance, so it can't sign in to the production app — " +
-                    "the server refused this sign-in. Sign in with your real " +
-                    "account here, or open the demo the way you usually do.",
-                viewModel,
-            )
-            return
-        }
+    val structureRole = user?.structureRole
+    if (MirrorNav.shellDefaulted(role, me?.portal ?: false, structureRole)) {
+        // 1.5.4: the account's role matched NO known branch —
+        // a retired role string (Family/Tourist, which
+        // production can no longer mint) or an unrecognized
+        // one with no structure to resolve it. shellKind lands
+        // it in the defensive default (portal — least
+        // privilege) below; the event is logged here, never
+        // silent and never privileged.
+        Diagnostics.note(
+            "shellKind",
+            "unrecognized role '$role' (structureRole=$structureRole) — " +
+                "defensive portal default applied",
+        )
+    }
+    when (MirrorNav.shellKind(role, me?.portal ?: false, structureRole)) {
         MirrorNav.ShellKind.PORTAL -> {
-            // Phase 9: Client/Family sign-ins get the portal
+            // Phase 9: client-structure sign-ins get the portal
             // shell — web's twelve portal views, never the
             // staff drawer.
             PortalShell(viewModel)
@@ -423,6 +424,7 @@ private fun AppShell(
             MirrorNav.ALL_VIEWS[route.removePrefix("adminsec/")]?.label ?: "Admin"
         route == "verified" -> "Sentinel Verified"
         route == "firmpulse" -> "Firm Pulse"
+        route == "analytics" -> "Analytics"
         else -> MirrorNav.ALL_VIEWS[route]?.label ?: "Command"
     }
 
@@ -793,6 +795,7 @@ private fun AppShell(
                     composable("b4etax") { TaxProfitScreen(viewModel, nav) }
                     composable("verified") { VerifiedScreen(viewModel, nav) }
                     composable("firmpulse") { FirmPulseScreen(viewModel, nav) }
+                    composable("analytics") { AnalyticsScreen(viewModel, nav) }
                     composable("cf2assurance") { AssuranceScreen(viewModel, nav) }
                     composable(
                         "contract/{id}",
@@ -945,8 +948,8 @@ private fun adminToolPurpose(key: String): String = when (key) {
 }
 
 /**
- * The portal shell (Phase 9): Client/Family sign-ins land here
- * — web's twelve portal views in web's names/order as a simple
+ * The portal shell (Phase 9): client-structure sign-ins land
+ * here — web's twelve portal views in web's names/order as a simple
  * drawer, landing on My Profile. This is a separate shell from
  * Command's: no staff groups, no injected entries, no Search.
  * The drawer's only utility entry is Sign out (the portal token

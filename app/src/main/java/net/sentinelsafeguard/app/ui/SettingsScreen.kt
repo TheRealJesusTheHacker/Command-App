@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import net.sentinelsafeguard.app.BuildConfig
 import net.sentinelsafeguard.app.data.api.DeviceInfo
+import net.sentinelsafeguard.app.data.api.User
 import net.sentinelsafeguard.app.data.api.pushPrefs
 import net.sentinelsafeguard.app.data.api.pushPrefsSet
 import net.sentinelsafeguard.app.notify.NotifAllowAction
@@ -98,6 +99,9 @@ fun SettingsScreen(
 
     var devices by remember { mutableStateOf<List<DeviceInfo>?>(null) }
     var accountName by remember { mutableStateOf<String?>(null) }
+    // 1.5.4: the /me user, kept whole so the identity card can
+    // show the role + structure chip the server reports.
+    var accountUser by remember { mutableStateOf<User?>(null) }
     var confirmSignOut by remember { mutableStateOf(false) }
 
     // Do All 1.4.0 (item 6): the notification permission is only
@@ -209,7 +213,9 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         try {
-            accountName = viewModel.api.me().user.displayName
+            val meUser = viewModel.api.me().user
+            accountName = meUser.displayName
+            accountUser = meUser
         } catch (ignored: Exception) {
         }
         try {
@@ -245,6 +251,27 @@ fun SettingsScreen(
                             "${Build.MANUFACTURER} ${Build.MODEL}.",
                         style = MaterialTheme.typography.bodyLarge,
                     )
+                    accountUser?.let { user ->
+                        // 1.5.4: the account's role exactly as
+                        // the server reports it, with the quiet
+                        // structure chip (Employee / Client)
+                        // when the payload carries structureRole
+                        // — display only; routing never reads it.
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 4.dp),
+                        ) {
+                            Text(
+                                user.role,
+                                color = SentinelMuted,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            MirrorNav.structureLabel(user.structureRole)?.let { label ->
+                                Spacer(Modifier.width(8.dp))
+                                MirrorChip(label)
+                            }
+                        }
+                    }
                     devices?.firstOrNull { it.current }?.let { device ->
                         Text(
                             "Device name: ${device.deviceName}" +

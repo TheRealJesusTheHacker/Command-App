@@ -12,15 +12,27 @@ import kotlinx.serialization.json.JsonObject
 object Phase5Logic {
 
     /** Employees directory role chips: label → backend `role`
-     *  parameter (the wrapper's own filter vocabulary). */
+     *  parameter (the wrapper's own filter vocabulary). The
+     *  "Demo access" chip retired in 1.5.4 with the Tourist
+     *  role itself — production cannot mint one, so there is
+     *  no demo section of the directory to filter to. */
     val EMPLOYEE_ROLE_FILTERS: List<Pair<String, String>> = listOf(
         "All" to "All",
         "Owners" to "Owners",
         "Staff" to "Staff",
         "Client access" to "Client",
-        "Demo access" to "Demo",
         "Inactive" to "Inactive",
     )
+
+    /** The roles the employee editor may ASSIGN (1.5.4): the
+     *  production set. "Family" and "Tourist" are retired —
+     *  the server refuses to mint either, so the picker no
+     *  longer offers them. (A roles LIST from the server may
+     *  still carry one inert legacy "Family" row; wherever a
+     *  surface renders the server's list it renders it as
+     *  sent — this constant governs only what the app itself
+     *  offers for assignment.) */
+    val ASSIGNABLE_ROLES: List<String> = listOf("OWNER", "STAFF", "Admin", "Client")
 
     /**
      * Scan-to-asset (1.4.0): what the operator typed, pasted, or
@@ -40,19 +52,28 @@ object Phase5Logic {
         }
     }
 
-    /** Web empIsTeam: team = every staff-side role. */
-    private val TEAM_EXCLUDE = setOf("Client", "Family", "Tourist")
-
+    /**
+     * Team membership for one directory row (1.5.4): the same
+     * decision the shell makes, asked of the row's own role +
+     * structureRole — [MirrorNav.shellKind] is the single
+     * classifier, so a row the shell would land in the portal
+     * (client structure, a retired role string, anything
+     * unrecognized) is never counted as team here either.
+     * Web's empIsTeam said "every staff-side role"; the
+     * role-structure window made the two structures explicit,
+     * and this follows them.
+     */
     fun isTeam(user: JsonObject): Boolean =
-        Phase3Logic.str(user, "role") !in TEAM_EXCLUDE
+        MirrorNav.shellKind(
+            Phase3Logic.str(user, "role"),
+            portalFlag = false,
+            structureRole = Phase3Logic.strOrNull(user, "structureRole"),
+        ) == MirrorNav.ShellKind.COMMAND
 
-    /** Directory sections in web order: Team / Client access /
-     *  Demo access. */
-    fun employeeSection(user: JsonObject): String = when (Phase3Logic.str(user, "role")) {
-        "Tourist" -> "Demo access"
-        "Client", "Family" -> "Client access"
-        else -> "Team"
-    }
+    /** Directory sections: Team / Client access. (The "Demo
+     *  access" section retired with the Tourist role.) */
+    fun employeeSection(user: JsonObject): String =
+        if (isTeam(user)) "Team" else "Client access"
 
     val ASSET_STATUSES: List<String> =
         listOf("In Service", "In Storage", "In Repair", "Retired", "Lost")

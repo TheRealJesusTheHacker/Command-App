@@ -12,6 +12,7 @@ import kotlinx.serialization.json.put
  * download. Like Phases 3–9 these ride the open-JSON verbs on
  * [SentinelApi]; refusals surface the server's own message via
  * [SentinelApi.callJson] — never a fake empty state.
+ * 1.5.4 adds the website-analytics read (below).
  */
 
 private fun SentinelApi.doAllQs(params: Map<String, String?>): String {
@@ -98,6 +99,25 @@ suspend fun SentinelApi.pushAck(ids: List<String>): JsonObject =
             }))
         }.toString(),
     )
+
+// ---- Website analytics (GET /api/app/analytics) ----
+
+/**
+ * 1.5.4: the app twin of the web dashboard's analyticssummary
+ * payload — the server reuses the web handler itself, so the
+ * body is that payload byte-for-byte ({authorized, available,
+ * visitors, pageviews, visits, bounceRate, avgVisitSecs,
+ * activeVisitors, topPages, topReferrers, periodDays}, or
+ * {authorized:true, available:false, reason}). The admin:read
+ * gate lives server-side: a non-admin device token is refused
+ * 403 (surfacing here as an [ApiException] with status 403 —
+ * AnalyticsLogic.stateForError classifies it), and a dead
+ * token is the standard 401 → SignedOutException path inside
+ * [SentinelApi.call]. Parsing lives in AnalyticsLogic; this
+ * method only rides the wire.
+ */
+suspend fun SentinelApi.analytics(): JsonObject =
+    callJson("GET", "/api/app/analytics")
 
 // ---- Backup bundle download ----
 

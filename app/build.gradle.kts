@@ -124,8 +124,26 @@ android {
         // mechanically derived from the real logo's triangle
         // emblem. versionCode 109 steps over 108 so it upgrades
         // in place.
-        versionCode = 109
-        versionName = "1.5.3"
+        // 1.5.4 (2026-11-09): three pieces from Sentinel Live's
+        // role-structure window. (A) Native website analytics:
+        // a Dashboard card + full view over GET
+        // /api/app/analytics — the web analyticssummary payload
+        // byte-for-byte, admin:read-gated server-side; the app
+        // renders only server values and hides the card whole
+        // on the gate's 403. (B) structureRole ("employee" /
+        // "client", additive on pub_user/pub_self) is parsed
+        // and shown as a quiet chip in Settings; routing still
+        // follows the server's role. (C) The retired-role
+        // cleanup: production can no longer mint "Family" or
+        // "Tourist" accounts, so the portal-by-Family branch,
+        // the refused-by-Tourist shell, the directory's "Demo
+        // access" section/filter and the role picker's retired
+        // options are removed; unrecognized role strings land
+        // in ONE defensive default (the portal shell — least
+        // privilege), logged, never the Command shell.
+        // versionCode 110 steps over 109 so it upgrades in place.
+        versionCode = 110
+        versionName = "1.5.4"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")

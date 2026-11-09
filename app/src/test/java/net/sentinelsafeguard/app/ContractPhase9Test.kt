@@ -137,13 +137,20 @@ class ContractPhase9Test {
     @Test
     fun shellKindRouting() {
         assertEquals(MirrorNav.ShellKind.PORTAL, MirrorNav.shellKind("Client", true))
-        assertEquals(MirrorNav.ShellKind.PORTAL, MirrorNav.shellKind("Family", true))
-        assertEquals(MirrorNav.ShellKind.PORTAL, MirrorNav.shellKind("Family", false))
         assertEquals(MirrorNav.ShellKind.COMMAND, MirrorNav.shellKind("OWNER", false))
         assertEquals(MirrorNav.ShellKind.COMMAND, MirrorNav.shellKind("STAFF", false))
-        // Tourist never gets a production token — refused shell.
-        assertEquals(MirrorNav.ShellKind.TOURIST_REFUSED, MirrorNav.shellKind("Tourist", false))
-        assertEquals(MirrorNav.ShellKind.TOURIST_REFUSED, MirrorNav.shellKind("Tourist", true))
+        // 1.5.4 (role-structure window): "Family" and "Tourist"
+        // are retired account roles — production cannot mint
+        // either. The portal-by-Family branch and the old
+        // refused-by-Tourist shell are gone; both strings now
+        // land in the defensive default (PORTAL, least
+        // privilege), never a privileged path. The full matrix
+        // (structureRole resolution, disagreements, the
+        // defaulted predicate) is pinned in RoleStructure154Test.
+        assertEquals(MirrorNav.ShellKind.PORTAL, MirrorNav.shellKind("Family", true))
+        assertEquals(MirrorNav.ShellKind.PORTAL, MirrorNav.shellKind("Family", false))
+        assertEquals(MirrorNav.ShellKind.PORTAL, MirrorNav.shellKind("Tourist", false))
+        assertEquals(MirrorNav.ShellKind.PORTAL, MirrorNav.shellKind("Tourist", true))
     }
 
     // ---- Role shapes: the three drawers ----

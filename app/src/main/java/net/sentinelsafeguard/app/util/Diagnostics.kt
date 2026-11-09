@@ -17,4 +17,15 @@ object Diagnostics {
             // Logging must never take the app down with it.
         }
     }
+
+    /** A noteworthy non-error event (1.5.4: the shell's
+     *  defensive role default firing). Same tag, same rule —
+     *  diagnostics belong in the log, not on a screen. */
+    fun note(where: String, message: String) {
+        try {
+            Log.i("SentinelDiag", "$where: $message")
+        } catch (ignored: Exception) {
+            // Logging must never take the app down with it.
+        }
+    }
 }

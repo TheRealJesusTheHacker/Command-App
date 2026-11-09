@@ -156,7 +156,7 @@ private fun EmployeesDirectory(viewModel: AppViewModel, nav: NavController) {
                     ) { Text("Clear search and filters") }
                 }
                 LazyColumn {
-                    listOf("Team", "Client access", "Demo access").forEach { section ->
+                    listOf("Team", "Client access").forEach { section ->
                         val sectionRows = rows.filter { Phase5Logic.employeeSection(it) == section }
                         if (sectionRows.isNotEmpty()) {
                             item { SectionHeader(section, sectionRows.size) }
@@ -418,7 +418,10 @@ fun EmployeeProfileScreen(viewModel: AppViewModel, nav: NavController, employeeI
                                 ChoiceMenu(
                                     "Role",
                                     Phase3Logic.str(user, "role"),
-                                    listOf("OWNER", "STAFF", "Admin", "Client", "Family", "Tourist"),
+                                    // 1.5.4: the assignable set only —
+                                    // Family/Tourist are retired and
+                                    // the server refuses to mint them.
+                                    Phase5Logic.ASSIGNABLE_ROLES,
                                 ) { picked -> run { viewModel.api.setEmployeeRole(uid, picked) } }
                                 Spacer(Modifier.height(8.dp))
                                 Row {

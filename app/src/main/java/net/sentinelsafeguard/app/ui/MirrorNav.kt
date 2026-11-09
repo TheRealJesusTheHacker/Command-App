@@ -170,7 +170,7 @@ object MirrorNav {
     val STAFF_KEYS: Set<String> =
         setOf("dashboard", "cases", "tickets", "assets", "forms", "myschedule", "knowledge")
 
-    /** The portal shell (spec §2.1, Phase 9): Client/Family
+    /** The portal shell (spec §2.1, Phase 9): client-structure
      *  sign-ins get these twelve views in web's names/order —
      *  a separate shell, never the staff drawer. The named
      *  backend deferrals (Addendum 28) are NOT views here and
@@ -190,16 +190,80 @@ object MirrorNav {
         MirrorView("portal_feedback", "Feedback & Referrals"),
     )
 
-    /** Which shell an account lands in. The portal flag on
-     *  /api/app/me (Phase 9) is authoritative; the portal role
-     *  names agree with it. Tourist never receives a production
-     *  token (demo is a separate instance, by design). */
-    enum class ShellKind { COMMAND, PORTAL, TOURIST_REFUSED }
+    /** The employee-structure role names the app knows
+     *  outright. Any OTHER employee role (the server's custom
+     *  roles) is recognized through structureRole instead —
+     *  see [shellKind]. */
+    val KNOWN_EMPLOYEE_ROLES: Set<String> =
+        setOf("OWNER", "STAFF", "Admin", "Subcontractor")
 
-    fun shellKind(role: String, portalFlag: Boolean): ShellKind = when {
-        role == "Tourist" -> ShellKind.TOURIST_REFUSED
-        portalFlag || role == "Client" || role == "Family" -> ShellKind.PORTAL
-        else -> ShellKind.COMMAND
+    /** Account roles the role-structure window RETIRED:
+     *  production refuses to mint either, and no production
+     *  user carries one. They are named here for exactly one
+     *  purpose — the retirement guard in [shellKind]. The
+     *  guard exists because the demo engine derives Tourist
+     *  as employee-structure server-side, so structure alone
+     *  must never admit the string; both retired strings fall
+     *  into the same defensive default as every unrecognized
+     *  role (the portal shell — least privilege). There is no
+     *  per-role behavior left for either: the old
+     *  portal-by-Family branch and refused-by-Tourist shell
+     *  were removed in 1.5.4. */
+    val RETIRED_ROLES: Set<String> = setOf("Family", "Tourist")
+
+    enum class ShellKind { COMMAND, PORTAL }
+
+    /**
+     * Which shell an account lands in (1.5.4, on the
+     * role-structure window's contracts). The server is
+     * truth, in this order:
+     *  1. a retired role string can never arrive from
+     *     production; if one somehow does, it gets the
+     *     defensive default, never a privileged shell;
+     *  2. the portal flag on /api/app/me (Phase 9) is
+     *     authoritative, and the "Client" role agrees with it;
+     *  3. the known employee roles land in Command;
+     *  4. structureRole resolves the roles the app does not
+     *     know by name (the server's custom employee roles) —
+     *     it is consulted ONLY for those: when structureRole
+     *     and a KNOWN role ever disagree, the role wins
+     *     (branches 2–3 run first);
+     *  5. anything else — an unrecognized string with no
+     *     structure to resolve it — takes the defensive
+     *     default: the PORTAL shell (least privilege,
+     *     client-safe, server-scoped), never Command. The
+     *     shell logs that the default fired (see
+     *     [shellDefaulted]).
+     */
+    fun shellKind(role: String, portalFlag: Boolean, structureRole: String? = null): ShellKind =
+        when {
+            role in RETIRED_ROLES -> ShellKind.PORTAL
+            portalFlag || role == "Client" -> ShellKind.PORTAL
+            role in KNOWN_EMPLOYEE_ROLES -> ShellKind.COMMAND
+            structureRole == "client" -> ShellKind.PORTAL
+            structureRole == "employee" -> ShellKind.COMMAND
+            else -> ShellKind.PORTAL
+        }
+
+    /** True when [shellKind] reached the portal shell through
+     *  the retirement guard or the unrecognized-role default
+     *  (branches 1 and 5) rather than through an affirmative
+     *  client signal — the shell logs those so a payload the
+     *  app cannot classify is visible in diagnostics, never
+     *  silently privileged. */
+    fun shellDefaulted(role: String, portalFlag: Boolean, structureRole: String? = null): Boolean =
+        role in RETIRED_ROLES ||
+            (!portalFlag && role != "Client" && role !in KNOWN_EMPLOYEE_ROLES &&
+                structureRole != "client" && structureRole != "employee")
+
+    /** The Settings chip for a structure value, verbatim from
+     *  the server's lowercase vocabulary; anything else (an
+     *  older payload without the field, an unknown value)
+     *  shows NO chip — the app derives nothing in its place. */
+    fun structureLabel(structureRole: String?): String? = when (structureRole) {
+        "employee" -> "Employee"
+        "client" -> "Client"
+        else -> null
     }
 
     fun portalLandingKey(): String = PORTAL_VIEWS.first().key

@@ -234,6 +234,12 @@ fun DashboardScreen(viewModel: AppViewModel, nav: NavController) {
                     }
                 }
 
+                // 1.5.4: the website-analytics card (web's
+                // dashboard widget, mirrored). It self-gates:
+                // accounts without admin:read never see it —
+                // the composable renders nothing on the 403.
+                item { AnalyticsDashboardCard(viewModel, nav, reloadKey) }
+
                 item {
                     MirrorCard("Recent activity") {
                         if (d.recentActivity.isEmpty()) {

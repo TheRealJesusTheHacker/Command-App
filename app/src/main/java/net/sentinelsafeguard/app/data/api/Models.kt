@@ -26,6 +26,13 @@ data class User(
     val id: Int,
     val displayName: String,
     val role: String,
+    // Role-structure window (server W4, 2026-11-08): the
+    // account's STRUCTURE — "employee" or "client", derived
+    // server-side from the role and carried additively on
+    // pub_user/pub_self. Nullable: payloads from before the
+    // window simply omit it, and the app derives nothing in
+    // its place (see MirrorNav.shellKind / structureLabel).
+    val structureRole: String? = null,
     val portalLang: String = "en",
     val clientId: Int? = null,
     val jobTitle: String? = null,
@@ -117,9 +124,11 @@ data class MeResponse(
     val reviewsAccess: Boolean = false,
     val taxAccess: Boolean = false,
     val taxOnly: Boolean = false,
-    // Phase 9 (Addendum 28): true for the web portal roles
-    // (Client / Family) — the app shell routes those accounts
-    // to the portal shell, never the staff drawer.
+    // Phase 9 (Addendum 28): true for the web portal accounts
+    // (client structure) — the app shell routes those accounts
+    // to the portal shell, never the staff drawer. (Family is
+    // a client-RECORD tier since the role-structure window,
+    // never an account role.)
     val portal: Boolean = false,
 )
 
