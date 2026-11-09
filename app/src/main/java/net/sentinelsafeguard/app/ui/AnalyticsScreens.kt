@@ -126,6 +126,7 @@ fun AnalyticsDashboardCard(viewModel: AppViewModel, nav: NavController, refreshS
 }
 
 /** The full native analytics view (route "analytics"). */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyticsScreen(viewModel: AppViewModel, nav: NavController) {
     var outcome by remember { mutableStateOf<AnalyticsOutcome?>(null) }
