@@ -131,7 +131,7 @@ suspend fun SentinelApi.analytics(): JsonObject =
  * other actor gets the denied shape {authorized:false}.
  *
  * Route honesty (verified against the shipped staging
- * source, 2026-11-09): no /api/app/* route wraps this
+ * source, 2026-11-09): no /api/app route wraps this
  * action — it is served on the web shell's POST /actions
  * surface, whose actor resolution reads a session token the
  * app does not hold. This call therefore rides that surface
