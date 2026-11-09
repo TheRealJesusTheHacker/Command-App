@@ -14,11 +14,13 @@ import kotlinx.serialization.json.JsonPrimitive
  *  A. whileYouSlept on the dashboard payload — OWNER only,
  *     server-side; the field's ABSENCE is the whole gate (the
  *     app derives nothing and renders no card without it).
- *  B. the briefing-audio action (getwysaudio): the caller
- *     never names a file; the server recomputes the current
- *     card's hash and serves {authorized, available, hash} or
- *     {…, contentType, audioB64}. A denied shape or an
- *     unavailable answer is a QUIET state here, never an error.
+ *  B. the briefing audio (the web getwysaudio action; the
+ *     app reads it on the canonical GET /api/app/wysaudio
+ *     route since 1.6.2): the caller never names a file; the
+ *     server recomputes the current card's hash and serves
+ *     {authorized, available, hash} or {…, contentType,
+ *     audioB64}. A denied shape or an unavailable answer is
+ *     a QUIET state here, never an error.
  *  C. clientHealth on the staff health-timeline payload —
  *     staff-only by server construction (proven absent from
  *     every client-scoped payload); bands are the server's

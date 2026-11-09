@@ -12,7 +12,9 @@ import kotlinx.serialization.json.put
  * download. Like Phases 3–9 these ride the open-JSON verbs on
  * [SentinelApi]; refusals surface the server's own message via
  * [SentinelApi.callJson] — never a fake empty state.
- * 1.5.4 adds the website-analytics read (below).
+ * 1.5.4 adds the website-analytics read (below). 1.6.2
+ * moves the briefing-audio read to its canonical app
+ * route (below).
  */
 
 private fun SentinelApi.doAllQs(params: Map<String, String?>): String {
@@ -122,37 +124,33 @@ suspend fun SentinelApi.analytics(): JsonObject =
 // ---- Briefing audio (FEATUREWAVE Item 22) ----
 
 /**
- * 1.6.1: the morning-briefing audio, through the server's
- * getwysaudio action — the caller NEVER names a file: the
+ * 1.6.2: the morning-briefing audio, through the CANONICAL
+ * app route — GET /api/app/wysaudio, the app twin of the
+ * web getwysaudio action. The wrap calls the web handler
+ * itself (OWNER-only in-handler), so the payload is that
+ * handler's exactly — the caller NEVER names a file: the
  * server recomputes the CURRENT While You Slept card's hash
  * and serves the cached clip for exactly that hash
  * ({authorized, available, hash} or {…, contentType,
- * audioB64}). The action is OWNER-only in-handler; every
- * other actor gets the denied shape {authorized:false}.
+ * audioB64}).
  *
- * Route honesty (verified against the shipped staging
- * source, 2026-11-09): no /api/app route wraps this
- * action — it is served on the web shell's POST /actions
- * surface, whose actor resolution reads a session token the
- * app does not hold. This call therefore rides that surface
- * with the app's standard device-auth headers and an EMPTY
- * args object (the action called bare, exactly as the
- * contract prescribes); on current server builds the answer
- * is the denied shape, and Wave161Logic + the card degrade
- * to the quiet "not generated yet" line — never an error.
- * The moment the server accepts device auth for the action
- * (or adds an app wrap), the same call returns audioB64 and
- * playback lights up with no further client change. The
- * response is parsed by Wave161Logic.parseWysAudio.
+ * Refusals ride the standard app-surface shapes: a
+ * non-owner device token is refused 403 ({ok:false,
+ * authorized:false, message}) — surfacing here as an
+ * [ApiException] with status 403, which the card's row
+ * degrades to its quiet line; a dead token is the standard
+ * 401 → SignedOutException path inside [SentinelApi.call].
+ * The response is parsed by Wave161Logic.parseWysAudio.
+ *
+ * History: 1.6.1 called the bare POST /actions arm, which
+ * the server ALSO accepts device auth on (scoped to this
+ * one action, and only when no web session resolves). That
+ * arm remains live server-side — the web surface's own
+ * business, untouched by this change; the app simply takes
+ * the canonical route now.
  */
 suspend fun SentinelApi.wysAudio(): JsonObject =
-    callJson(
-        "POST", "/actions",
-        buildJsonObject {
-            put("action", "getwysaudio")
-            put("args", buildJsonObject { })
-        }.toString(),
-    )
+    callJson("GET", "/api/app/wysaudio")
 
 // ---- Backup bundle download ----
 

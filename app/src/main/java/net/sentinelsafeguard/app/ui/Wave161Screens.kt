@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
+import net.sentinelsafeguard.app.data.api.SignedOutException
 import net.sentinelsafeguard.app.data.api.wysAudio
 import net.sentinelsafeguard.app.ui.theme.SentinelAmber
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
@@ -137,11 +138,13 @@ private fun WysCountRow(label: String, value: Int) {
  * The briefing-audio row. audio.available == false renders
  * the quiet honest line and NO control. When the card says
  * audio exists, the play control fetches it through the
- * getwysaudio action (the caller never names a file — the
- * server recomputes the current card's hash) and plays the
- * returned bytes through the app's voice-note machinery.
- * A denied or unavailable answer degrades to the same quiet
- * line — never an error dialog.
+ * canonical app route (GET /api/app/wysaudio — the caller
+ * never names a file; the server recomputes the current
+ * card's hash) and plays the returned bytes through the
+ * app's voice-note machinery. A denied (403) or unavailable
+ * answer degrades to the same quiet line — never an error
+ * dialog; a dead token (401) takes the standard sign-out
+ * path instead of degrading.
  */
 @Composable
 private fun WysAudioRow(viewModel: AppViewModel, audio: Wave161Logic.WysAudio) {
@@ -175,10 +178,18 @@ private fun WysAudioRow(viewModel: AppViewModel, audio: Wave161Logic.WysAudio) {
                                     }
                                 else -> unavailable = true
                             }
+                        } catch (e: SignedOutException) {
+                            // The token died: SentinelApi has
+                            // already fired onSignedOut and the
+                            // shell is returning to sign-in — the
+                            // row does not also flip to its quiet
+                            // state behind the departing shell.
                         } catch (e: Exception) {
-                            // The fetch failing is the same quiet
-                            // state to the reader — the card never
-                            // grows an error dialog for audio.
+                            // The fetch failing (incl. the wrap's
+                            // 403 for a non-owner) is the same
+                            // quiet state to the reader — the
+                            // card never grows an error dialog
+                            // for audio.
                             unavailable = true
                         } finally {
                             fetching = false

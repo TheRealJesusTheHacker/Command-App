@@ -184,8 +184,18 @@ android {
         // renders only when its payload carries the new field.
         // Full detail in the PROGRAM-RECORD 1.6.1 addendum.
         // versionCode 113 steps over 112 so it upgrades in place.
-        versionCode = 113
-        versionName = "1.6.1"
+        // 1.6.2 (2026-11-09): the briefing-audio read moves to
+        // the canonical app route (GET /api/app/wysaudio) now
+        // that the server ships the wrap; the /actions device
+        // arm 1.6.1 rode stays live server-side, uncalled by
+        // the app. The audio contract fixtures flip to the
+        // live shapes (owner available / unavailable, the
+        // wrap's 403 and 401 bodies). Everything else is
+        // 1.6.1's surface, unchanged. Full detail in the
+        // PROGRAM-RECORD 1.6.2 addendum. versionCode 114 steps
+        // over 113 so it upgrades in place.
+        versionCode = 114
+        versionName = "1.6.2"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")
