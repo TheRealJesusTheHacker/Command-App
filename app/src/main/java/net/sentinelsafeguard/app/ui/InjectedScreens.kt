@@ -850,6 +850,20 @@ private fun PipelinePacketsScreen(viewModel: AppViewModel) {
                     "${Phase3Logic.str(lead, "state")} · ${Phase3Logic.str(lead, "email")}",
                     color = SentinelMuted, style = MaterialTheme.typography.bodySmall,
                 )
+                // 1.6.1 (Feature Wave Item 13): the lead's
+                // source, via the label mapping that now also
+                // carries the wave's two new sources
+                // (academy-owner-reset, security-scorecard);
+                // unknown future sources humanize gracefully
+                // (Wave161Logic.leadSourceLabel, unit-pinned).
+                // Source-less rows render exactly as before.
+                val leadSource = Phase3Logic.str(lead, "source")
+                if (leadSource.isNotBlank()) {
+                    Text(
+                        "Source: ${Wave161Logic.leadSourceLabel(leadSource)}",
+                        color = SentinelMuted, style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (lid != null) {
                     Row {
                         listOf("new", "contacted", "qualified", "won", "lost").forEach { state ->

@@ -240,6 +240,15 @@ fun DashboardScreen(viewModel: AppViewModel, nav: NavController) {
                 // the composable renders nothing on the 403.
                 item { AnalyticsDashboardCard(viewModel, nav, reloadKey) }
 
+                // 1.6.1 (Feature Wave Item 7): the While You
+                // Slept overnight card. The field is OWNER-only
+                // server-side — staff/client payloads never
+                // carry it, so absence renders NOTHING here:
+                // no card, no placeholder, no error.
+                Wave161Logic.parseWys(d.whileYouSlept)?.let { wys ->
+                    item { WysCard(viewModel, wys) }
+                }
+
                 item {
                     MirrorCard("Recent activity") {
                         if (d.recentActivity.isEmpty()) {

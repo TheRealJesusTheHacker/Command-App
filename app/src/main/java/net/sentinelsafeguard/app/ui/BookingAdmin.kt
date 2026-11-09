@@ -130,6 +130,10 @@ fun BookingAdminPanel(viewModel: AppViewModel) {
                     }) { Text("Delete") }
                 }
             }
+            // 1.6.1 (Feature Wave Item 26): the service's
+            // booking-prep lines (pub_cf_service carries prep);
+            // null/absent → nothing renders, no filler.
+            PrepBlock(service)
         }
         TextFieldRow("Service name", serviceName, { serviceName = it })
         TextFieldRow("Duration (minutes)", serviceMinutes, { serviceMinutes = it })
@@ -167,6 +171,10 @@ fun BookingAdminPanel(viewModel: AppViewModel) {
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 4.dp),
             )
+            // 1.6.1 (Feature Wave Item 26): the booking's prep
+            // (pub_cf_booking carries it from the booked
+            // service); null/absent → nothing renders.
+            PrepBlock(booking)
             if (bid != null) {
                 Row {
                     TextButton(onClick = { managingId = bid }) { Text("Manage") }

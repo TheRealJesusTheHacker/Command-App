@@ -260,6 +260,15 @@ fun PortalProgressScreen(viewModel: AppViewModel, nav: NavController) {
                         title = Phase8bLogic.rowTitle(row),
                         subtitle = Phase9Logic.progressLine(row),
                     )
+                    // 1.6.1 (Feature Wave Item 23): the entry's
+                    // own client-scoped photo timeline (tickets
+                    // only), grouped by stageLabel in the
+                    // server's served order. Absent/empty → the
+                    // row renders exactly as before.
+                    val timeline = Phase3Logic.arr(row, "photoTimeline")
+                    if (timeline.isNotEmpty()) {
+                        PhotoTimelineGroups(viewModel, timeline)
+                    }
                 }
                 val roadmap = Phase3Logic.obj(home, "cfRoadmap")
                 if (roadmap != null) {

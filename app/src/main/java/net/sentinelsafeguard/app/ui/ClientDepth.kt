@@ -502,6 +502,14 @@ private fun HealthTimelineCard(viewModel: AppViewModel, clientId: Int) {
         "Health timeline", "events",
         loader = { viewModel.api.clientHealthTimeline(clientId) },
     ) { data, _ ->
+        // 1.6.1 (Feature Wave Item 14): the internal client
+        // HEALTH score rides this staff payload only (proven
+        // absent from every client-scoped payload server-side;
+        // this card is itself the staff surface). Absent field
+        // (older payload) → the card renders exactly as before.
+        Wave161Logic.parseClientHealth(data)?.let { health ->
+            ClientHealthBlock(health)
+        }
         val events = Phase3Logic.arr(data, "events")
         if (events.isEmpty()) Text("No health events yet.", color = SentinelMuted)
         events.forEach { event ->

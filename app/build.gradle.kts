@@ -173,8 +173,19 @@ android {
         // net.sentinelsafeguard.app — internal organization only;
         // Android identity is the applicationId. Full mapping in
         // the PROGRAM-RECORD rename addendum. versionCode 112.
-        versionCode = 112
-        versionName = "1.6.0"
+        // 1.6.1 (2026-11-09, Feature Wave mirror): the app
+        // consumes the wave's new payload fields — the owner's
+        // While You Slept dashboard card + briefing audio
+        // (Items 7/22), the staff client-health score block
+        // (Item 14), the stage-ordered photo timeline on ticket
+        // profile + portal progress (Item 23), booking prep
+        // lists (Item 26), and the two new Pipeline lead
+        // sources (Item 13). Strictly additive: every surface
+        // renders only when its payload carries the new field.
+        // Full detail in the PROGRAM-RECORD 1.6.1 addendum.
+        // versionCode 113 steps over 112 so it upgrades in place.
+        versionCode = 113
+        versionName = "1.6.1"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")

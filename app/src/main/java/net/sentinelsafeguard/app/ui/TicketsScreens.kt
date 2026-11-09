@@ -979,6 +979,17 @@ fun TicketProfileScreen(viewModel: AppViewModel, nav: NavController, ticketId: I
 
                 TicketOpsSections(viewModel, nav, t)
 
+                // 1.6.1 (Feature Wave Item 23): the profile
+                // payload's stage-ordered photo timeline, in
+                // the server's served order (grouped by
+                // stageLabel, never re-sorted). Absent/empty →
+                // the profile renders exactly as before.
+                if (d.photoTimeline.isNotEmpty()) {
+                    MirrorCard("Photo timeline") {
+                        PhotoTimelineGroups(viewModel, d.photoTimeline)
+                    }
+                }
+
                 MirrorCard("Ticket activity", d.activity.size) {
                     if (d.activity.isEmpty()) {
                         Text("No activity recorded for this ticket yet.", color = SentinelMuted)

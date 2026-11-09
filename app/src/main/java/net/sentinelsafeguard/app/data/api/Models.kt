@@ -1,6 +1,7 @@
 package net.sentinelsafeguard.app.data.api
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Wire models for the Command app API (/api/app/* endpoints).
@@ -315,6 +316,11 @@ data class TicketDetailResponse(
     val client: Client? = null,
     val case: CaseItem? = null,
     val activity: List<ActivityItem> = emptyList(),
+    // FEATUREWAVE Item 23 (1.6.1): the stage-ordered photo
+    // timeline (pub_cf_photo rows + stage/stageLabel), kept as
+    // open JSON like every other web-shaped section — the
+    // parsing/rendering lives in Wave161Logic/Wave161Screens.
+    val photoTimeline: List<JsonObject> = emptyList(),
 )
 
 /** Create (201, with id), patch, and note responses. */
@@ -722,6 +728,12 @@ data class DashboardResponse(
     val attention: List<DashAttention> = emptyList(),
     val recentActivity: List<ActivityItem> = emptyList(),
     val canWrite: DashCanWrite = DashCanWrite(),
+    // FEATUREWAVE Item 7 (1.6.1): the "While You Slept"
+    // overnight card — OWNER-only server-side (staff/client
+    // payloads never carry the key). Open JSON by design; the
+    // parse + honesty rails live in Wave161Logic. Absence is
+    // the gate: null → no card renders.
+    val whileYouSlept: JsonObject? = null,
 )
 
 // ---- hunt5: roster (B2), portal thread (B6), timeline (B8), writes ----

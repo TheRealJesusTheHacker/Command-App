@@ -119,6 +119,41 @@ suspend fun SentinelApi.pushAck(ids: List<String>): JsonObject =
 suspend fun SentinelApi.analytics(): JsonObject =
     callJson("GET", "/api/app/analytics")
 
+// ---- Briefing audio (FEATUREWAVE Item 22) ----
+
+/**
+ * 1.6.1: the morning-briefing audio, through the server's
+ * getwysaudio action — the caller NEVER names a file: the
+ * server recomputes the CURRENT While You Slept card's hash
+ * and serves the cached clip for exactly that hash
+ * ({authorized, available, hash} or {…, contentType,
+ * audioB64}). The action is OWNER-only in-handler; every
+ * other actor gets the denied shape {authorized:false}.
+ *
+ * Route honesty (verified against the shipped staging
+ * source, 2026-11-09): no /api/app/* route wraps this
+ * action — it is served on the web shell's POST /actions
+ * surface, whose actor resolution reads a session token the
+ * app does not hold. This call therefore rides that surface
+ * with the app's standard device-auth headers and an EMPTY
+ * args object (the action called bare, exactly as the
+ * contract prescribes); on current server builds the answer
+ * is the denied shape, and Wave161Logic + the card degrade
+ * to the quiet "not generated yet" line — never an error.
+ * The moment the server accepts device auth for the action
+ * (or adds an app wrap), the same call returns audioB64 and
+ * playback lights up with no further client change. The
+ * response is parsed by Wave161Logic.parseWysAudio.
+ */
+suspend fun SentinelApi.wysAudio(): JsonObject =
+    callJson(
+        "POST", "/actions",
+        buildJsonObject {
+            put("action", "getwysaudio")
+            put("args", buildJsonObject { })
+        }.toString(),
+    )
+
 // ---- Backup bundle download ----
 
 /**
