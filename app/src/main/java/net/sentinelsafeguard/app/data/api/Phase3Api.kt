@@ -230,12 +230,6 @@ suspend fun SentinelApi.runOffboardStep(clientId: Int, step: String): JsonObject
         buildJsonObject { put("step", step) }.toBody(),
     )
 
-suspend fun SentinelApi.clientMail(clientId: Int): JsonObject =
-    getJson("/api/app/clients/$clientId/mail")
-
-suspend fun SentinelApi.clientMailThread(clientId: Int, threadKey: String): JsonObject =
-    getJson("/api/app/clients/$clientId/mail-thread?key=${encodeQuery(threadKey)}")
-
 suspend fun SentinelApi.clientTraining(clientId: Int): JsonObject =
     getJson("/api/app/clients/$clientId/training")
 

@@ -1408,16 +1408,6 @@ object RealBodiesPhase3 {
    }
   }
  },
- "client_mail_get": {
-  "status": 200,
-  "body": {
-   "ok": true,
-   "configured": false,
-   "note": "Mail with this client: threads in the firm's own mailboxes (skyler@ / sentinel@) that involve the client's email addresses. The client's own mailbox is not on this server and is never read. Read-only: nothing here can send, move, delete or flag mail.",
-   "threads": [],
-   "message": "The mail bridge is not configured on this server yet (no Dovecot master-user credential provisioned)."
-  }
- },
  "client_training_get": {
   "status": 200,
   "body": {

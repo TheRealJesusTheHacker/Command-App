@@ -47,8 +47,6 @@ import net.sentinelsafeguard.app.data.api.clientDocExpiry
 import net.sentinelsafeguard.app.data.api.clientDuplicates
 import net.sentinelsafeguard.app.data.api.clientHealthTimeline
 import net.sentinelsafeguard.app.data.api.clientHygiene
-import net.sentinelsafeguard.app.data.api.clientMail
-import net.sentinelsafeguard.app.data.api.clientMailThread
 import net.sentinelsafeguard.app.data.api.clientNotes
 import net.sentinelsafeguard.app.data.api.clientNotificationPrefs
 import net.sentinelsafeguard.app.data.api.clientOffboard
@@ -211,7 +209,6 @@ fun ClientDepthPart2(viewModel: AppViewModel, nav: NavController, clientId: Int)
     PostureLetterCard(viewModel, clientId)
     SecurityDetailCard(viewModel, clientId)
     TrainingDocsCard(viewModel, clientId)
-    ClientMailCard(viewModel, clientId)
     ClientFilesCard(viewModel, clientId)
     ClientReportsCard(viewModel, clientId)
     ClientDigestsCard(viewModel, clientId)
@@ -1090,62 +1087,6 @@ private fun TrainingDocsCard(viewModel: AppViewModel, clientId: Int) {
             }
             val note = Phase3Logic.str(ev, "note")
             if (note.isNotBlank()) Text(note, color = SentinelMuted, style = MaterialTheme.typography.bodySmall)
-        }
-        ActionErrorText(error)
-    }
-}
-
-@Composable
-private fun ClientMailCard(viewModel: AppViewModel, clientId: Int) {
-    val scope = rememberCoroutineScope()
-    var thread by remember { mutableStateOf<JsonObject?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    AsyncCard("Mail with this client", loader = { viewModel.api.clientMail(clientId) }) { data, _ ->
-        val note = Phase3Logic.str(data, "note")
-        if (note.isNotBlank()) Text(note, color = SentinelMuted, style = MaterialTheme.typography.bodySmall)
-        if (Phase3Logic.bool(data, "configured") != true) {
-            // The bridge's honest unconfigured state, in web's own
-            // words (the payload's message), exactly as web shows.
-            val message = Phase3Logic.str(data, "message")
-            if (message.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(message, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-        val threads = Phase3Logic.arr(data, "threads")
-        if (threads.isEmpty() && Phase3Logic.bool(data, "configured") == true) {
-            Text("No mail threads with this client yet.", color = SentinelMuted)
-        }
-        threads.forEach { row ->
-            val key = Phase3Logic.str(row, "key").ifBlank { Phase3Logic.str(row, "threadKey") }
-            ItemRow(
-                Phase3Logic.str(row, "subject").ifBlank { "Mail thread" },
-                listOfNotNull(
-                    Phase3Logic.str(row, "counterparty").takeIf { it.isNotBlank() },
-                    Phase3Logic.str(row, "lastAt").takeIf { it.isNotBlank() },
-                    Phase3Logic.str(row, "count").takeIf { it.isNotBlank() }?.let { "$it message(s)" },
-                ).joinToString(" · "),
-            ) {
-                if (key.isNotBlank()) scope.launch {
-                    try {
-                        thread = viewModel.api.clientMailThread(clientId, key)
-                    } catch (e: Exception) {
-                        error = plainError(e, "The thread could not be opened. Try again.")
-                    }
-                }
-            }
-        }
-        thread?.let { opened ->
-            Spacer(Modifier.height(8.dp))
-            Phase3Logic.arr(opened, "messages").forEach { msg ->
-                Text(
-                    "${Phase3Logic.str(msg, "from")} — ${Phase3Logic.str(msg, "subject")}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                val body = Phase3Logic.str(msg, "body").ifBlank { Phase3Logic.str(msg, "snippet") }
-                if (body.isNotBlank()) Text(body, color = SentinelMuted)
-            }
         }
         ActionErrorText(error)
     }

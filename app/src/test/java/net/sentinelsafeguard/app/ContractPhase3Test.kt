@@ -40,7 +40,6 @@ import net.sentinelsafeguard.app.data.api.clientDuplicates
 import net.sentinelsafeguard.app.data.api.clientFilterPresets
 import net.sentinelsafeguard.app.data.api.clientHealthTimeline
 import net.sentinelsafeguard.app.data.api.clientHygiene
-import net.sentinelsafeguard.app.data.api.clientMail
 import net.sentinelsafeguard.app.data.api.clientNotes
 import net.sentinelsafeguard.app.data.api.clientNotificationPrefs
 import net.sentinelsafeguard.app.data.api.clientOffboard
@@ -478,15 +477,9 @@ class ContractPhase3Test {
         )
     }
 
-    // ---- Clients depth: mail / reports / digests ----
-
-    @Test
-    fun clientMailShowsTheUnconfiguredBridgeHonestly() = runBlocking {
-        val out = api(QueueTransport(step("client_mail_get"))).clientMail(1)
-        assertEquals("false", out.str("configured"))
-        assertTrue(out.str("note")!!.contains("Read-only"))
-        assertTrue(out.str("message")!!.contains("not configured"))
-    }
+    // ---- Clients depth: reports / digests ----
+    // (The mail bridge test left with the bridge in 1.6.4: the
+    // app no longer consumes /clients/{id}/mail at all.)
 
     @Test
     fun reportsAndDigestsFlows() = runBlocking {

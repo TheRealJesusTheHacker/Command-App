@@ -211,8 +211,22 @@ android {
         // Command mirror data, not the mail engine, and stay.
         // Full detail in the PROGRAM-RECORD 1.6.3 addendum.
         // versionCode 115 steps over 114 so it upgrades in place.
-        versionCode = 115
-        versionName = "1.6.3"
+        // 1.6.4 (2026-11-10, owner ruling): the client-depth
+        // mail bridge KEPT by 1.6.3 now goes too — the "Mail
+        // with this client" card, the clientMail /
+        // clientMailThread API functions and their contract
+        // test are removed. The owner's direction is that mail
+        // lives in the Sentinel Mail App and browser webmail
+        // only, and the bridge's live data feed was never
+        // provisioned, so the card had no live purpose. The
+        // server endpoint itself is untouched (this is an
+        // app-side removal), and the mirror can regain a
+        // correspondence surface later only as its own scoped
+        // decision. Full detail in the PROGRAM-RECORD 1.6.4
+        // addendum. versionCode 116 steps over 115 so it
+        // upgrades in place.
+        versionCode = 116
+        versionName = "1.6.4"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         // The CF Access values are deliberately NOT build config
