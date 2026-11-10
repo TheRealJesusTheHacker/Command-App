@@ -45,14 +45,14 @@ import kotlin.math.sin
  * Honest-fit (the M-18 rule): a pattern ships only where the
  * control genuinely changes that state in this app.
  *  - Search↔X — the live search/filter fields (global Search,
- *    Clients directory, Tickets directory, Mail folder
- *    search): the field's trailing affordance is the
+ *    Clients directory, Tickets directory): the field's
+ *    trailing affordance is the
  *    magnifier while the query is empty and morphs into the
  *    clear (X) action while text is present; tapping it in
  *    the X state clears the query. Forward and reverse are
  *    the same 400 ms motion.
- *  - Send arc — the three genuine send controls (Mail reply,
- *    ticket portal reply, portal thread reply): on a
+ *  - Send arc — the genuine send controls (ticket portal
+ *    reply, portal thread reply): on a
  *    SUCCESSFUL send the plane flies out on a curved arc and
  *    a fresh plane springs in behind it. A failed send never
  *    flies — the message did not leave.

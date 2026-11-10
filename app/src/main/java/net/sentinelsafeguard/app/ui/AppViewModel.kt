@@ -16,7 +16,6 @@ import net.sentinelsafeguard.app.data.api.LoginResult
 import net.sentinelsafeguard.app.data.api.MeResponse
 import net.sentinelsafeguard.app.data.api.OkHttpTransport
 import net.sentinelsafeguard.app.data.api.SentinelApi
-import net.sentinelsafeguard.app.data.mail.MailService
 import net.sentinelsafeguard.app.update.UpdateManager
 import net.sentinelsafeguard.app.update.UpdateState
 
@@ -29,15 +28,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val secure = SecureStore(application)
     val settings = SettingsStore(application)
     val pushStore = PushStore(application)
-    val mail = MailService()
 
     val api = SentinelApi(AppConfig.api, OkHttpTransport(AppConfig.api.baseUrl))
     val updates = UpdateManager(api)
 
     var signedIn by mutableStateOf(secure.isSignedIn)
-        private set
-
-    var mailConnected by mutableStateOf(secure.hasMailCredentials)
         private set
 
     var locked by mutableStateOf(false)
@@ -161,13 +156,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         checkForUpdate()
     }
 
-    /** Mail sign-in is separate: the mailbox password, stored encrypted. */
-    fun saveMailCredentials(username: String, password: String) {
-        secure.mailUsername = username
-        secure.mailPassword = password
-        mailConnected = true
-    }
-
     fun unlock() {
         locked = false
     }
@@ -189,10 +177,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         settings.sessionEndedNoticePending = true
         viewModelScope.launch {
             secure.clearAll()
-            mail.clearCache()
             api.deviceToken = null
             signedIn = false
-            mailConnected = false
             locked = false
         }
     }
@@ -207,11 +193,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // next sign-in's PushWorker run registers fresh —
             // the reset PushWorker's lifecycle has always assumed.
             pushStore.resetDeliveryState()
-            mail.clearCache()
             me = null
             meLoaded = false
             signedIn = false
-            mailConnected = false
             locked = false
             updateAvailable = null
             onDone()

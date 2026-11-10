@@ -194,11 +194,27 @@ android {
         // 1.6.1's surface, unchanged. Full detail in the
         // PROGRAM-RECORD 1.6.2 addendum. versionCode 114 steps
         // over 113 so it upgrades in place.
-        versionCode = 114
-        versionName = "1.6.2"
+        // 1.6.3 (2026-11-10, owner order): the Mail tab and the
+        // entire direct mail engine are REMOVED from the
+        // Command App — the app no longer interacts with the
+        // mail side of the server at all. The Sentinel Mail App
+        // and browser webmail are the only mail clients now; the
+        // mail server itself is untouched. Gone: the mail
+        // screens, the data/mail engine package (with its SPKI
+        // pinning), the mail library dependencies, the
+        // mailbox credential store, the Settings mail section,
+        // the PollWorker mailbox unread check and the "New mail"
+        // notification channel / category / toggle. Command-API
+        // surfaces that merely
+        // carry email-shaped data (client contact addresses, the
+        // client-depth mail bridge, invoice recipientEmail) are
+        // Command mirror data, not the mail engine, and stay.
+        // Full detail in the PROGRAM-RECORD 1.6.3 addendum.
+        // versionCode 115 steps over 114 so it upgrades in place.
+        versionCode = 115
+        versionName = "1.6.3"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
-        buildConfigField("String", "MAIL_HOST", "\"mail.sentinelsafeguard.net\"")
         // The CF Access values are deliberately NOT build config
         // fields — plaintext BuildConfig strings are readable from
         // the APK with `strings`. They travel sealed instead; see
@@ -423,11 +439,6 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-
-    // Mail: Eclipse Angus Mail (Jakarta Mail implementation, MPL/EPL —
-    // maintained by the Eclipse Foundation; spec §4.1 library rule).
-    implementation("org.eclipse.angus:angus-mail:2.0.3")
-    implementation("org.eclipse.angus:angus-activation:2.0.2")
 
     // On-device security: Keystore-backed encrypted storage + biometrics
     implementation("androidx.security:security-crypto:1.1.0-alpha06")

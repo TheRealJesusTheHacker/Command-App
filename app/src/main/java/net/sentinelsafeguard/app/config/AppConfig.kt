@@ -29,10 +29,6 @@ object AppConfig {
         cfAccessClientSecret = GateConfig.cfAccessClientSecret,
     )
 
-    const val MAIL_HOST: String = BuildConfig.MAIL_HOST
-    const val MAIL_IMAP_PORT: Int = 993
-    const val MAIL_SMTP_PORT: Int = 587
-
     /** Header names Cloudflare Access expects for service authentication. */
     const val CF_ACCESS_CLIENT_ID_HEADER = "CF-Access-Client-Id"
     const val CF_ACCESS_CLIENT_SECRET_HEADER = "CF-Access-Client-Secret"

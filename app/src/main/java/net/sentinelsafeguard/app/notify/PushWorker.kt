@@ -58,7 +58,6 @@ object PushLogic {
     fun categoryEnabled(category: NotifyCategory, settings: SettingsStore): Boolean =
         when (category) {
             NotifyCategory.TICKETS -> settings.notifyTickets
-            NotifyCategory.MAIL -> settings.notifyMail
             NotifyCategory.SIGN_IN_ALERT -> settings.notifySignInAlerts
             // 1.4.0 enum growth (Lane D channels): push events never
             // map to these today (categoryFor above), but the when

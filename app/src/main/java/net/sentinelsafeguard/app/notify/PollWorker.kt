@@ -13,7 +13,6 @@ import net.sentinelsafeguard.app.data.SecureStore
 import net.sentinelsafeguard.app.data.SettingsStore
 import net.sentinelsafeguard.app.data.api.OkHttpTransport
 import net.sentinelsafeguard.app.data.api.SentinelApi
-import net.sentinelsafeguard.app.data.mail.MailService
 import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
@@ -21,9 +20,11 @@ import java.util.concurrent.TimeUnit
  * The v1 notification engine (spec §6): WorkManager wakes the app about
  * every 15 minutes (the platform floor — "within about 15 minutes",
  * never "instant") and compares two cheap numbers against last time:
- * new-ticket / sign-in-alert counts from the Command API, and the mail
- * unread count over IMAP. Anything that rose posts a local
- * notification, subject to the per-category toggles and quiet hours.
+ * new-ticket / sign-in-alert counts from the Command API. Anything
+ * that rose posts a local notification, subject to the per-category
+ * toggles and quiet hours. (1.6.3: the former mailbox unread
+ * check is gone with the mail engine — mail lives in the
+ * Sentinel Mail App.)
  */
 class PollWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -80,31 +81,6 @@ class PollWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             // A dead token surfaces the next time the app is opened.
         }
 
-        if (secure.hasMailCredentials) {
-            try {
-                val unread = MailService().totalUnread(
-                    secure.mailUsername!!, secure.mailPassword!!,
-                )
-                if (unread > settings.lastMailUnreadCount &&
-                    settings.lastMailUnreadCount >= 0 &&
-                    QuietHours.shouldNotify(
-                        NotifyCategory.MAIL, now,
-                        settings.quietStartMinutes, settings.quietEndMinutes,
-                        settings.notifyMail,
-                    )
-                ) {
-                    val rose = unread - settings.lastMailUnreadCount
-                    Notifier.notify(
-                        applicationContext, NotifyCategory.MAIL,
-                        "New mail",
-                        if (rose == 1) "One new message arrived." else "$rose new messages arrived.",
-                    )
-                }
-                settings.lastMailUnreadCount = unread
-            } catch (ignored: Exception) {
-                // Mail server unreachable this round — stay silent, retry next poll.
-            }
-        }
         return Result.success()
     }
 

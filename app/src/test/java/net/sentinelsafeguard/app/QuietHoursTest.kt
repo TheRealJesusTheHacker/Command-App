@@ -16,13 +16,10 @@ class QuietHoursTest {
     private val end = 18 * 60
 
     @Test
-    fun ticketsAndMailAreSilentDuringQuietHours() {
+    fun ticketsAreSilentDuringQuietHours() {
         val afternoon = LocalTime.of(14, 30)
         assertFalse(
             QuietHours.shouldNotify(NotifyCategory.TICKETS, afternoon, start, end, true)
-        )
-        assertFalse(
-            QuietHours.shouldNotify(NotifyCategory.MAIL, afternoon, start, end, true)
         )
     }
 
@@ -38,7 +35,6 @@ class QuietHoursTest {
     fun outsideQuietHoursEverythingEnabledNotifies() {
         val evening = LocalTime.of(21, 0)
         assertTrue(QuietHours.shouldNotify(NotifyCategory.TICKETS, evening, start, end, true))
-        assertTrue(QuietHours.shouldNotify(NotifyCategory.MAIL, evening, start, end, true))
     }
 
     @Test
@@ -66,7 +62,7 @@ class QuietHoursTest {
 
     // ---- Do All 1.4.0 (Expansion A1): the automation categories.
     // Quiet-exempt: CRITICAL + ESTATE_DOWN (with SIGN_IN_ALERT).
-    // Quiet-bound: MONEY + DIGEST (with TICKETS + MAIL).
+    // Quiet-bound: MONEY + DIGEST (with TICKETS).
 
     @Test
     fun criticalAndEstateDownAreExemptFromQuietHours() {
@@ -110,7 +106,6 @@ class QuietHoursTest {
         assertTrue(QuietHours.isQuietExempt(NotifyCategory.CRITICAL))
         assertTrue(QuietHours.isQuietExempt(NotifyCategory.ESTATE_DOWN))
         assertFalse(QuietHours.isQuietExempt(NotifyCategory.TICKETS))
-        assertFalse(QuietHours.isQuietExempt(NotifyCategory.MAIL))
         assertFalse(QuietHours.isQuietExempt(NotifyCategory.MONEY))
         assertFalse(QuietHours.isQuietExempt(NotifyCategory.DIGEST))
     }

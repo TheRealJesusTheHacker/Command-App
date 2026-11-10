@@ -91,7 +91,6 @@ fun SettingsScreen(
 
     var biometric by remember { mutableStateOf(settings.biometricEnabled) }
     var notifyTickets by remember { mutableStateOf(settings.notifyTickets) }
-    var notifyMail by remember { mutableStateOf(settings.notifyMail) }
     var notifyAlerts by remember { mutableStateOf(settings.notifySignInAlerts) }
     var quietStart by remember { mutableStateOf(QuietHours.toHhMm(settings.quietStartMinutes)) }
     var quietEnd by remember { mutableStateOf(QuietHours.toHhMm(settings.quietEndMinutes)) }
@@ -386,15 +385,12 @@ fun SettingsScreen(
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "The app checks for new tickets and mail about every 15 minutes.",
+            "The app checks for new tickets about every 15 minutes.",
             color = SentinelMuted,
             style = MaterialTheme.typography.bodyMedium,
         )
         ToggleRow("New tickets", null, notifyTickets) {
             notifyTickets = it; settings.notifyTickets = it
-        }
-        ToggleRow("New mail", null, notifyMail) {
-            notifyMail = it; settings.notifyMail = it
         }
         ToggleRow(
             "Sign-in alerts",
@@ -415,7 +411,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
         Text("Quiet hours", style = MaterialTheme.typography.titleMedium)
         Text(
-            "Ticket and mail notifications stay silent during these hours. Sign-in alerts still come through.",
+            "Ticket notifications stay silent during these hours. Sign-in alerts still come through.",
             color = SentinelMuted,
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -456,17 +452,6 @@ fun SettingsScreen(
             "Right now: silent from ${QuietHours.formatMinutes(settings.quietStartMinutes)} " +
                 "to ${QuietHours.formatMinutes(settings.quietEndMinutes)}.",
             color = SentinelMuted,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        SectionHeader("Mail")
-        Text(
-            "Messages stay in your mailbox until you delete them — nothing deletes itself. " +
-                if (viewModel.secure.hasMailCredentials) {
-                    "Mail is connected as ${viewModel.secure.mailUsername}."
-                } else {
-                    "Mail is not connected yet — open the Mail tab to connect it."
-                },
             style = MaterialTheme.typography.bodyMedium,
         )
 
@@ -558,7 +543,7 @@ fun SettingsScreen(
             onDismissRequest = { confirmSignOut = false },
             title = { Text("Sign out of this phone?") },
             text = {
-                Text("This phone's access is revoked and its saved sign-in is wiped. Your account and mail are not changed.")
+                Text("This phone's access is revoked and its saved sign-in is wiped. Your account is not changed.")
             },
             confirmButton = {
                 Button(
@@ -694,7 +679,7 @@ fun OnResumeEffect(onResume: () -> Unit) {
  * in plain words — the body shared by the Settings card and the
  * first-run dialog. The privacy line is literally true of this
  * app: notifications are built on the phone from the app's own
- * poll of the owner's self-hosted Command + mailbox; nothing
+ * poll of the owner's self-hosted Command; nothing
  * leaves the phone and no third-party service is involved.
  */
 @Composable
@@ -703,10 +688,6 @@ private fun NotificationExplainerBody(deniedFinal: Boolean = false) {
         NotifyChannelLine(
             "New tickets",
             "A ticket lands, or a client replies to one.",
-        )
-        NotifyChannelLine(
-            "New mail",
-            "New messages in your Sentinel mailbox.",
         )
         NotifyChannelLine(
             "Sign-in alerts",
@@ -718,7 +699,7 @@ private fun NotificationExplainerBody(deniedFinal: Boolean = false) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Quiet hours hold the routine ones — tickets, mail, money, digests — " +
+            "Quiet hours hold the routine ones — tickets, money, digests — " +
                 "until the window ends. Sign-in alerts, critical alerts, and " +
                 "estate-down alerts still come through.",
             color = SentinelMuted,

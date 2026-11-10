@@ -8,7 +8,6 @@ import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
-import java.util.Base64
 
 /**
  * The SPKI pin configuration (config/CertificatePins.kt).
@@ -16,9 +15,9 @@ import java.util.Base64
  * The two certificates below are throwaway harness certs (EC "A",
  * RSA "B"); their expected pins were computed with openssl from the
  * same bytes, so spkiPin is checked against an independent tool,
- * not against itself. The live-mail pin VALUES are also asserted
- * exactly: changing a fleet pin must be a deliberate act that edits
- * the code and this test together, never a silent one-line slip.
+ * not against itself. (1.6.3: the mail-host pin set this file once
+ * asserted was removed with the app's mail engine; the Command
+ * host's deliberate empty pin set remains pinned below.)
  */
 class CertificatePinsTest {
 
@@ -38,22 +37,6 @@ class CertificatePinsTest {
     fun chainMatchesRejectsAbsentPinsAndEmptySets() {
         assertFalse(CertificatePins.chainMatches(arrayOf(certB()), setOf(PIN_A)))
         assertFalse(CertificatePins.chainMatches(arrayOf(certA()), emptySet()))
-    }
-
-    @Test
-    fun mailPinsAreExactlyTheTwoDocumentedAnchors() {
-        assertEquals(
-            setOf(
-                // ISRG Root YE
-                "sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=",
-                // ISRG Root X2
-                "diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=",
-            ),
-            CertificatePins.MAIL_PINS,
-        )
-        CertificatePins.MAIL_PINS.forEach { pin ->
-            assertEquals(32, Base64.getDecoder().decode(pin).size)
-        }
     }
 
     @Test

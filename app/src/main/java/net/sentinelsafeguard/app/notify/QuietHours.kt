@@ -3,7 +3,7 @@ package net.sentinelsafeguard.app.notify
 import java.time.LocalTime
 
 enum class NotifyCategory {
-    TICKETS, MAIL, SIGN_IN_ALERT,
+    TICKETS, SIGN_IN_ALERT,
     // Do All 1.4.0 (Expansion A1): the phone-automation categories.
     CRITICAL, ESTATE_DOWN, MONEY, DIGEST,
 }
@@ -13,8 +13,8 @@ enum class NotifyCategory {
  * during the sleep window, routine notifications stay silent.
  * Quiet-exempt — the ones worth waking for: sign-in alerts,
  * Critical Alerts, and estate-down (a Sentinel surface is down).
- * Money and digest notifications are quiet-bound like tickets
- * and mail. Pure logic, unit-tested.
+ * Money and digest notifications are quiet-bound like tickets.
+ * Pure logic, unit-tested.
  */
 object QuietHours {
 
@@ -24,7 +24,6 @@ object QuietHours {
         NotifyCategory.CRITICAL,
         NotifyCategory.ESTATE_DOWN -> true
         NotifyCategory.TICKETS,
-        NotifyCategory.MAIL,
         NotifyCategory.MONEY,
         NotifyCategory.DIGEST -> false
     }

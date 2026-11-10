@@ -59,10 +59,17 @@ class NotifyRoutingTest {
     }
 
     @Test
-    fun mailHasNoDetailRouteSoItLandsOnTheSection() {
+    fun legacyMailKindsNoLongerRouteToAMailSurface() {
+        // 1.6.3: the Mail tab and the mail notification category
+        // are gone from this app (mail lives in the Sentinel Mail
+        // App). A legacy mail kind string falls through to the
+        // generic landing — never to a "mail" route, which no
+        // longer exists in the nav graph.
         val target = NotifyRouting.targetFor("new_mail", "99")
-        assertEquals(NotifyCategory.MAIL, target.category)
-        assertEquals("mail", target.route)
+        assertEquals(NotifyCategory.TICKETS, target.category)
+        assertEquals("today", target.route)
+        assertEquals("today", NotifyRouting.targetFor("mail", null).route)
+        assertEquals("today", NotifyRouting.targetFor("mail_intake", null).route)
     }
 
     @Test

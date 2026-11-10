@@ -60,8 +60,7 @@ class OkHttpTransport(
     // the certificate on command.sentinelsafeguard.net is presented
     // through Cloudflare's layer, outside the owner's control, and a
     // stale pin would brick this client and the update download
-    // below at the same moment. The mail client pins instead (its
-    // server is the owner's own); see CertificatePins/HARDENING.md.
+    // below at the same moment; see CertificatePins/HARDENING.md.
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)

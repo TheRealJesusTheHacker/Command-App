@@ -7,7 +7,7 @@ import androidx.security.crypto.MasterKey
 
 /**
  * The only home for secrets on the device (spec §5): the Command device
- * token and the mailbox password, in Android Keystore-backed encrypted
+ * token, in Android Keystore-backed encrypted
  * storage. This file's preferences are excluded from every backup and
  * device transfer by res/xml/data_extraction_rules.xml and
  * res/xml/backup_rules.xml. Nothing here is ever logged.
@@ -35,17 +35,7 @@ class SecureStore(context: Context) {
         get() = prefs.getString(KEY_DISPLAY_NAME, null)
         set(value) = putOrRemove(KEY_DISPLAY_NAME, value)
 
-    var mailUsername: String?
-        get() = prefs.getString(KEY_MAIL_USERNAME, null)
-        set(value) = putOrRemove(KEY_MAIL_USERNAME, value)
-
-    var mailPassword: String?
-        get() = prefs.getString(KEY_MAIL_PASSWORD, null)
-        set(value) = putOrRemove(KEY_MAIL_PASSWORD, value)
-
     val isSignedIn: Boolean get() = !deviceToken.isNullOrBlank()
-    val hasMailCredentials: Boolean
-        get() = !mailUsername.isNullOrBlank() && !mailPassword.isNullOrBlank()
 
     /** Sign-out wipes every secret this store holds. */
     fun clearAll() {
@@ -62,7 +52,5 @@ class SecureStore(context: Context) {
         const val FILE_NAME = "sentinel_secure_store"
         private const val KEY_DEVICE_TOKEN = "device_token"
         private const val KEY_DISPLAY_NAME = "display_name"
-        private const val KEY_MAIL_USERNAME = "mail_username"
-        private const val KEY_MAIL_PASSWORD = "mail_password"
     }
 }

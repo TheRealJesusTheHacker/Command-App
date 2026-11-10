@@ -121,8 +121,10 @@ private fun navPopExit(reduced: Boolean = false): androidx.compose.animation.Exi
  * drawer is exactly the web STAFF subset). As of Phase 9 every
  * Command view is built — no placeholder screens remain.
  * Client-structure sign-ins get the separate portal shell
- * ([PortalShell]). Mail + Settings live in the Command drawer's
- * utility row: app-only entries, never Command views (§2.2).
+ * ([PortalShell]). Settings lives in the Command drawer's
+ * utility row: an app-only entry, never a Command view (§2.2).
+ * (1.6.3: the drawer's Mail entry is gone with the mail engine —
+ * mail lives in the Sentinel Mail App now.)
  */
 @Composable
 fun AppRoot(
@@ -417,7 +419,6 @@ private fun AppShell(
         route.startsWith("job/") || route.startsWith("jobEdit") -> "Schedule"
         route == "jobNew" -> "New job"
         route == "search" -> "Search"
-        route == "mail" -> "Mail"
         route == "settings" -> "Settings"
         route == "admin" -> "Admin"
         route.startsWith("adminsec/") ->
@@ -503,14 +504,6 @@ private fun AppShell(
                         )
                     }
                     HorizontalDivider(Modifier.padding(vertical = 12.dp))
-                    NavigationDrawerItem(
-                        label = { Text("Mail") },
-                        selected = currentKey == "mail",
-                        onClick = { go("mail") },
-                        icon = { DrawerIcon("mail", currentKey == "mail") },
-                        colors = drawerItemColors(),
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
                     NavigationDrawerItem(
                         label = { Text("Settings") },
                         selected = currentKey == "settings",
@@ -807,7 +800,6 @@ private fun AppShell(
                         )
                     }
                     composable("search") { SearchScreen(viewModel, nav) }
-                    composable("mail") { MailScreen(viewModel) }
                     composable("settings") {
                         SettingsScreen(viewModel, onSignedOut = { go(startRoute) })
                     }
@@ -954,7 +946,7 @@ private fun adminToolPurpose(key: String): String = when (key) {
  * Command's: no staff groups, no injected entries, no Search.
  * The drawer's only utility entry is Sign out (the portal token
  * is refused on the staff utility surfaces server-side, so the
- * app-only Settings/Mail entries do not belong here).
+ * app-only Settings entry does not belong here).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

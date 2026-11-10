@@ -15,7 +15,6 @@ import net.sentinelsafeguard.app.R
 object Notifier {
 
     const val CHANNEL_TICKETS = "tickets"
-    const val CHANNEL_MAIL = "mail"
     const val CHANNEL_ALERTS = "signin_alerts"
     // Do All 1.4.0 (Expansion A1): the phone-automation channels.
     const val CHANNEL_CRITICAL = "critical_alerts"
@@ -37,10 +36,6 @@ object Notifier {
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_TICKETS, "New tickets", NotificationManager.IMPORTANCE_DEFAULT)
                 .apply { description = "A new ticket needs attention." }
-        )
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_MAIL, "New mail", NotificationManager.IMPORTANCE_DEFAULT)
-                .apply { description = "New mail in your Sentinel mailbox." }
         )
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ALERTS, "Sign-in alerts", NotificationManager.IMPORTANCE_HIGH)
@@ -66,7 +61,6 @@ object Notifier {
 
     private fun channelAndBaseId(category: NotifyCategory): Pair<String, Int> = when (category) {
         NotifyCategory.TICKETS -> CHANNEL_TICKETS to 1001
-        NotifyCategory.MAIL -> CHANNEL_MAIL to 1002
         NotifyCategory.SIGN_IN_ALERT -> CHANNEL_ALERTS to 1003
         NotifyCategory.CRITICAL -> CHANNEL_CRITICAL to 1004
         NotifyCategory.ESTATE_DOWN -> CHANNEL_ESTATE to 1005
@@ -167,10 +161,6 @@ object NotifyRouting {
         "ticket_created", "ticket_assigned", "ticket_replied",
         "new_ticket", "ticket", "tickets" ->
             Target(NotifyCategory.TICKETS, detailOrSection(refId, "ticket/", "tickets"))
-        // Mail has no per-message route in the app shell — the
-        // section IS the deepest honest target.
-        "mail", "new_mail", "mail_intake" ->
-            Target(NotifyCategory.MAIL, "mail")
         // Critical Alerts surface on Today (the urgent-intake
         // banner pins there); there is no alert detail route.
         "critical_alert", "critical" ->

@@ -335,7 +335,7 @@ object MirrorNav {
  * ADMIN_GROUPS / PORTAL_VIEWS / EXTRA_VIEWS already carry —
  * labels, groups, and order are untouched; the icons are
  * decoration beside the unchanged labels. Utility entries
- * (search / mail / settings / signout) map by their route keys.
+ * (search / settings / signout) map by their route keys.
  * The full mapping is recorded in the hunt18 BUILD-RECORD.
  */
 fun mirrorViewIcon(key: String): Int = when (key) {
@@ -411,7 +411,6 @@ fun mirrorViewIcon(key: String): Int = when (key) {
     "firmpulse" -> R.drawable.ic_nav_firmpulse
     "contract" -> R.drawable.ic_nav_contract
     "search" -> R.drawable.ic_nav_search
-    "mail" -> R.drawable.ic_nav_mail
     "settings" -> R.drawable.ic_nav_settings
     "signout" -> R.drawable.ic_nav_signout
     else -> R.drawable.ic_nav_dashboard
