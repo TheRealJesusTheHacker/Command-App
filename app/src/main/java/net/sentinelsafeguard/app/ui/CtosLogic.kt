@@ -305,14 +305,32 @@ object CtosLogic {
 
     /** "spfRecord" → "Spf record"; "detected_type" → "Detected
      *  type". Display-only casing over the server's own keys. */
+    private val KEY_ACRONYMS = setOf(
+        "spf", "dkim", "dmarc", "dns", "tls", "ssl", "ip", "ipv4",
+        "ipv6", "url", "uri", "http", "https", "html", "mx", "ns",
+        "soa", "txt", "asn", "rdap", "id", "os", "ua", "cve",
+    )
+
+    /** Keys read as sentence-case labels ("sizeBytes" -> "Size
+     *  bytes"); known acronyms stay upper-case ("spfRecord" ->
+     *  "SPF record"). */
     fun prettyKey(key: String): String {
-        val spaced = key.replace('_', ' ')
+        val spaced = key.replace('_', ' ').replace('-', ' ')
             .replace(Regex("(?<=[a-z0-9])(?=[A-Z])"), " ")
             .trim()
         if (spaced.isEmpty()) return key
-        return spaced.replaceFirstChar {
-            if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString()
-        }
+        val words = spaced.split(Regex("\\s+"))
+        return words.mapIndexed { index, word ->
+            val lower = word.lowercase(Locale.US)
+            when {
+                lower in KEY_ACRONYMS -> lower.uppercase(Locale.US)
+                index == 0 -> word.replaceFirstChar {
+                    if (it.isLowerCase()) it.titlecase(Locale.US)
+                    else it.toString()
+                }
+                else -> lower
+            }
+        }.joinToString(" ")
     }
 
     private fun primitiveText(el: JsonElement): String? = when (el) {
