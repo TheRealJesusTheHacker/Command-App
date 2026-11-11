@@ -282,6 +282,35 @@ object MirrorNav {
     fun flagOn(flag: String?, flags: Map<String, Boolean>): Boolean =
         flag == null || flags[flag] == true
 
+    /**
+     * AUDIT-171 B-26: may this account follow a notification
+     * deep link to [route]? The NavHost registers every Command
+     * route for every Command-shell account, and the drawer is
+     * the only place role/flag restrictions were applied — an
+     * intent-supplied route sailed past them. The link now lands
+     * only when its section is one this account can actually see
+     * (the same [visibleGroups] the drawer renders); anything
+     * else is dropped, exactly like an unresolvable route.
+     * (Server-side authorization still governs the DATA — this
+     * guard is about not navigating a restricted account into a
+     * surface its role never sees.)
+     */
+    fun deepLinkAllowed(
+        route: String,
+        role: String,
+        flags: Map<String, Boolean>,
+        taxOnly: Boolean,
+    ): Boolean {
+        val section = when (route.substringBefore("/")) {
+            "ticket" -> "tickets"
+            "invoice" -> "invoices"
+            "client" -> "clients"
+            else -> route.substringBefore("/")
+        }
+        return visibleGroups(role, flags, taxOnly)
+            .any { group -> group.views.any { it.key == section } }
+    }
+
     /** The views visible for a role + flag set, groups in order,
      *  empty groups dropped. taxOnly accounts see only Tax & Profit. */
     fun visibleGroups(

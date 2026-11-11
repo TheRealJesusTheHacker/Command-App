@@ -209,7 +209,7 @@ fun CasesScreen(viewModel: AppViewModel, nav: NavController) {
                                     )
                                 }
                             }
-                            items(cards) { case ->
+                            items(cards, key = { it.id }) { case ->
                                 CaseCard(
                                     case = case,
                                     roster = roster,
@@ -465,7 +465,7 @@ private fun CaseDirectory(
                     modifier = Modifier.padding(horizontal = 16.dp),
                 ) { Text("Reset search & filters") }
             }
-            else -> items(results!!) { case ->
+            else -> items(results!!, key = { it.id }) { case ->
                 CaseCard(
                     case = case,
                     roster = roster,
@@ -719,7 +719,7 @@ fun CaseFormScreen(viewModel: AppViewModel, nav: NavController, caseId: Int?) {
             loadError != null -> ErrorBox(loadError!!)
             !loaded -> SkeletonList(4)
             else -> Column(Modifier.padding(horizontal = 16.dp)) {
-                val clientOptions = listOf("No client") + clients.map { it.legalName }
+                val clientOptions = listOf("No client") + MirrorVocab.clientOptions(clients)
                 ChoiceMenu(
                     "Client",
                     clientOptions[
@@ -729,7 +729,7 @@ fun CaseFormScreen(viewModel: AppViewModel, nav: NavController, caseId: Int?) {
                     clientOptions,
                 ) { picked ->
                     clientId = if (picked == "No client") null
-                    else clients.firstOrNull { it.legalName == picked }?.id
+                    else MirrorVocab.clientIdAt(clients, clientOptions, picked, sentinelCount = 1)
                 }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
@@ -748,7 +748,16 @@ fun CaseFormScreen(viewModel: AppViewModel, nav: NavController, caseId: Int?) {
                     ChoiceMenu("Priority", priority, MirrorVocab.PRIORITIES) { priority = it }
                 }
                 Spacer(Modifier.height(12.dp))
-                val assigneeOptions = listOf("Unassigned") + roster.map { it.displayName }
+                // AUDIT-171 B-07: same namesake-safe pattern as
+                // the ticket form — unique options, positional
+                // resolution.
+                val assigneeOptions = listOf("Unassigned") + roster.map { u ->
+                    if (roster.count { it.displayName == u.displayName } > 1) {
+                        "${u.displayName} (#${u.id})"
+                    } else {
+                        u.displayName
+                    }
+                }
                 ChoiceMenu(
                     "Assigned to",
                     assigneeOptions[
@@ -757,8 +766,8 @@ fun CaseFormScreen(viewModel: AppViewModel, nav: NavController, caseId: Int?) {
                     ],
                     assigneeOptions,
                 ) { picked ->
-                    assignedUserId = if (picked == "Unassigned") null
-                    else roster.firstOrNull { it.displayName == picked }?.id
+                    val idx = assigneeOptions.indexOf(picked)
+                    assignedUserId = if (idx <= 0) null else roster.getOrNull(idx - 1)?.id
                 }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
@@ -928,7 +937,7 @@ private fun CasePhotosCard(viewModel: AppViewModel, caseId: Int) {
             title = { Text("Photo") },
             text = {
                 val bmp = remember(bytes) {
-                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    decodeForDisplay(bytes)
                 }
                 if (bmp != null) {
                     androidx.compose.foundation.Image(

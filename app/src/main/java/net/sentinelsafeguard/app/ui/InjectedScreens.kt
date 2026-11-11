@@ -18,6 +18,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -51,6 +53,7 @@ import net.sentinelsafeguard.app.data.api.clientImportPreview
 import net.sentinelsafeguard.app.data.api.clientImports
 import net.sentinelsafeguard.app.data.api.clientOpsEmergency
 import net.sentinelsafeguard.app.data.api.clientOpsEmergencyDelete
+import net.sentinelsafeguard.app.data.api.clientOpsEmergencyReorder
 import net.sentinelsafeguard.app.data.api.clientOpsEmergencySave
 import net.sentinelsafeguard.app.data.api.clientOpsRetainerDraw
 import net.sentinelsafeguard.app.data.api.clientOpsRetainerEntry
@@ -804,10 +807,51 @@ private fun ClientOpsScreen(viewModel: AppViewModel) {
         var error by remember { mutableStateOf<String?>(null) }
         val act = rememberAction({ error = it }, { reload() })
         val contacts = Phase3Logic.arr(data, "contacts").ifEmpty { Phase3Logic.arr(data, "emergencyContacts") }
-        contacts.forEach { c ->
+        val contactIds = contacts.mapNotNull { Phase3Logic.int(it, "id") }
+        contacts.forEachIndexed { index, c ->
             val cid = Phase3Logic.int(c, "id")
             Row {
                 Text(Phase8bLogic.rowTitle(c), modifier = Modifier.weight(1f))
+                // AUDIT-171 B-24: the call order IS the product
+                // here (first contact is called first) — the
+                // reorder endpoint existed with no UI. The server
+                // requires the complete id list, exactly once each.
+                if (cid != null && contactIds.size == contacts.size && contactIds.size > 1) {
+                    TextButton(
+                        modifier = Modifier.semantics { contentDescription = "Move contact up" },
+                        enabled = index > 0,
+                        onClick = {
+                            val ids = contactIds.toMutableList()
+                            ids.removeAt(index)
+                            ids.add(index - 1, cid)
+                            act {
+                                viewModel.api.clientOpsEmergencyReorder(buildJsonObject {
+                                    put("clientId", clientId)
+                                    put("orderedIds", kotlinx.serialization.json.JsonArray(
+                                        ids.map { kotlinx.serialization.json.JsonPrimitive(it) },
+                                    ))
+                                })
+                            }
+                        },
+                    ) { Text("↑") }
+                    TextButton(
+                        modifier = Modifier.semantics { contentDescription = "Move contact down" },
+                        enabled = index < contacts.size - 1,
+                        onClick = {
+                            val ids = contactIds.toMutableList()
+                            ids.removeAt(index)
+                            ids.add(index + 1, cid)
+                            act {
+                                viewModel.api.clientOpsEmergencyReorder(buildJsonObject {
+                                    put("clientId", clientId)
+                                    put("orderedIds", kotlinx.serialization.json.JsonArray(
+                                        ids.map { kotlinx.serialization.json.JsonPrimitive(it) },
+                                    ))
+                                })
+                            }
+                        },
+                    ) { Text("↓") }
+                }
                 if (cid != null) {
                     TextButton(onClick = { act { viewModel.api.clientOpsEmergencyDelete(cid) } }) {
                         Text("Delete")

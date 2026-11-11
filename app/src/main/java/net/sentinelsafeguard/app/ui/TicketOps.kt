@@ -46,6 +46,7 @@ import net.sentinelsafeguard.app.data.api.consumePart
 import net.sentinelsafeguard.app.data.api.convertTimeToInvoice
 import net.sentinelsafeguard.app.data.api.createExpense
 import net.sentinelsafeguard.app.data.api.createTimeEntry
+import net.sentinelsafeguard.app.data.api.editTimeEntry
 import net.sentinelsafeguard.app.data.api.deleteCannedResponse
 import net.sentinelsafeguard.app.data.api.deleteExpense
 import net.sentinelsafeguard.app.data.api.deletePhoto
@@ -370,7 +371,7 @@ private fun PhotosCard(viewModel: AppViewModel, ticket: Ticket) {
         Button(onClick = { picker.launch("image/*") }) { Text("Upload photo") }
         ActionErrorText(error)
         viewPhoto?.let { bytes ->
-            val bitmap = remember(bytes) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+            val bitmap = remember(bytes) { decodeForDisplay(bytes) }
             AlertDialog(
                 onDismissRequest = { viewPhoto = null },
                 title = { Text("Photo") },
@@ -481,7 +482,7 @@ private fun VoiceNotesCard(viewModel: AppViewModel, ticket: Ticket) {
                             error = plainError(e, "The voice note could not be downloaded. Try again.")
                         }
                     }
-                }) { Text("Download") }
+                }) { Text("Share / save") }
             }
             if (isActive) {
                 androidx.compose.material3.LinearProgressIndicator(
@@ -591,6 +592,9 @@ private fun TimeTrackingCard(viewModel: AppViewModel, ticket: Ticket) {
     var minutes by remember { mutableStateOf("") }
     var rate by remember { mutableStateOf("") }
     var billable by remember { mutableStateOf(true) }
+    // AUDIT-171 B-23: the entry being edited, when the form is in
+    // edit mode (null = adding by hand).
+    var editingId by remember { mutableStateOf<Int?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     val selected = remember { mutableStateOf(setOf<Int>()) }
@@ -659,6 +663,20 @@ private fun TimeTrackingCard(viewModel: AppViewModel, ticket: Ticket) {
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                if (eid != null && Phase3Logic.bool(entry, "running") != true) {
+                    // AUDIT-171 B-23: entries could be created and
+                    // deleted but never edited, though the API
+                    // layer has always carried the PATCH. Edit
+                    // loads the entry into the form below.
+                    TextButton(onClick = {
+                        editingId = eid
+                        description = Phase3Logic.str(entry, "description")
+                        minutes = ((Phase3Logic.long(entry, "durationSeconds") ?: 0L) / 60L).toString()
+                        rate = Phase3Logic.long(entry, "rateCents")
+                            ?.let { (it / 100.0).toString() } ?: ""
+                        billable = Phase3Logic.bool(entry, "billable") == true
+                    }) { Text("Edit") }
+                }
                 if (eid != null) {
                     TextButton(onClick = {
                         scope.launch {
@@ -673,7 +691,10 @@ private fun TimeTrackingCard(viewModel: AppViewModel, ticket: Ticket) {
             }
         }
         Spacer(Modifier.height(8.dp))
-        Text("Add entry by hand", style = MaterialTheme.typography.titleSmall)
+        Text(
+            if (editingId == null) "Add entry by hand" else "Edit entry",
+            style = MaterialTheme.typography.titleSmall,
+        )
         TextFieldRow("Description", description, { description = it })
         TextFieldRow("Duration (minutes)", minutes, { minutes = it })
         TextFieldRow("Rate ($/hour, optional)", rate, { rate = it })
@@ -687,21 +708,38 @@ private fun TimeTrackingCard(viewModel: AppViewModel, ticket: Ticket) {
                 onClick = {
                     scope.launch {
                         try {
-                            viewModel.api.createTimeEntry(buildJsonObject {
-                                put("ticketId", ticket.id)
-                                ticket.clientId?.let { put("clientId", it) }
-                                put("description", description)
-                                put("durationMinutes", minutes.toInt())
-                                put("billable", billable)
-                                Phase4Logic.dollarsToCents(rate)?.let { put("rateCents", it) }
-                            })
+                            val editing = editingId
+                            if (editing == null) {
+                                viewModel.api.createTimeEntry(buildJsonObject {
+                                    put("ticketId", ticket.id)
+                                    ticket.clientId?.let { put("clientId", it) }
+                                    put("description", description)
+                                    put("durationMinutes", minutes.toInt())
+                                    put("billable", billable)
+                                    Phase4Logic.dollarsToCents(rate)?.let { put("rateCents", it) }
+                                })
+                            } else {
+                                viewModel.api.editTimeEntry(editing, buildJsonObject {
+                                    put("description", description)
+                                    put("durationMinutes", minutes.toInt())
+                                    put("billable", billable)
+                                    Phase4Logic.dollarsToCents(rate)?.let { put("rateCents", it) }
+                                })
+                                editingId = null
+                            }
                             description = ""; minutes = ""; reload()
                         } catch (e: Exception) {
                             error = plainError(e, "The entry could not be saved. Try again.")
                         }
                     }
                 },
-            ) { Text("Add entry") }
+            ) { Text(if (editingId == null) "Add entry" else "Save changes") }
+            if (editingId != null) {
+                OutlinedButton(onClick = {
+                    editingId = null
+                    description = ""; minutes = ""; rate = ""
+                }) { Text("Cancel edit") }
+            }
             OutlinedButton(
                 enabled = selected.value.isNotEmpty() && ticket.clientId != null,
                 onClick = {
@@ -783,12 +821,15 @@ private fun PlaybooksCard(viewModel: AppViewModel) {
                         if (clients.isEmpty()) {
                             Text("Loading clients…", color = SentinelMuted)
                         } else {
+                            val clientOpts = MirrorVocab.clientOptions(clients)
                             ChoiceMenu(
                                 "Client",
-                                chosen?.legalName ?: clients.first().legalName,
-                                clients.map { it.legalName },
+                                chosen?.let { MirrorVocab.clientOptionLabel(clients, it) }
+                                    ?: MirrorVocab.clientOptionLabel(clients, clients.first()),
+                                clientOpts,
                             ) { picked ->
-                                chosen = clients.firstOrNull { it.legalName == picked }
+                                chosen = MirrorVocab.clientIdAt(clients, clientOpts, picked)
+                                    ?.let { id -> clients.firstOrNull { it.id == id } }
                             }
                         }
                     }

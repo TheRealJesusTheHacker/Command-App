@@ -58,6 +58,11 @@ object CtosLogic {
         val inputHint: String,
         val network: Boolean,
         val kind: String,
+        /** AUDIT-171 B-17 [OSINT]: true for the authorization-gated
+         *  active tools (pentest / bounty / proxyscan). The flag
+         *  rode the payload all along; the parse used to drop it,
+         *  so a gated scan looked exactly like a passive lookup. */
+        val gated: Boolean = false,
     )
 
     fun parseTools(workspace: JsonObject?): List<ToolMeta> =
@@ -69,6 +74,7 @@ object CtosLogic {
                 inputHint = Phase3Logic.str(t, "input"),
                 network = Phase3Logic.bool(t, "network") == true,
                 kind = Phase3Logic.str(t, "kind"),
+                gated = Phase3Logic.bool(t, "gated") == true,
             )
         }.filter { it.name.isNotBlank() }
 
@@ -110,6 +116,117 @@ object CtosLogic {
 
     fun parseCases(workspace: JsonObject?): List<CaseRow> =
         Phase3Logic.arr(workspace, "cases").mapNotNull { parseCase(it) }
+
+    /**
+     * AUDIT-171 B-07 [OSINT]: case pickers resolved the tap by
+     * case TITLE — and case titles default to the target on the
+     * server, so two cases on one target share a title by
+     * construction and the first silently won. Chips now carry
+     * the case id ("#7 · target"), and resolution reads the id.
+     */
+    fun caseChipLabel(c: CaseRow): String = "#${c.id} · ${c.title}"
+
+    fun caseFromChip(cases: List<CaseRow>, chip: String): CaseRow? {
+        val id = chip.removePrefix("#").substringBefore(" ·").trim().toIntOrNull()
+        if (id != null) return cases.firstOrNull { it.id == id }
+        return cases.firstOrNull { it.title == chip }
+    }
+
+    /**
+     * AUDIT-171 B-20 [OSINT]: one artifact's content out of a case
+     * export. The case GET deliberately omits artifact content;
+     * the export carries it. Artifacts have no id on either
+     * payload, so the match is the (label, tool, createdAt)
+     * triple the case screen rendered.
+     */
+    fun artifactContent(
+        exportPayload: JsonObject?,
+        label: String,
+        tool: String,
+        createdAt: Long,
+    ): JsonObject? {
+        val exp = Phase3Logic.obj(exportPayload, "export") ?: exportPayload
+        val match = Phase3Logic.arr(exp, "artifacts").firstOrNull { a ->
+            Phase3Logic.str(a, "label") == label &&
+                Phase3Logic.str(a, "tool") == tool &&
+                (Phase3Logic.long(a, "createdAt") ?: 0L) == createdAt
+        } ?: return null
+        return match["content"] as? JsonObject
+    }
+
+    // ---- Case report (AUDIT-171 B-18) ----------------------------------
+
+    data class CaseReport(
+        val case: CaseRow?,
+        val findingsByType: List<Pair<String, Int>>,
+        val findings: List<FindingRow>,
+        val artifacts: List<ArtifactRow>,
+        val footer: String,
+        val generatedAt: Long,
+    )
+
+    /** Parse the printable-report twin's payload ({ok, report:{…}}). */
+    fun parseReport(payload: JsonObject?): CaseReport? {
+        val report = Phase3Logic.obj(payload, "report") ?: return null
+        val byType = Phase3Logic.obj(report, "findingsByType")
+        return CaseReport(
+            case = Phase3Logic.obj(report, "case")?.let { parseCase(it) },
+            findingsByType = byType?.entries
+                ?.map { (k, v) -> k to ((v as? JsonPrimitive)?.content?.toIntOrNull() ?: 0) }
+                ?.sortedBy { it.first } ?: emptyList(),
+            findings = Phase3Logic.arr(report, "findings").map { f ->
+                FindingRow(
+                    id = 0,
+                    tool = Phase3Logic.str(f, "tool"),
+                    type = Phase3Logic.str(f, "type"),
+                    value = Phase3Logic.str(f, "value"),
+                    detail = Phase3Logic.str(f, "detail"),
+                    url = Phase3Logic.str(f, "url"),
+                    createdAt = Phase3Logic.long(f, "createdAt") ?: 0L,
+                )
+            },
+            artifacts = parseArtifacts(report),
+            footer = Phase3Logic.str(report, "footer"),
+            generatedAt = Phase3Logic.long(report, "generatedAt") ?: 0L,
+        )
+    }
+
+    /** The report as shareable plain text — the same content the
+     *  report screen renders, in the server's own words (footer
+     *  included verbatim). */
+    fun renderReportText(report: CaseReport): String {
+        val sb = StringBuilder()
+        val c = report.case
+        sb.appendLine("CToS case report — ${c?.title ?: "Case"}")
+        if (c != null) {
+            sb.appendLine("Target: ${c.target}${if (c.targetType.isNotBlank()) " (${c.targetType})" else ""}")
+            sb.appendLine("Status: ${c.status}")
+        }
+        sb.appendLine()
+        sb.appendLine("Findings (${report.findings.size})")
+        for ((type, count) in report.findingsByType) {
+            sb.appendLine("  $type: $count")
+        }
+        for (f in report.findings) {
+            sb.appendLine()
+            sb.appendLine("[${f.type}] ${f.value}")
+            if (f.tool.isNotBlank()) sb.appendLine("  Tool: ${f.tool}")
+            if (f.detail.isNotBlank()) sb.appendLine("  ${f.detail}")
+            if (f.url.isNotBlank()) sb.appendLine("  ${f.url}")
+        }
+        if (report.artifacts.isNotEmpty()) {
+            sb.appendLine()
+            sb.appendLine("Artifacts (${report.artifacts.size})")
+            for (a in report.artifacts) {
+                sb.appendLine("  ${a.label}${if (a.tool.isNotBlank()) " — ${a.tool}" else ""}")
+            }
+        }
+        if (report.footer.isNotBlank()) {
+            sb.appendLine()
+            sb.appendLine(report.footer)
+        }
+        return sb.toString().trim()
+    }
 
     data class FindingRow(
         val id: Int,
@@ -186,6 +303,115 @@ object CtosLogic {
         }.sortedBy { it.label.lowercase() }
     }
 
+    // ---- OPSEC profile + authorization gate (AUDIT-171 B-17) ------
+    //
+    // The workspace payload has always carried `profile`,
+    // `profileOptions` and `gate` (a_ctosget); the app parsed none
+    // of them, so the OPSEC profile was web-only and the gate
+    // invisible in-app. These parses are display-only: profile
+    // EDITING has no app twin on the server (documented as a
+    // server-side ask in the audit record), and gate management is
+    // owner-only on the web — the app shows the registry state,
+    // including the server's own canManage flag, never a write.
+
+    data class OpsecProfile(
+        val doh: String,
+        val dohCustom: String,
+        val uaRotate: Boolean,
+        val jitterMs: Int,
+    )
+
+    fun parseProfile(workspace: JsonObject?): OpsecProfile? {
+        val p = Phase3Logic.obj(workspace, "profile") ?: return null
+        return OpsecProfile(
+            doh = Phase3Logic.str(p, "doh").ifBlank { "google" },
+            dohCustom = Phase3Logic.str(p, "dohCustom"),
+            uaRotate = Phase3Logic.bool(p, "uaRotate") == true,
+            jitterMs = Phase3Logic.int(p, "jitterMs") ?: 0,
+        )
+    }
+
+    data class ProfileOptionRow(val key: String, val label: String, val detail: String)
+
+    data class UnavailableRow(val label: String, val reason: String)
+
+    data class ProfileOptions(
+        val wired: List<ProfileOptionRow>,
+        val unavailable: List<UnavailableRow>,
+        val providers: List<String>,
+    )
+
+    fun parseProfileOptions(workspace: JsonObject?): ProfileOptions? {
+        val o = Phase3Logic.obj(workspace, "profileOptions") ?: return null
+        return ProfileOptions(
+            wired = Phase3Logic.arr(o, "wired").map { w ->
+                ProfileOptionRow(
+                    key = Phase3Logic.str(w, "key"),
+                    label = Phase3Logic.str(w, "label"),
+                    detail = Phase3Logic.str(w, "detail"),
+                )
+            },
+            unavailable = Phase3Logic.arr(o, "unavailable").map { u ->
+                UnavailableRow(
+                    label = Phase3Logic.str(u, "label"),
+                    reason = Phase3Logic.str(u, "reason"),
+                )
+            },
+            providers = Phase3Logic.arrRaw(o, "providers")
+                .mapNotNull { (it as? JsonPrimitive)?.content }
+                .filter { it.isNotBlank() },
+        )
+    }
+
+    /** Human line for one wired profile setting's current value. */
+    fun profileValueLine(profile: OpsecProfile, key: String): String = when (key) {
+        "doh" -> if (profile.doh == "custom") {
+            "Custom endpoint${profile.dohCustom.takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""}"
+        } else {
+            profile.doh.replaceFirstChar { it.uppercase() }
+        }
+        "uaRotate" -> if (profile.uaRotate) "On — rotates per run" else "Off"
+        "jitterMs" -> if (profile.jitterMs > 0) "Up to ${profile.jitterMs} ms" else "Off"
+        else -> ""
+    }
+
+    data class GateEntry(
+        val id: Int,
+        val target: String,
+        val targetKind: String,
+        val basisKind: String,
+        val clientLabel: String,
+        val status: String,
+    )
+
+    data class GatePanel(
+        val rule: String,
+        val canManage: Boolean,
+        val entries: List<GateEntry>,
+        val auditCount: Int,
+        val poolCount: Int,
+    )
+
+    fun parseGate(workspace: JsonObject?): GatePanel? {
+        val g = Phase3Logic.obj(workspace, "gate") ?: return null
+        return GatePanel(
+            rule = Phase3Logic.str(g, "rule"),
+            canManage = Phase3Logic.bool(g, "canManage") == true,
+            entries = Phase3Logic.arr(g, "entries").map { e ->
+                GateEntry(
+                    id = Phase3Logic.int(e, "id") ?: 0,
+                    target = Phase3Logic.str(e, "target"),
+                    targetKind = Phase3Logic.str(e, "targetKind"),
+                    basisKind = Phase3Logic.str(e, "basisKind"),
+                    clientLabel = Phase3Logic.str(e, "clientLabel"),
+                    status = Phase3Logic.str(e, "status"),
+                )
+            },
+            auditCount = Phase3Logic.arr(g, "audit").size,
+            poolCount = Phase3Logic.arr(g, "pool").size,
+        )
+    }
+
     fun catalogLine(workspace: JsonObject?): String? {
         val cat = Phase3Logic.obj(workspace, "catalog") ?: return null
         val platforms = Phase3Logic.int(cat, "platforms") ?: return null
@@ -228,6 +454,12 @@ object CtosLogic {
         val sources: List<OsintLogic.SourceEntry>,
         val data: JsonObject?,
         val recorded: Int?,
+        /** AUDIT-171 B-19 [OSINT]: the result's top-level findings.
+         *  The parse used to read sources + data only, so anything
+         *  a tool returned solely as a finding was invisible here
+         *  (it could still record into a case server-side, which
+         *  the operator could not verify from this screen). */
+        val findings: List<FindingRow> = emptyList(),
     )
 
     /** Shape a ctostool twin payload ({ok, tool, result:
@@ -240,10 +472,22 @@ object CtosLogic {
             ?.mapNotNull { it as? JsonObject }
             ?.map { OsintLogic.parseSourceEntry(it) }
             ?: emptyList()
+        val toolName = Phase3Logic.str(payload, "tool")
         return ToolResult(
             sources = sources,
             data = result?.get("data") as? JsonObject,
             recorded = Phase3Logic.int(payload, "recorded"),
+            findings = Phase3Logic.arr(result, "findings").map { f ->
+                FindingRow(
+                    id = Phase3Logic.int(f, "id") ?: 0,
+                    tool = Phase3Logic.str(f, "tool").ifBlank { toolName },
+                    type = Phase3Logic.str(f, "type"),
+                    value = Phase3Logic.str(f, "value"),
+                    detail = Phase3Logic.str(f, "detail"),
+                    url = Phase3Logic.str(f, "url"),
+                    createdAt = Phase3Logic.long(f, "createdAt") ?: 0L,
+                )
+            },
         )
     }
 
@@ -362,6 +606,11 @@ object CtosLogic {
      * caps pathological nesting (the dashboard's module results)
      * at a readable depth; past the cap a subtree renders as
      * its key count rather than vanishing.
+     *
+     * AUDIT-171 B-19: the cap rises from 3 to 5 — at 3, real tool
+     * payloads (nested module data) degraded to "N fields" counts
+     * instead of their values on a normal result. The cap still
+     * bounds pathological nesting.
      */
     fun shapeData(data: JsonObject?, depth: Int = 0): List<DataNode> {
         if (data == null) return emptyList()
@@ -372,7 +621,7 @@ object CtosLogic {
                 is JsonPrimitive -> primitiveText(el)?.takeIf { it.isNotBlank() }
                     ?.let { out += DataNode.Line(label, it) }
                 is JsonObject -> {
-                    if (depth >= 3) {
+                    if (depth >= 5) {
                         out += DataNode.Line(label, "${el.size} fields")
                     } else {
                         val children = shapeData(el, depth + 1)
@@ -389,7 +638,7 @@ object CtosLogic {
                         if (joined.isNotEmpty()) {
                             out += DataNode.Line(label, joined.joinToString(", "))
                         }
-                    } else if (depth >= 3) {
+                    } else if (depth >= 5) {
                         out += DataNode.Line(label, "${el.size} items")
                     } else {
                         val children = mutableListOf<DataNode>()

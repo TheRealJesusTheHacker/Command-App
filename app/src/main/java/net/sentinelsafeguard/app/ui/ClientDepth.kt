@@ -662,7 +662,7 @@ private fun SiteProfilesCard(viewModel: AppViewModel, clientId: Int) {
         }
         viewDiagram?.let { bytes ->
             val bitmap = remember(bytes) {
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                decodeForDisplay(bytes)
             }
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { viewDiagram = null },
@@ -1393,12 +1393,13 @@ fun VerifiedScreen(viewModel: AppViewModel, nav: NavController) {
                         Text("Loading clients…", color = SentinelMuted)
                     } else {
                         val selected = clients.firstOrNull { it.id == issueClient } ?: clients.first()
+                        val clientOpts = MirrorVocab.clientOptions(clients)
                         ChoiceMenu(
                             "Client",
-                            selected.legalName,
-                            clients.map { it.legalName },
+                            MirrorVocab.clientOptionLabel(clients, selected),
+                            clientOpts,
                         ) { picked ->
-                            issueClient = clients.firstOrNull { it.legalName == picked }?.id
+                            issueClient = MirrorVocab.clientIdAt(clients, clientOpts, picked)
                         }
                     }
                     if (categories.isNotEmpty()) {

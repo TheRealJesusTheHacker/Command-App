@@ -93,8 +93,9 @@ private fun ClientPicker(
         return
     }
     val selected = clients.firstOrNull { it.id == selectedId } ?: clients.first()
-    ChoiceMenu("Client", selected.legalName, clients.map { it.legalName }) { picked ->
-        clients.firstOrNull { it.legalName == picked }?.let { onPick(it.id) }
+    val clientOpts = MirrorVocab.clientOptions(clients)
+    ChoiceMenu("Client", MirrorVocab.clientOptionLabel(clients, selected), clientOpts) { picked ->
+        MirrorVocab.clientIdAt(clients, clientOpts, picked)?.let { onPick(it) }
     }
 }
 

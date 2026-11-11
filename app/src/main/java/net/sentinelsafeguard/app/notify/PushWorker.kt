@@ -43,15 +43,41 @@ data class PushEvent(
 object PushLogic {
 
     /**
-     * Event kind → notification category. Critical alerts ride the
-     * high-importance sign-in-alert channel (they are the one class
-     * worth waking for); ticket events and everything else ride the
-     * tickets channel, exactly as the poll engine categorizes them.
+     * Event kind → notification category. AUDIT-171 B-14: this used
+     * to map critical_alert to SIGN_IN_ALERT, which left the
+     * Settings "Critical alerts" toggle (notifyCritical) governing
+     * nothing and ran critical alerts through the sign-in toggle
+     * instead. [NotifyRouting] is the single source of truth for
+     * kind → (category, route) — it maps critical_alert to
+     * CRITICAL — so the category is read from there.
      */
-    fun categoryFor(kind: String): NotifyCategory = when {
-        kind == "critical_alert" -> NotifyCategory.SIGN_IN_ALERT
-        kind.startsWith("ticket") -> NotifyCategory.TICKETS
-        else -> NotifyCategory.TICKETS
+    fun categoryFor(kind: String): NotifyCategory =
+        NotifyRouting.targetFor(kind, null).category
+
+    /**
+     * AUDIT-171 B-13: the events in [events] this device has not
+     * already shown. The worker records every received id on-device
+     * BEFORE it ACKs, so when an ACK or cursor save fails and the
+     * server redelivers the batch, the redelivery is consumed and
+     * re-ACKed silently instead of alerting the owner twice.
+     */
+    fun unseenEvents(events: List<PushEvent>, seenIds: Set<String>): List<PushEvent> =
+        events.filter { it.id !in seenIds }
+
+    /**
+     * The seen-id set after a poll: prior ids plus this batch's, in
+     * arrival order, capped at the most recent [cap] so the store
+     * stays small. Ids are recorded whether their notification was
+     * shown or silenced — silenced events are consumed by design.
+     */
+    fun seenAfter(
+        seenIds: Collection<String>,
+        events: List<PushEvent>,
+        cap: Int = 200,
+    ): List<String> {
+        val merged = LinkedHashSet<String>(seenIds)
+        events.forEach { merged.add(it.id) }
+        return merged.toList().takeLast(cap)
     }
 
     /** Whether [category]'s per-category toggle is on in Settings. */
@@ -61,12 +87,17 @@ object PushLogic {
             NotifyCategory.SIGN_IN_ALERT -> settings.notifySignInAlerts
             // 1.4.0 enum growth (Lane D channels): push events never
             // map to these today (categoryFor above), but the when
-            // must stay exhaustive — critical rides its own toggle,
-            // estate-down rides the alerts toggle, money/digest
-            // have no per-category toggle (quiet hours still gate
-            // them inside QuietHours.shouldNotify).
+            // must stay exhaustive — money/digest have no
+            // per-category toggle (quiet hours still gate them
+            // inside QuietHours.shouldNotify).
+            // AUDIT-171 B-14: estate-down rides the CRITICAL
+            // toggle — that is what the Settings copy has always
+            // promised ("A Critical Alert in Command, or a
+            // Sentinel site going down" is the Critical toggle's
+            // own description); it used to ride the sign-in
+            // toggle, which its label never mentions.
             NotifyCategory.CRITICAL -> settings.notifyCritical
-            NotifyCategory.ESTATE_DOWN -> settings.notifySignInAlerts
+            NotifyCategory.ESTATE_DOWN -> settings.notifyCritical
             NotifyCategory.MONEY -> true
             NotifyCategory.DIGEST -> true
         }
@@ -161,10 +192,10 @@ object PushLogic {
     /** Display body for an event whose payload left it blank. */
     fun fallbackBody(kind: String): String = when {
         kind == "critical_alert" ->
-            "A critical alert was raised in Sentinel Command. Open the app to check it."
+            "A critical alert was raised in Command. Open the app to check it."
         kind.startsWith("ticket") ->
-            "A ticket changed in Sentinel Command. Open the app to see it."
-        else -> "Something changed in Sentinel Command. Open the app to see it."
+            "A ticket changed in Command. Open the app to see it."
+        else -> "Something changed in Command. Open the app to see it."
     }
 }
 
@@ -234,7 +265,19 @@ class PushWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             }
 
             val now = LocalTime.now()
-            for (event in events) {
+            // AUDIT-171 B-13: suppress re-alerts for events this
+            // device already showed (a failed ACK/cursor save on an
+            // earlier run makes the server redeliver the batch).
+            val seenIds = pushStore.seenEventIds.toSet()
+            for (event in PushLogic.unseenEvents(events, seenIds)) {
+                // AUDIT-171 B-10/B-14: route through NotifyRouting
+                // (the single kind → category + route truth) and
+                // post a DEEP LINK, so a tap lands on the exact
+                // record — the events' refType/refId used to be
+                // parsed and then dropped, and every tap opened
+                // the app's home. B-11: the event id salts the
+                // notification id, so events in one batch no
+                // longer overwrite each other.
                 val category = PushLogic.categoryFor(event.kind)
                 val allowed = QuietHours.shouldNotify(
                     category, now,
@@ -242,16 +285,22 @@ class PushWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                     PushLogic.categoryEnabled(category, settings),
                 )
                 if (allowed) {
-                    Notifier.notify(
+                    Notifier.notifyDeepLink(
                         applicationContext, category,
                         event.title.ifBlank { PushLogic.fallbackTitle(event.kind) },
                         event.body.ifBlank { PushLogic.fallbackBody(event.kind) },
+                        routeKey = event.kind,
+                        refId = event.refId,
+                        idSalt = event.id,
                     )
                 }
                 // Silenced events (quiet hours / toggle off) are
                 // still consumed: they were delivered to the device,
                 // and ACKing them below is what stops redelivery.
             }
+            // Record every received id BEFORE the ACK, so an ACK
+            // failure leaves the device remembering what it showed.
+            pushStore.seenEventIds = PushLogic.seenAfter(seenIds, events)
             // ACK every id actually received and processed above —
             // notified or silenced alike — so nothing redelivers.
             api.pushAck(events.map { it.id })

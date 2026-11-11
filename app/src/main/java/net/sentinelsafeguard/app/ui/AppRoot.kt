@@ -371,9 +371,15 @@ private fun AppShell(
     LaunchedEffect(deepLinkNonce) {
         val route = deepLinkRoute
         if (!route.isNullOrBlank()) {
-            try {
-                nav.navigate(route) { launchSingleTop = true }
-            } catch (ignored: Exception) {
+            // AUDIT-171 B-26: the route crosses the same
+            // role/flag gate the drawer applies — a restricted
+            // account's notification tap cannot navigate it into
+            // a section its role never sees.
+            if (MirrorNav.deepLinkAllowed(route, role, flags, taxOnly)) {
+                try {
+                    nav.navigate(route) { launchSingleTop = true }
+                } catch (ignored: Exception) {
+                }
             }
             onDeepLinkConsumed()
         }

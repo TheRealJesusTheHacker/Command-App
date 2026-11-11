@@ -227,6 +227,24 @@ object OsintLogic {
 
     // ---- Server source entries (the _osint_src shape) -------------
 
+    /**
+     * AUDIT-171 M-05 [OSINT]: a server-supplied URL is opened via
+     * ACTION_VIEW only when it is an absolute http(s) URL. Finding
+     * and source URLs are third-party data the server collected —
+     * a crafted `intent:`, `file:` or app-deep-link value must
+     * never reach the intent resolver from a tap. Returns the
+     * trimmed URL when openable, null otherwise.
+     */
+    fun openableUrl(raw: String?): String? {
+        val u = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val lower = u.lowercase()
+        if (!lower.startsWith("https://") && !lower.startsWith("http://")) return null
+        // A host must follow the scheme ("https://" alone is junk).
+        val afterScheme = u.substringAfter("://", "")
+        if (afterScheme.isBlank() || afterScheme.startsWith("/")) return null
+        return u
+    }
+
     data class SourceFinding(val title: String, val detail: String?, val url: String?)
 
     data class SourceEntry(
@@ -236,6 +254,12 @@ object OsintLogic {
         val note: String?,
         val confidence: String?,
         val findings: List<SourceFinding>,
+        /** AUDIT-171 B-19 [OSINT]: the source's own URL. The parse
+         *  used to drop it, so a CToS source whose only output was
+         *  its URL rendered as a bare summary with no way to open
+         *  it (the flagship deck's card already offers the source
+         *  URL when present). */
+        val url: String? = null,
     )
 
     /**
@@ -251,6 +275,7 @@ object OsintLogic {
         summary = Phase3Logic.strOrNull(result, "summary"),
         note = Phase3Logic.strOrNull(result, "note"),
         confidence = Phase3Logic.strOrNull(result, "confidence"),
+        url = Phase3Logic.strOrNull(result, "url"),
         findings = Phase3Logic.arr(result, "findings").map { f ->
             SourceFinding(
                 title = Phase3Logic.str(f, "title"),

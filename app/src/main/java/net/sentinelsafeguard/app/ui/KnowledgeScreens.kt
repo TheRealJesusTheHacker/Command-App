@@ -421,7 +421,7 @@ fun KnowledgeDetailScreen(viewModel: AppViewModel, nav: NavController, id: Int) 
                                                 error = plainError(e, "The book could not be downloaded. Try again.")
                                             }
                                         }
-                                    }) { Text("Download") }
+                                    }) { Text("Share / save") }
                                 }
                             }
                         }

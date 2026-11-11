@@ -180,7 +180,7 @@ private fun InvoiceDirectory(viewModel: AppViewModel, nav: NavController) {
                     )
                 }
                 LazyColumn {
-                    items(rows) { inv ->
+                    items(rows, key = { Phase3Logic.int(it, "id") ?: it.toString() }) { inv ->
                         InvoiceRow(inv) {
                             Phase3Logic.int(inv, "id")?.let { nav.navigate("invoice/$it") }
                         }
@@ -257,7 +257,7 @@ private fun InvoiceBoard(viewModel: AppViewModel, nav: NavController) {
                         if (cards.isEmpty()) {
                             item { Text("No invoices in this stage", color = SentinelMuted, modifier = Modifier.padding(16.dp)) }
                         }
-                        items(cards) { inv ->
+                        items(cards, key = { Phase3Logic.int(it, "id") ?: it.toString() }) { inv ->
                             InvoiceRow(inv) { Phase3Logic.int(inv, "id")?.let { nav.navigate("invoice/$it") } }
                             Row(Modifier.padding(horizontal = 16.dp)) {
                                 ChoiceMenu("Status", Phase3Logic.str(inv, "status"), Phase4Logic.INVOICE_STATUSES) { picked ->
@@ -554,8 +554,9 @@ fun InvoiceFormScreen(viewModel: AppViewModel, nav: NavController, invoiceId: In
             if (clients.isEmpty()) Text("Loading clients…", color = SentinelMuted, modifier = Modifier.padding(16.dp))
             else {
                 val selected = clients.firstOrNull { it.id == clientId } ?: clients.first()
-                ChoiceMenu("Client", selected.legalName, clients.map { it.legalName }) { picked ->
-                    clients.firstOrNull { it.legalName == picked }?.let { clientId = it.id }
+                val clientOpts = MirrorVocab.clientOptions(clients)
+                ChoiceMenu("Client", MirrorVocab.clientOptionLabel(clients, selected), clientOpts) { picked ->
+                    MirrorVocab.clientIdAt(clients, clientOpts, picked)?.let { clientId = it }
                 }
             }
             DateFieldRow("Issue date", issueDate, { issueDate = it; if (issueError != null) issueError = FieldValidators.dateIfPresent(it) })
@@ -653,7 +654,7 @@ private fun QuotesSection(viewModel: AppViewModel, nav: NavController) {
                 val rows = Phase3Logic.arr(state.data!!, "quotes")
                 if (rows.isEmpty()) Text("No quotes yet.", color = SentinelMuted, modifier = Modifier.padding(16.dp))
                 LazyColumn {
-                    items(rows) { q ->
+                    items(rows, key = { Phase3Logic.int(it, "id") ?: it.toString() }) { q ->
                         MirrorCard(Phase3Logic.str(q, "quoteNumber")) {
                             Text(Phase3Logic.str(q, "title"), style = MaterialTheme.typography.bodyLarge)
                             Text(Phase3Logic.str(q, "clientName"), color = SentinelMuted)
@@ -785,8 +786,9 @@ fun QuoteFormScreen(viewModel: AppViewModel, nav: NavController, quoteId: Int?) 
             if (clients.isEmpty()) Text("Loading clients…", color = SentinelMuted, modifier = Modifier.padding(16.dp))
             else {
                 val selected = clients.firstOrNull { it.id == clientId } ?: clients.first()
-                ChoiceMenu("Client", selected.legalName, clients.map { it.legalName }) { p ->
-                    clients.firstOrNull { it.legalName == p }?.let { clientId = it.id }
+                val clientOpts = MirrorVocab.clientOptions(clients)
+                ChoiceMenu("Client", MirrorVocab.clientOptionLabel(clients, selected), clientOpts) { p ->
+                    MirrorVocab.clientIdAt(clients, clientOpts, p)?.let { clientId = it }
                 }
             }
             TextFieldRow("Title", title, { title = it })
@@ -909,7 +911,7 @@ private fun PriceBookSection(viewModel: AppViewModel) {
                 val rows = Phase3Logic.arr(state.data!!, "items")
                 if (rows.isEmpty()) Text("No price items yet.", color = SentinelMuted, modifier = Modifier.padding(16.dp))
                 LazyColumn {
-                    items(rows) { item ->
+                    items(rows, key = { it.toString() }) { item ->
                         MirrorCard(Phase3Logic.str(item, "name")) {
                             DetailLine("Description", Phase3Logic.str(item, "description").ifBlank { null })
                             DetailLine("Rate", MirrorVocab.formatCents(Phase3Logic.long(item, "rateCents") ?: 0))

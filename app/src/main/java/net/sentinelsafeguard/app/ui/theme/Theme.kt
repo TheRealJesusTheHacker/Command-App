@@ -44,22 +44,58 @@ val SentinelText = Color(0xFFE6EDE6)
 val SentinelMuted = Color(0xFF9DB89D)
 val SentinelDanger = Color(0xFFB03A2E)
 val SentinelDangerText = Color(0xFFFFFFFF)
+
+/**
+ * Danger as FOREGROUND text/icon colour (AUDIT-171 H5): #B03A2E on
+ * the app's black surfaces measures 3.34:1 — below the 4.5:1 floor
+ * for text. This bright variant (the same value the OSINT severity
+ * chips already paired against a danger wash) measures ≈8.8:1 on
+ * SentinelBlack. [SentinelDanger] itself stays for FILLED surfaces
+ * (buttons, washes), where white on it is ≈5.9:1.
+ */
+val SentinelDangerBright = Color(0xFFFF8A7A)
 val SentinelOutline = Color(0xFF2A3A2A)
 
 private val SentinelColors = darkColorScheme(
     primary = SentinelGreen,
     onPrimary = Color(0xFF031007),
+    primaryContainer = SentinelSurfaceTop,
+    onPrimaryContainer = SentinelGreen,
     secondary = SentinelGreenDim,
     onSecondary = Color(0xFF031007),
+    secondaryContainer = SentinelSurfaceHigh,
+    onSecondaryContainer = SentinelText,
+    tertiary = SentinelAmber,
+    onTertiary = Color(0xFF140D02),
+    tertiaryContainer = Color(0xFF2A2008),
+    onTertiaryContainer = SentinelAmber,
     background = SentinelBlack,
     onBackground = SentinelText,
     surface = SentinelSurface,
     onSurface = SentinelText,
     surfaceVariant = SentinelSurfaceHigh,
     onSurfaceVariant = SentinelMuted,
-    error = SentinelDanger,
-    onError = SentinelDangerText,
+    surfaceDim = SentinelBlack,
+    surfaceBright = SentinelSurfaceTop,
+    surfaceContainerLowest = Color(0xFF040604),
+    surfaceContainerLow = SentinelSurfaceLow,
+    surfaceContainer = SentinelSurface,
+    surfaceContainerHigh = SentinelSurfaceHigh,
+    surfaceContainerHighest = SentinelSurfaceTop,
+    surfaceTint = SentinelGreen,
+    inverseSurface = SentinelText,
+    inverseOnSurface = SentinelBlack,
+    inversePrimary = SentinelGreenDim,
+    // error is the TEXT-side role in Material 3 (form errors, error
+    // labels): the bright, 4.5:1-passing value. Filled error
+    // surfaces ride errorContainer (deep red, white content 5.9:1).
+    error = SentinelDangerBright,
+    onError = Color(0xFF2B0703),
+    errorContainer = SentinelDanger,
+    onErrorContainer = SentinelDangerText,
     outline = SentinelOutline,
+    outlineVariant = Color(0xFF1D2A1D),
+    scrim = Color(0xFF000000),
 )
 
 /**

@@ -5,6 +5,8 @@ import android.net.Uri
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,6 +52,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import net.sentinelsafeguard.app.data.api.ctosCase
+import net.sentinelsafeguard.app.data.api.ctosCaseReport
 import net.sentinelsafeguard.app.data.api.ctosClearCase
 import net.sentinelsafeguard.app.data.api.ctosCreateCase
 import net.sentinelsafeguard.app.data.api.ctosDeleteCase
@@ -57,6 +60,7 @@ import net.sentinelsafeguard.app.data.api.ctosExportCase
 import net.sentinelsafeguard.app.data.api.ctosRecord
 import net.sentinelsafeguard.app.data.api.ctosRunTool
 import net.sentinelsafeguard.app.data.api.ctosWorkspace
+import net.sentinelsafeguard.app.ui.theme.SentinelAmber
 import net.sentinelsafeguard.app.ui.theme.SentinelGreen
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceHigh
@@ -87,9 +91,13 @@ import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceHigh
 private val prettyJson = Json { prettyPrint = true }
 
 private fun openUrl(context: android.content.Context, url: String) {
-    if (url.isBlank()) return
+    // AUDIT-171 M-05 [OSINT]: finding/source URLs are server-
+    // collected third-party data — only absolute http(s) URLs
+    // reach the intent resolver (a crafted intent:/file: value
+    // must never be handed to Android by a tap).
+    val openable = OsintLogic.openableUrl(url) ?: return
     try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(openable)))
     } catch (ignored: Exception) {
         // No browser able to take it — the URL stays on screen.
     }
@@ -182,6 +190,7 @@ fun CtosScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             tool = tool,
             cases = CtosLogic.parseCases(state.data),
             initialCaseId = selectedCaseId,
+            workspace = state.data,
             onBack = { openTool = null; state.reloadKey++ },
         )
         return
@@ -217,7 +226,7 @@ fun CtosScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text("OSINT tools", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "The CToS working deck — cases, findings, and the Wave 1 tools.",
+                    "The CToS working deck — cases, findings, and the tool deck.",
                     color = SentinelMuted,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -247,11 +256,15 @@ fun CtosScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                 )
                             } else {
                                 ChipRow(
-                                    options = cases.map { it.title },
-                                    selected = selected?.title,
-                                    onPick = { title ->
+                                    // AUDIT-171 B-07: chips carry the
+                                    // case id — titles collide by
+                                    // construction (they default to
+                                    // the target).
+                                    options = cases.map { CtosLogic.caseChipLabel(it) },
+                                    selected = selected?.let { CtosLogic.caseChipLabel(it) },
+                                    onPick = { chip ->
                                         selectedCaseId =
-                                            cases.firstOrNull { it.title == title }?.id
+                                            chip?.let { CtosLogic.caseFromChip(cases, it)?.id }
                                     },
                                 )
                                 if (selected != null) {
@@ -316,7 +329,7 @@ fun CtosScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                             )
                                             "Export shared."
                                         }
-                                    }) { Text("Export") }
+                                    }) { Text("Share export") }
                                     TextButton(onClick = { confirmClear = true }) {
                                         Text("Clear")
                                     }
@@ -342,6 +355,12 @@ fun CtosScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                 title = tool.label,
                                 subtitle = tool.desc,
                                 badge = when {
+                                    // AUDIT-171 B-17: gated active
+                                    // tools are badged as such —
+                                    // they used to look identical
+                                    // to passive lookups.
+                                    tool.gated -> "AUTHORIZATION GATE"
+                                    tool.kind == "builder" -> "BUILDER"
                                     tool.kind == "browser" -> "ON-DEVICE"
                                     tool.network -> null
                                     else -> "LOCAL"
@@ -385,8 +404,57 @@ fun CtosScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                 )
                             }
                         }
-                        Spacer(Modifier.height(16.dp))
                     }
+                    // AUDIT-171 B-17 [OSINT]: the authorization gate
+                    // rides every workspace payload and was never
+                    // rendered. The registry state is shown here;
+                    // managing it stays owner-only on the web (the
+                    // payload's own canManage flag says who may).
+                    CtosLogic.parseGate(data)?.let { gate ->
+                        item { SectionHeader("Authorization gate", gate.entries.size) }
+                        item {
+                            MirrorCard("Registered targets") {
+                                if (gate.rule.isNotBlank()) {
+                                    Text(
+                                        gate.rule,
+                                        color = SentinelMuted,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                }
+                                if (gate.entries.isEmpty()) {
+                                    Text(
+                                        "No targets are registered. Gated tools " +
+                                            "(Pentest Suite, Bug Bounty Hunter, Proxy " +
+                                            "Scanner) refuse unregistered targets.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                                gate.entries.forEach { entry ->
+                                    DetailLine(
+                                        entry.target,
+                                        listOf(
+                                            entry.basisKind,
+                                            entry.status,
+                                            entry.clientLabel,
+                                        ).filter { it.isNotBlank() }.joinToString(" · "),
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    if (gate.canManage) {
+                                        "You are the owner — the registry is managed " +
+                                            "in web Command (Gate settings)."
+                                    } else {
+                                        "The registry is managed by the Owner in web Command."
+                                    },
+                                    color = SentinelMuted,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                    item { Spacer(Modifier.height(16.dp)) }
                 }
             }
         }
@@ -502,6 +570,11 @@ private fun CtosCaseScreen(
     }
     var showFinding by remember { mutableStateOf(false) }
     var showNote by remember { mutableStateOf(false) }
+    // AUDIT-171 B-18/B-20: the printable case report, and the
+    // artifact whose content is being read.
+    var showReport by remember { mutableStateOf(false) }
+    var openArtifact by remember { mutableStateOf<CtosLogic.ArtifactRow?>(null) }
+    var artifactContent by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
@@ -516,6 +589,15 @@ private fun CtosCaseScreen(
                 error = plainError(e, "That could not be done. Try again.")
             }
         }
+    }
+
+    if (showReport) {
+        CtosReportScreen(
+            viewModel = viewModel,
+            caseId = caseId,
+            onBack = { showReport = false },
+        )
+        return
     }
 
     Column {
@@ -574,6 +656,12 @@ private fun CtosCaseScreen(
                                 OutlinedButton(onClick = { showNote = true }) {
                                     Text("Add note")
                                 }
+                                // AUDIT-171 B-18: the printable
+                                // case report (server twin) as a
+                                // readable screen, not raw JSON.
+                                OutlinedButton(onClick = { showReport = true }) {
+                                    Text("Case report")
+                                }
                                 TextButton(onClick = {
                                     run {
                                         val out = viewModel.api.ctosExportCase(caseId)
@@ -587,7 +675,7 @@ private fun CtosCaseScreen(
                                         )
                                         "Export shared."
                                     }
-                                }) { Text("Export") }
+                                }) { Text("Share export") }
                             }
                         }
                     }
@@ -656,6 +744,27 @@ private fun CtosCaseScreen(
                                 a.tool.takeIf { it.isNotBlank() },
                                 if (a.createdAt > 0) formatEpochMs(a.createdAt) else null,
                             ).joinToString(" · "),
+                            // AUDIT-171 B-20: artifacts were
+                            // label-only rows. A tap now loads the
+                            // case export and shows this artifact's
+                            // content (the case payload omits it
+                            // by design).
+                            onClick = {
+                                openArtifact = a
+                                artifactContent = null
+                                run {
+                                    val out = viewModel.api.ctosExportCase(caseId)
+                                    val content = CtosLogic.artifactContent(
+                                        out, a.label, a.tool, a.createdAt,
+                                    )
+                                    artifactContent = content?.let {
+                                        prettyJson.encodeToString(
+                                            JsonElement.serializer(), it,
+                                        )
+                                    } ?: "This artifact's content was not in the export."
+                                    null
+                                }
+                            },
                         )
                     }
                     item { Spacer(Modifier.height(16.dp)) }
@@ -686,6 +795,155 @@ private fun CtosCaseScreen(
                 run { viewModel.api.ctosRecord(caseId, body); "Note recorded." }
             },
         )
+    }
+    openArtifact?.let { artifact ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { openArtifact = null },
+            title = { Text(artifact.label) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        listOfNotNull(
+                            artifact.kind.takeIf { it.isNotBlank() },
+                            artifact.tool.takeIf { it.isNotBlank() },
+                        ).joinToString(" · "),
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        artifactContent ?: "Loading the artifact's content…",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        ),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { openArtifact = null }) { Text("Close") }
+            },
+        )
+    }
+}
+
+/**
+ * AUDIT-171 B-18 [OSINT]: the printable CToS case report as a
+ * readable screen — the server builds it (a_ctosreport) with its
+ * honesty footer; the app renders the structure and can share it
+ * as text. Before this, the twin had no app method at all.
+ */
+@Composable
+private fun CtosReportScreen(
+    viewModel: AppViewModel,
+    caseId: Int,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    val state = rememberJsonScreen(key = caseId) { viewModel.api.ctosCaseReport(caseId) }
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 8.dp, top = 8.dp, end = 16.dp),
+        ) {
+            TextButton(onClick = onBack) { Text("‹ Case") }
+            Column(Modifier.weight(1f)) {
+                Text("Case report", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "The printable report Command builds for this case.",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+        when {
+            state.error != null && state.data == null ->
+                ErrorBox(state.error!!) { state.reloadKey++ }
+            state.data == null -> SkeletonList()
+            else -> {
+                val report = CtosLogic.parseReport(state.data)
+                if (report == null) {
+                    ErrorBox("The report payload could not be read.") { state.reloadKey++ }
+                } else {
+                    LazyColumn {
+                        item {
+                            MirrorCard(report.case?.title ?: "Case", topTier = true) {
+                                report.case?.let { c ->
+                                    DetailLine("Target", c.target)
+                                    if (c.targetType.isNotBlank()) {
+                                        DetailLine("Type", c.targetType)
+                                    }
+                                    DetailLine("Status", c.status)
+                                }
+                                if (report.generatedAt > 0) {
+                                    DetailLine("Generated", formatEpochMs(report.generatedAt))
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                GradientPrimaryButton(
+                                    text = "Share report",
+                                    onClick = {
+                                        shareText(
+                                            context,
+                                            "CToS case report — ${report.case?.title ?: caseId}",
+                                            CtosLogic.renderReportText(report),
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        item { SectionHeader("Findings", report.findings.size) }
+                        if (report.findingsByType.isNotEmpty()) {
+                            item {
+                                MirrorCard("Findings by type") {
+                                    report.findingsByType.forEach { (type, count) ->
+                                        DetailLine(type, count.toString())
+                                    }
+                                }
+                            }
+                        }
+                        items(report.findings) { f ->
+                            MirrorCard(f.value.ifBlank { f.type }) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (f.type.isNotBlank()) MirrorChip(f.type)
+                                    if (f.tool.isNotBlank()) MirrorChip(f.tool)
+                                }
+                                if (f.detail.isNotBlank()) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(f.detail, style = MaterialTheme.typography.bodyMedium)
+                                }
+                                if (f.url.isNotBlank()) {
+                                    TextButton(onClick = { openUrl(context, f.url) }) {
+                                        Text("Open source")
+                                    }
+                                }
+                            }
+                        }
+                        if (report.artifacts.isNotEmpty()) {
+                            item { SectionHeader("Artifacts", report.artifacts.size) }
+                            items(report.artifacts) { a ->
+                                ItemRow(
+                                    title = a.label,
+                                    subtitle = listOfNotNull(
+                                        a.kind.takeIf { it.isNotBlank() },
+                                        a.tool.takeIf { it.isNotBlank() },
+                                    ).joinToString(" · "),
+                                )
+                            }
+                        }
+                        if (report.footer.isNotBlank()) {
+                            item {
+                                Text(
+                                    report.footer,
+                                    color = SentinelMuted,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.padding(16.dp),
+                                )
+                            }
+                        }
+                        item { Spacer(Modifier.height(16.dp)) }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -781,6 +1039,7 @@ private fun CtosToolScreen(
     tool: CtosLogic.ToolMeta,
     cases: List<CtosLogic.CaseRow>,
     initialCaseId: Int?,
+    workspace: JsonObject?,
     onBack: () -> Unit,
 ) {
     Column {
@@ -798,11 +1057,246 @@ private fun CtosToolScreen(
                 )
             }
         }
-        if (tool.kind == "browser") {
-            CtosFileHashPanel()
-        } else {
-            CtosServerToolPanel(viewModel, tool, cases, initialCaseId)
+        // AUDIT-171 B-16 [OSINT]: builders and the settings tile
+        // used to fall through to the server-run panel, whose Run
+        // the server refuses ("Unknown CToS tool") — every Run
+        // failed. Builders compose a command ON THIS PHONE (the
+        // web's own design — Command never executes them), and
+        // Encryption Settings opens the OPSEC profile panel.
+        when {
+            tool.kind == "browser" -> CtosFileHashPanel()
+            CtosBuilders.isBuilder(tool.name) -> CtosBuilderPanel(tool)
+            tool.kind == "settings" || tool.name == "encsettings" ->
+                CtosOpsecPanel(workspace)
+            else -> CtosServerToolPanel(viewModel, tool, cases, initialCaseId)
         }
+    }
+}
+
+/**
+ * AUDIT-171 B-16 [OSINT]: the command-builder panel. Composes
+ * the command on this phone (CtosBuilders — the web's templates)
+ * and offers it for copy; Command never executes it. The fields
+ * are the web form's, with the web's defaults.
+ */
+@Composable
+private fun CtosBuilderPanel(tool: CtosLogic.ToolMeta) {
+    val clipboard = LocalClipboardManager.current
+    var target by remember { mutableStateOf("") }
+    var values by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var checked by remember {
+        mutableStateOf(
+            when (tool.name) {
+                "buildernmap" -> setOf("t4")
+                "buildersqlmap" -> setOf("batch")
+                else -> emptySet()
+            },
+        )
+    }
+    var copied by remember { mutableStateOf(false) }
+    val commands = if (target.isBlank()) {
+        emptyList()
+    } else {
+        CtosBuilders.commands(tool.name, target, values, checked)
+    }
+
+    fun setValue(key: String, value: String) {
+        values = values + (key to value)
+        copied = false
+    }
+
+    fun toggle(key: String, on: Boolean) {
+        checked = if (on) checked + key else checked - key
+        copied = false
+    }
+
+    LazyColumn {
+        item {
+            MirrorCard("Build — ${tool.label}", topTier = true) {
+                Text(
+                    "Composes a command on this phone for your own terminal. " +
+                        "Command never runs it.",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(8.dp))
+                TextFieldRow(tool.inputHint.ifBlank { "Target" }, target, onChange = {
+                    target = it
+                    copied = false
+                })
+                when (tool.name) {
+                    "buildernmap" -> {
+                        Text("Scan", color = SentinelMuted, style = MaterialTheme.typography.labelLarge)
+                        ChipRow(
+                            options = listOf("-sV", "-sS", "-A", "-sU", "-sn"),
+                            selected = values["scan"] ?: "-sV",
+                            onPick = { it?.let { v -> setValue("scan", v) } },
+                        )
+                        TextFieldRow("Ports (e.g. 22,80,443 or 1-1000)", values["ports"] ?: "",
+                            onChange = { setValue("ports", it) })
+                        BuilderCheck("Timing -T4", "t4", checked, ::toggle)
+                        BuilderCheck("Default scripts (-sC)", "scripts", checked, ::toggle)
+                        BuilderCheck("OS detect (-O)", "osdetect", checked, ::toggle)
+                    }
+                    "buildergobuster" -> {
+                        Text("Mode", color = SentinelMuted, style = MaterialTheme.typography.labelLarge)
+                        ChipRow(
+                            options = listOf("dir", "dns", "vhost", "fuzz"),
+                            selected = values["mode"] ?: "dir",
+                            onPick = { it?.let { v -> setValue("mode", v) } },
+                        )
+                        TextFieldRow("Wordlist path", values["wordlist"] ?: CtosBuilders.DEFAULT_WORDLIST,
+                            onChange = { setValue("wordlist", it) })
+                        TextFieldRow("Extensions (php,html,…) — dir mode", values["extensions"] ?: "",
+                            onChange = { setValue("extensions", it) })
+                    }
+                    "buildersqlmap" -> {
+                        Text("Level", color = SentinelMuted, style = MaterialTheme.typography.labelLarge)
+                        ChipRow(
+                            options = listOf("1", "2", "3", "4", "5"),
+                            selected = values["level"] ?: "1",
+                            onPick = { it?.let { v -> setValue("level", v) } },
+                        )
+                        Text("Risk", color = SentinelMuted, style = MaterialTheme.typography.labelLarge)
+                        ChipRow(
+                            options = listOf("1", "2", "3"),
+                            selected = values["risk"] ?: "1",
+                            onPick = { it?.let { v -> setValue("risk", v) } },
+                        )
+                        BuilderCheck("--forms", "forms", checked, ::toggle)
+                        BuilderCheck("--dbs", "dbs", checked, ::toggle)
+                        BuilderCheck("--batch", "batch", checked, ::toggle)
+                    }
+                    "buildersublist3r" -> {
+                        TextFieldRow("Output file (-o), optional", values["output"] ?: "",
+                            onChange = { setValue("output", it) })
+                        BuilderCheck("Brute force (-b)", "brute", checked, ::toggle)
+                        BuilderCheck("Verbose (-v)", "verbose", checked, ::toggle)
+                    }
+                    "builderdorks" -> {
+                        Text("Category", color = SentinelMuted, style = MaterialTheme.typography.labelLarge)
+                        ChipRow(
+                            options = listOf("ALL") + CtosBuilders.DORKS.keys.toList(),
+                            selected = values["category"] ?: "ALL",
+                            onPick = { it?.let { v -> setValue("category", v) } },
+                        )
+                    }
+                }
+            }
+        }
+        if (commands.isNotEmpty()) {
+            item {
+                MirrorCard(if (commands.size == 1) "Command" else "Queries — ${commands.size}") {
+                    commands.forEach { cmd ->
+                        Text(
+                            cmd,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            ),
+                            modifier = Modifier.padding(vertical = 3.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GradientPrimaryButton(
+                            text = if (copied) "Copied" else "Copy",
+                            onClick = {
+                                clipboard.setText(AnnotatedString(commands.joinToString("\n")))
+                                copied = true
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun BuilderCheck(
+    label: String,
+    key: String,
+    checked: Set<String>,
+    onToggle: (String, Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.Checkbox(
+            checked = key in checked,
+            onCheckedChange = { onToggle(key, it) },
+        )
+        Text(label)
+    }
+}
+
+/**
+ * AUDIT-171 B-17 [OSINT]: the OPSEC profile panel (the
+ * encsettings tile's real home). Shows the operator's current
+ * profile values and the server's own wired/unavailable rows
+ * with their reasons. Editing the profile has no app twin on
+ * the server today — the panel says where editing lives rather
+ * than faking a save (server-side ask, audit record).
+ */
+@Composable
+private fun CtosOpsecPanel(workspace: JsonObject?) {
+    val profile = CtosLogic.parseProfile(workspace)
+    val options = CtosLogic.parseProfileOptions(workspace)
+    LazyColumn {
+        item {
+            MirrorCard("Encryption Settings — OPSEC profile", topTier = true) {
+                Text(
+                    "How CToS network runs present themselves. These are your " +
+                        "current settings, as the server holds them.",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(8.dp))
+                if (profile == null) {
+                    Text("The profile could not be read from the workspace payload.")
+                } else if (options != null && options.wired.isNotEmpty()) {
+                    options.wired.forEach { row ->
+                        DetailLine(row.label, CtosLogic.profileValueLine(profile, row.key))
+                        if (row.detail.isNotBlank()) {
+                            Text(
+                                row.detail,
+                                color = SentinelMuted,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                } else if (profile != null) {
+                    DetailLine("DNS-over-HTTPS provider", profile.doh)
+                    DetailLine("User-Agent rotation", if (profile.uaRotate) "On" else "Off")
+                    DetailLine("Request jitter", if (profile.jitterMs > 0) "Up to ${profile.jitterMs} ms" else "Off")
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "To change these, use Encryption Settings in web Command — " +
+                        "the app shows the profile but the server offers no " +
+                        "app-side save for it yet.",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        if (options != null && options.unavailable.isNotEmpty()) {
+            item { SectionHeader("Not available", options.unavailable.size) }
+            item {
+                MirrorCard("Not available — and why") {
+                    options.unavailable.forEach { row ->
+                        Text(row.label, fontWeight = FontWeight.Bold)
+                        Text(
+                            row.reason,
+                            color = SentinelMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(16.dp)) }
     }
 }
 
@@ -906,6 +1400,20 @@ private fun CtosServerToolPanel(
     LazyColumn {
         item {
             MirrorCard("Run ${tool.label}", topTier = true) {
+                if (tool.gated) {
+                    // AUDIT-171 B-17: a gated active tool states its
+                    // terms BEFORE the run, not as a refusal after.
+                    Text(
+                        "Authorization-gated: this active tool runs only " +
+                            "against targets registered in the authorization " +
+                            "gate (see the deck's Authorization gate card). " +
+                            "The server checks the gate and audit-logs the " +
+                            "decision either way.",
+                        color = SentinelAmber,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 if (tool.name == "metadata") {
                     Text(
                         "Pick an image — it is sent to Command, parsed in memory, " +
@@ -966,10 +1474,13 @@ private fun CtosServerToolPanel(
                 if (cases.isNotEmpty()) {
                     Text("Record results into", style = MaterialTheme.typography.labelLarge)
                     ChipRow(
-                        options = cases.map { it.title },
-                        selected = cases.firstOrNull { it.id == caseId }?.title,
-                        onPick = { title ->
-                            caseId = cases.firstOrNull { it.title == title }?.id
+                        // AUDIT-171 B-07: id-carrying chips, as on
+                        // the deck — titles collide by construction.
+                        options = cases.map { CtosLogic.caseChipLabel(it) },
+                        selected = cases.firstOrNull { it.id == caseId }
+                            ?.let { CtosLogic.caseChipLabel(it) },
+                        onPick = { chip ->
+                            caseId = chip?.let { CtosLogic.caseFromChip(cases, it)?.id }
                         },
                         allLabel = "No case",
                     )
@@ -1066,6 +1577,38 @@ private fun CtosResultView(
                     }
                     if (!f.url.isNullOrBlank()) {
                         TextButton(onClick = { openUrl(context, f.url!!) }) {
+                            Text("Open source")
+                        }
+                    }
+                }
+                // AUDIT-171 B-19: the source's own URL, when the
+                // payload carries one — a source whose only output
+                // is its URL used to render as a bare summary.
+                if (!src.url.isNullOrBlank() && src.findings.isEmpty()) {
+                    TextButton(onClick = { openUrl(context, src.url!!) }) {
+                        Text("Open source")
+                    }
+                }
+            }
+        }
+        // AUDIT-171 B-19: the result's top-level findings — parsed
+        // since this audit (CtosLogic.parseToolResult) and rendered
+        // here; a tool that returns findings only here used to show
+        // an empty result.
+        if (parsed.findings.isNotEmpty()) {
+            SectionHeader("Findings", parsed.findings.size)
+            parsed.findings.forEach { f ->
+                MirrorCard(f.value.ifBlank { f.type }) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (f.type.isNotBlank()) MirrorChip(f.type)
+                        if (f.tool.isNotBlank()) MirrorChip(f.tool)
+                    }
+                    if (f.detail.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(f.detail, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (f.url.isNotBlank()) {
+                        TextButton(onClick = { openUrl(context, f.url) }) {
                             Text("Open source")
                         }
                     }

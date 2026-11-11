@@ -26,6 +26,16 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // AUDIT-171 M-06: the app renders client PII (names,
+        // contacts, invoices) — keep it out of screenshots,
+        // screen recordings and the recents thumbnail. (The
+        // in-app update flow installs via a file intent and does
+        // not depend on captures; nothing in the app shares its
+        // own window.)
+        window.setFlags(
+            android.view.WindowManager.LayoutParams.FLAG_SECURE,
+            android.view.WindowManager.LayoutParams.FLAG_SECURE,
+        )
         readDeepLink(intent)
         setContent {
             SentinelTheme {

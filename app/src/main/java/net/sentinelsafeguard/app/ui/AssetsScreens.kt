@@ -733,12 +733,13 @@ fun AssetFormScreen(viewModel: AppViewModel, nav: NavController, assetId: Int?) 
                     if (scopeParam == "Client") {
                         if (clients.isNotEmpty()) {
                             val current = clients.firstOrNull { it.id.toString() == clientIdText }
+                            val clientOpts = MirrorVocab.clientOptions(clients)
                             ChoiceMenu(
                                 "Client",
-                                current?.legalName ?: "Choose client",
-                                clients.map { it.legalName },
+                                current?.let { MirrorVocab.clientOptionLabel(clients, it) } ?: "Choose client",
+                                clientOpts,
                             ) { picked ->
-                                clientIdText = clients.firstOrNull { it.legalName == picked }?.id?.toString() ?: ""
+                                clientIdText = MirrorVocab.clientIdAt(clients, clientOpts, picked)?.toString() ?: ""
                             }
                         }
                         TextFieldRow("Client ID", clientIdText, onChange = { clientIdText = it })

@@ -9,6 +9,7 @@ import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -31,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -322,6 +325,9 @@ fun SentinelMap(
                     },
                     modifier = Modifier
                         .padding(horizontal = 2.dp)
+                        // AUDIT-171 M-10: the layer chips were
+                        // ~26dp tall — under the 48dp touch floor.
+                        .defaultMinSize(minHeight = 48.dp)
                         .sentinelClickable { tick(); layer = option },
                 ) {
                     Text(
@@ -354,7 +360,13 @@ fun SentinelMap(
                     ),
                     modifier = Modifier
                         .padding(vertical = 3.dp)
-                        .size(38.dp)
+                        // AUDIT-171 M-10: 38dp was under the 48dp
+                        // touch floor — the discs are 48dp now,
+                        // with real names for screen readers.
+                        .size(48.dp)
+                        .semantics {
+                            contentDescription = if (zoomIn) "Zoom in" else "Zoom out"
+                        }
                         .sentinelClickable {
                             tick()
                             if (zoomIn) mapView.controller.zoomIn() else mapView.controller.zoomOut()

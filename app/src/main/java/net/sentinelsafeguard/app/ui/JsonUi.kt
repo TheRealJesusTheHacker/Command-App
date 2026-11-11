@@ -297,6 +297,25 @@ fun shareText(context: Context, subject: String, text: String) {
     context.startActivity(Intent.createChooser(intent, subject))
 }
 
+/**
+ * AUDIT-171 L-05: copy investigation material (finding values,
+ * hashes, queries) with the platform's sensitive-content flag
+ * (API 33+), so clipboard previews/history treat it as sensitive
+ * instead of surfacing it in suggestions. Older APIs get a plain
+ * copy — the flag simply does not exist there.
+ */
+fun copySensitive(context: Context, text: String) {
+    val manager = context.getSystemService(android.content.ClipboardManager::class.java)
+        ?: return
+    val data = android.content.ClipData.newPlainText("", text)
+    if (android.os.Build.VERSION.SDK_INT >= 33) {
+        data.description.extras = android.os.PersistableBundle().apply {
+            putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE, true)
+        }
+    }
+    manager.setPrimaryClip(data)
+}
+
 /** Share bytes as a file (PDF documents, photos, voice notes)
  *  through the app's FileProvider cache share path. */
 fun shareBytes(context: Context, fileName: String, mimeType: String, bytes: ByteArray) {
@@ -333,9 +352,22 @@ class JsonScreenState {
 }
 
 @Composable
-fun rememberJsonScreen(loader: suspend () -> JsonObject): JsonScreenState {
-    val state = remember { JsonScreenState() }
-    LaunchedEffect(state.reloadKey) {
+fun rememberJsonScreen(loader: suspend () -> JsonObject): JsonScreenState =
+    rememberJsonScreen(key = Unit, loader = loader)
+
+/**
+ * AUDIT-171 B-06 [OSINT]: the keyed variant. When the entity a
+ * screen shows can change WITHOUT the composable leaving
+ * composition (a report pivoting to its child report), the state
+ * must be re-created and reloaded for the new [key] — the unkeyed
+ * version kept the previous entity's data on screen under the new
+ * entity's identity (and its Delete acted on the new id while the
+ * parent report was still displayed).
+ */
+@Composable
+fun rememberJsonScreen(key: Any?, loader: suspend () -> JsonObject): JsonScreenState {
+    val state = remember(key) { JsonScreenState() }
+    LaunchedEffect(key, state.reloadKey) {
         state.error = null
         try {
             state.data = loader()

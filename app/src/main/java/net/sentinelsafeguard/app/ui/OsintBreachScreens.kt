@@ -141,6 +141,14 @@ private suspend fun awaitSearch(
     onStatus: (String) -> Unit,
 ): Pair<Int?, String?> {
     var polls = 0
+    // AUDIT-171 B-22: a search ABSENT from the workspace list used
+    // to read as "still running" for the whole 5-minute budget.
+    // Absence before first sighting gets a short grace (the create
+    // may still be landing); absence AFTER sighting means the
+    // search left the list (cleared or rolled off) and polling
+    // stops with an honest note instead of a silent timeout.
+    var seenOnce = false
+    var unseenPolls = 0
     while (polls < 100) {
         delay(3000)
         polls++
@@ -150,7 +158,20 @@ private suspend fun awaitSearch(
             null
         } ?: continue
         val search = Phase3Logic.arr(ws, "searches")
-            .firstOrNull { Phase3Logic.int(it, "id") == searchId } ?: continue
+            .firstOrNull { Phase3Logic.int(it, "id") == searchId }
+        if (search == null) {
+            if (seenOnce) {
+                return null to "The search is no longer in the workspace " +
+                    "list — it may have been cleared. Check Searches and Reports."
+            }
+            unseenPolls++
+            if (unseenPolls >= 10) {
+                return null to "The search has not appeared in the workspace " +
+                    "yet. Check Searches in a moment — if it is not there, run it again."
+            }
+            continue
+        }
+        seenOnce = true
         when (Phase3Logic.str(search, "status")) {
             "done" -> return Phase3Logic.int(search, "reportId") to null
             "failed" -> return null to
@@ -384,6 +405,7 @@ private fun TypeSupportCards(workspace: JsonObject?, typeKey: String, value: Str
 // Deck home
 // ---------------------------------------------------------------------
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
     val scope = rememberCoroutineScope()
@@ -522,10 +544,10 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
                         }
                     }
                     item {
-                        MirrorCard("CToS — OSINT tools", topTier = true) {
+                        MirrorCard("OSINT tools", topTier = true) {
                             Text(
                                 "The working deck: open a case on a target, then run " +
-                                    "the Wave 1 tools against it — Username Profiler " +
+                                    "the tools against it — Username Profiler " +
                                     "across the full platform catalog, DNS with its " +
                                     "spoofability verdict, IP intelligence, WHOIS, " +
                                     "fingerprinting, metadata, and the local-compute " +
@@ -567,11 +589,18 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
                             }
                             if (detectCandidates.isNotEmpty()) {
                                 Spacer(Modifier.height(6.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    detectCandidates.take(5).forEach { cand ->
+                                // AUDIT-171 B-21 [OSINT]: every
+                                // candidate is shown (the list used
+                                // to truncate at five), and a type
+                                // the app has no tool for says so
+                                // instead of silently opening the
+                                // Username sweep under a false type.
+                                androidx.compose.foundation.layout.FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    detectCandidates.forEach { cand ->
                                         OutlinedButton(onClick = {
-                                            prefill = detectValue
-                                            route = when (cand) {
+                                            val target = when (cand) {
                                                 "name" -> "name"
                                                 "username" -> "username"
                                                 "email" -> "email"
@@ -590,7 +619,15 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
                                                 "btc" -> "btc"
                                                 "eth" -> "eth"
                                                 "breach" -> "emailBreach"
-                                                else -> "username"
+                                                else -> null
+                                            }
+                                            if (target == null) {
+                                                detectNote =
+                                                    "The $cand type has no tool in the app yet — " +
+                                                        "it is available on the web deck."
+                                            } else {
+                                                prefill = detectValue
+                                                route = target
                                             }
                                         }) { Text(cand) }
                                     }
@@ -1721,7 +1758,11 @@ private fun OsintReportView(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val state = rememberJsonScreen { viewModel.api.osintReport(reportId) }
+    // AUDIT-171 B-06: keyed by reportId — pivoting to a child
+    // report swaps the id without leaving composition, and the
+    // unkeyed state kept showing the PARENT report under the
+    // child's identity (while Delete acted on the child).
+    val state = rememberJsonScreen(key = reportId) { viewModel.api.osintReport(reportId) }
     // 1.5.2 (Elevation F3): a pivot launched from this report
     // runs under this search's own purpose (carried by the
     // server) and lands in the child run's report, which names
@@ -1921,13 +1962,20 @@ private fun OsintReportView(
                             }
                             items(results) { result ->
                                 SourceResultCard(result) { url ->
-                                    try {
-                                        context.startActivity(
-                                            Intent(Intent.ACTION_VIEW, Uri.parse(url)),
-                                        )
-                                    } catch (e: Exception) {
-                                        // A link the phone cannot open stays
-                                        // visible as text on the card.
+                                    // AUDIT-171 M-05 [OSINT]: server-
+                                    // collected URLs are third-party
+                                    // data — only absolute http(s)
+                                    // reaches the intent resolver.
+                                    val openable = OsintLogic.openableUrl(url)
+                                    if (openable != null) {
+                                        try {
+                                            context.startActivity(
+                                                Intent(Intent.ACTION_VIEW, Uri.parse(openable)),
+                                            )
+                                        } catch (e: Exception) {
+                                            // A link the phone cannot open stays
+                                            // visible as text on the card.
+                                        }
                                     }
                                 }
                             }
@@ -2082,6 +2130,11 @@ private fun SourceResultCard(result: JsonObject, onOpenUrl: (String) -> Unit) {
                         color = SentinelMuted,
                         style = MaterialTheme.typography.labelMedium,
                     )
+                    // AUDIT-171 B-03 [OSINT]: the marker tap used to
+                    // be consumed and do nothing. It now surfaces
+                    // the marker's own detail lines under the map,
+                    // like the Live Intel tap does.
+                    var ipMarkerTapped by remember { mutableStateOf(false) }
                     SentinelMap(
                         markers = listOf(
                             IntelMapLogic.SimpleMarker(
@@ -2098,7 +2151,7 @@ private fun SourceResultCard(result: JsonObject, onOpenUrl: (String) -> Unit) {
                                 pulseBaseRadiusMeters = 20_000.0,
                             ),
                         ),
-                        onMarkerTap = {},
+                        onMarkerTap = { ipMarkerTapped = true },
                         accent = SentinelGreen,
                         frameCenter = IntelMapLogic.MapPoint(ipPoint.first, ipPoint.second),
                         frameZoom = 9.0,
@@ -2107,6 +2160,12 @@ private fun SourceResultCard(result: JsonObject, onOpenUrl: (String) -> Unit) {
                             .height(220.dp)
                             .padding(top = 6.dp),
                     )
+                    if (ipMarkerTapped) {
+                        DetailLine(
+                            "Position",
+                            OsintLogic.coordinateReadout(ipPoint.first, ipPoint.second),
+                        )
+                    }
                 }
                 val note = Phase3Logic.strOrNull(result, "note")
                 if (!note.isNullOrBlank()) {

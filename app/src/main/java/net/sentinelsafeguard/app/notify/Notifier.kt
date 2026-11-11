@@ -39,11 +39,11 @@ object Notifier {
         )
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ALERTS, "Sign-in alerts", NotificationManager.IMPORTANCE_HIGH)
-                .apply { description = "Someone signed in to Sentinel Command. These arrive even during quiet hours." }
+                .apply { description = "Someone signed in to Command. These arrive even during quiet hours." }
         )
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_CRITICAL, "Critical alerts", NotificationManager.IMPORTANCE_HIGH)
-                .apply { description = "A Critical Alert was sent in Sentinel Command. These arrive even during quiet hours." }
+                .apply { description = "A Critical Alert was sent in Command. These arrive even during quiet hours." }
         )
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ESTATE, "Estate down", NotificationManager.IMPORTANCE_HIGH)
@@ -86,9 +86,10 @@ object Notifier {
         body: String,
         routeKey: String,
         refId: String?,
+        idSalt: String? = null,
     ) {
         val route = NotifyRouting.targetFor(routeKey, refId).route
-        post(context, category, title, body, route = route, refId = refId)
+        post(context, category, title, body, route = route, refId = refId, idSalt = idSalt)
     }
 
     private fun post(
@@ -98,16 +99,21 @@ object Notifier {
         body: String,
         route: String?,
         refId: String?,
+        idSalt: String? = null,
     ) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         val (channel, baseId) = channelAndBaseId(category)
         // Deep-linked notifications get their own id slot per
         // record so two ticket alerts never overwrite each other;
         // plain notifications keep the historic per-category id.
+        // AUDIT-171 B-11: a caller that delivers EVENTS (the push
+        // worker) salts the slot with the event id — several events
+        // about the SAME record in one batch are distinct alerts
+        // and must not collapse into one visible notification.
         val id = if (route == null) {
             baseId
         } else {
-            baseId * 1000 + ((refId?.hashCode() ?: route.hashCode()) and 0x3FF)
+            baseId * 1000 + (((idSalt ?: refId)?.hashCode() ?: route.hashCode()) and 0x3FF)
         }
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP

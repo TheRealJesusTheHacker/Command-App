@@ -37,6 +37,18 @@ data class HttpRequest(
         result = 31 * result + (bodyBytes?.contentHashCode() ?: 0)
         return result
     }
+
+    /**
+     * AUDIT-171 L-08: the generated data-class toString would
+     * print the headers — including the device-token
+     * Authorization header — and the body into any log line that
+     * interpolates a request (Diagnostics does log failures).
+     * This redacted shape keeps method + path + sizes only.
+     */
+    override fun toString(): String =
+        "HttpRequest(method=$method, path=$path, " +
+            "headers=${headers.keys}, body=${body?.length ?: 0} chars, " +
+            "bodyBytes=${bodyBytes?.size ?: 0} bytes)"
 }
 
 data class HttpResponse(

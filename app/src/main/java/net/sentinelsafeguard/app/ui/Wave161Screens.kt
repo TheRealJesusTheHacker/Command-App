@@ -30,6 +30,7 @@ import net.sentinelsafeguard.app.data.api.SignedOutException
 import net.sentinelsafeguard.app.data.api.wysAudio
 import net.sentinelsafeguard.app.ui.theme.SentinelAmber
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
+import net.sentinelsafeguard.app.ui.theme.SentinelDangerBright
 import net.sentinelsafeguard.app.ui.theme.SentinelGreen
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import java.util.Locale
@@ -61,7 +62,7 @@ fun WysCard(viewModel: AppViewModel, wys: Wave161Logic.Wys) {
             wys.failures.forEach { f ->
                 Text(
                     f.label,
-                    color = SentinelDanger,
+                    color = SentinelDangerBright,
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                     modifier = Modifier.padding(top = 4.dp),
                 )
@@ -99,7 +100,7 @@ fun WysCard(viewModel: AppViewModel, wys: Wave161Logic.Wys) {
                             Text(chain.name, modifier = Modifier.weight(1f))
                             Text(
                                 if (chain.ok) "OK" else "FAILED",
-                                color = if (chain.ok) SentinelGreen else SentinelDanger,
+                                color = if (chain.ok) SentinelGreen else SentinelDangerBright,
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                             )
                         }
@@ -156,8 +157,55 @@ private fun WysAudioRow(viewModel: AppViewModel, audio: Wave161Logic.WysAudio) {
     val player = rememberVoicePlayer()
     var fetching by remember { mutableStateOf(false) }
     var unavailable by remember { mutableStateOf(false) }
+    // AUDIT-171 B-05: a TRANSIENT failure (network, player) is not
+    // "not generated". The old code latched every failure into the
+    // not-generated line and removed the control for good; now a
+    // failed fetch offers a retry, and only the server's own
+    // not-generated answer shows the quiet line permanently.
+    var fetchFailed by remember { mutableStateOf(false) }
     if (unavailable) {
         Text(Wave161Logic.AUDIO_NOT_GENERATED_LINE, color = SentinelMuted)
+        return
+    }
+    fun fetchAndPlay() {
+        fetching = true
+        fetchFailed = false
+        scope.launch {
+            try {
+                val body = viewModel.api.wysAudio()
+                when (val r = Wave161Logic.parseWysAudio(body)) {
+                    is Wave161Logic.WysAudioResult.Ready ->
+                        if (!player.play("wys-briefing", r.bytes, r.extension)) {
+                            fetchFailed = true
+                        }
+                    else -> unavailable = true
+                }
+            } catch (e: SignedOutException) {
+                // The token died: SentinelApi has already fired
+                // onSignedOut and the shell is returning to
+                // sign-in — the row does not also flip to its
+                // quiet state behind the departing shell.
+            } catch (e: Exception) {
+                // Includes the wrap's 403 for a non-owner session:
+                // the retry simply asks again (a 403 will fail the
+                // same way; the line never claims "not generated"
+                // for what was really a refusal or a dropped
+                // connection).
+                fetchFailed = true
+            } finally {
+                fetching = false
+            }
+        }
+    }
+    if (fetchFailed) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "The briefing audio could not be loaded.",
+                color = SentinelMuted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            TextButton(onClick = { fetchAndPlay() }) { Text("Try again") }
+        }
         return
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -167,34 +215,7 @@ private fun WysAudioRow(viewModel: AppViewModel, audio: Wave161Logic.WysAudio) {
                 if (player.activeKey == "wys-briefing") {
                     player.togglePause()
                 } else {
-                    fetching = true
-                    scope.launch {
-                        try {
-                            val body = viewModel.api.wysAudio()
-                            when (val r = Wave161Logic.parseWysAudio(body)) {
-                                is Wave161Logic.WysAudioResult.Ready ->
-                                    if (!player.play("wys-briefing", r.bytes, r.extension)) {
-                                        unavailable = true
-                                    }
-                                else -> unavailable = true
-                            }
-                        } catch (e: SignedOutException) {
-                            // The token died: SentinelApi has
-                            // already fired onSignedOut and the
-                            // shell is returning to sign-in — the
-                            // row does not also flip to its quiet
-                            // state behind the departing shell.
-                        } catch (e: Exception) {
-                            // The fetch failing (incl. the wrap's
-                            // 403 for a non-owner) is the same
-                            // quiet state to the reader — the
-                            // card never grows an error dialog
-                            // for audio.
-                            unavailable = true
-                        } finally {
-                            fetching = false
-                        }
-                    }
+                    fetchAndPlay()
                 }
             },
         ) {
@@ -241,7 +262,7 @@ fun ClientHealthBlock(health: Wave161Logic.ClientHealth) {
                     "good" -> SentinelGreen
                     "fair" -> SentinelAmber
                     "atrisk" -> SentinelAmber
-                    "critical" -> SentinelDanger
+                    "critical" -> SentinelDangerBright
                     else -> SentinelMuted
                 }
                 Text(
@@ -321,7 +342,7 @@ fun PhotoTimelineGroups(viewModel: AppViewModel, entries: List<JsonObject>) {
     }
     ActionErrorText(error)
     viewPhoto?.let { bytes ->
-        val bitmap = remember(bytes) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+        val bitmap = remember(bytes) { decodeForDisplay(bytes) }
         AlertDialog(
             onDismissRequest = { viewPhoto = null },
             title = { Text("Photo") },

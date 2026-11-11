@@ -254,7 +254,7 @@ fun EngagementFormScreen(viewModel: AppViewModel, nav: NavController, engagement
             loadError != null -> ErrorBox(loadError!!)
             !loaded -> SkeletonList(4)
             else -> Column(Modifier.padding(horizontal = 16.dp)) {
-                val clientOptions = listOf("No client") + clients.map { it.legalName }
+                val clientOptions = listOf("No client") + MirrorVocab.clientOptions(clients)
                 ChoiceMenu(
                     "Client",
                     clientOptions[
@@ -264,7 +264,7 @@ fun EngagementFormScreen(viewModel: AppViewModel, nav: NavController, engagement
                     clientOptions,
                 ) { picked ->
                     clientId = if (picked == "No client") null
-                    else clients.firstOrNull { it.legalName == picked }?.id
+                    else MirrorVocab.clientIdAt(clients, clientOptions, picked, sentinelCount = 1)
                 }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(

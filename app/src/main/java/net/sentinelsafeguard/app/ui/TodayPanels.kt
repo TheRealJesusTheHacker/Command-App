@@ -19,9 +19,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -191,17 +194,47 @@ private fun CountLine(label: String, count: Int) {
     }
 }
 
+/**
+ * AUDIT-171 M-06: a panel that failed to load says so AND offers
+ * the way back. The plain "could not be loaded" lines that used
+ * to strand Today here had no retry at all.
+ */
+@Composable
+private fun PanelLoadFailure(what: String, onRetry: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "$what could not be loaded.",
+            color = SentinelMuted,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onRetry) { Text("Try again") }
+    }
+}
+
 /** The urgent-intake banner: pinned above the Today grid when
  *  Critical Alerts are waiting (web b4j rule). */
 @Composable
 fun UrgentBanner(viewModel: AppViewModel, nav: NavController) {
     var urgent by remember { mutableStateOf<JsonObject?>(null) }
-    LaunchedEffect(Unit) {
+    var loadFailed by remember { mutableStateOf(false) }
+    var reloadKey by remember { mutableStateOf(0) }
+    LaunchedEffect(reloadKey) {
+        loadFailed = false
         urgent = try {
             viewModel.api.todayUrgent().obj("urgent")
         } catch (e: Exception) {
+            // AUDIT-171 M-06: a failed check is NOT "nothing
+            // urgent" — the banner used to just vanish, which
+            // reads exactly like an all-clear.
+            loadFailed = true
             null
         }
+    }
+    if (loadFailed) {
+        MirrorCard("Urgent intake", topTier = true) {
+            PanelLoadFailure("Urgent intake") { reloadKey++ }
+        }
+        return
     }
     val u = urgent ?: return
     val total = u.totalOf()
@@ -232,40 +265,70 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
     var actionNote by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(reloadKey) {
-        panels = try {
-            viewModel.api.todayPanels().obj("panels")
-        } catch (e: Exception) {
-            null
-        }
-        automations = try {
-            viewModel.api.todayAutomations()
-        } catch (e: Exception) {
-            null
-        }
-        digests = try {
-            viewModel.api.todayDigests()
-        } catch (e: Exception) {
-            null
-        }
-        reports = try {
-            viewModel.api.todayReportsSummary()
-        } catch (e: Exception) {
-            null
-        }
-        staffCerts = try {
-            viewModel.api.todayStaffCerts()
-        } catch (e: Exception) {
-            null
-        }
-        estate = try {
-            viewModel.api.todayEstateHealth()
-        } catch (e: Exception) {
-            null
-        }
-        calendar = try {
-            viewModel.api.todayCalendarSync()
-        } catch (e: Exception) {
-            null
+        // AUDIT-171 H-02: these seven loads are independent — they
+        // used to run as a sequential chain, so the panel block
+        // cost the SUM of seven round trips before it rendered.
+        // They now fan out together (the whole Today screen's
+        // calls overlap inside the API client's in-flight
+        // coalescing window, which is also what deduplicates the
+        // screen's repeated todayUrgent/todayReportsSummary GETs).
+        coroutineScope {
+            val dPanels = async {
+                try {
+                    viewModel.api.todayPanels().obj("panels")
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val dAutomations = async {
+                try {
+                    viewModel.api.todayAutomations()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val dDigests = async {
+                try {
+                    viewModel.api.todayDigests()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val dReports = async {
+                try {
+                    viewModel.api.todayReportsSummary()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val dStaffCerts = async {
+                try {
+                    viewModel.api.todayStaffCerts()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val dEstate = async {
+                try {
+                    viewModel.api.todayEstateHealth()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val dCalendar = async {
+                try {
+                    viewModel.api.todayCalendarSync()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            panels = dPanels.await()
+            automations = dAutomations.await()
+            digests = dDigests.await()
+            reports = dReports.await()
+            staffCerts = dStaffCerts.await()
+            estate = dEstate.await()
+            calendar = dCalendar.await()
         }
         loaded = true
     }
@@ -420,7 +483,7 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
         val auto = automations?.obj("today") ?: p?.obj("b3eAutomation")
         MirrorCard("Automations") {
             if (auto == null) {
-                Text("Automation status could not be loaded.", color = SentinelMuted)
+                PanelLoadFailure("Automation status") { reloadKey++ }
             } else {
                 CountLine("Stale tickets", auto.obj("staleTickets")?.totalOf() ?: 0)
                 CountLine("Runaway timers", auto.obj("runawayTimers")?.totalOf() ?: 0)
@@ -451,7 +514,7 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
             (it.obj("breaches")?.totalOf() ?: 0) + (it.obj("atRisk")?.totalOf() ?: 0)
         }) {
             if (sla == null) {
-                Text("SLA status could not be loaded.", color = SentinelMuted)
+                PanelLoadFailure("SLA status") { reloadKey++ }
             } else {
                 Text("Breaches · ${sla.obj("breaches")?.totalOf() ?: 0}", style = MaterialTheme.typography.titleSmall)
                 PanelRows(sla.obj("breaches")?.items() ?: emptyList(), nav, "No SLA breaches.")
@@ -547,7 +610,7 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
         MirrorCard("Reports & Feedback") {
             val r = reports
             if (r == null) {
-                Text("Reports summary could not be loaded.", color = SentinelMuted)
+                PanelLoadFailure("Reports summary") { reloadKey++ }
             } else {
                 val reps = r.obj("reports")?.arr("reports")?.size ?: 0
                 val survey = r.obj("surveys")?.obj("summary") ?: r.obj("reports")?.obj("surveySummary")
@@ -580,7 +643,7 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
             val firmOps = p?.obj("cf2FirmOps")
             val firm = p?.obj("cf2Firm")
             if (firmOps == null && firm == null) {
-                Text("Firm operations could not be loaded.", color = SentinelMuted)
+                PanelLoadFailure("Firm operations") { reloadKey++ }
             } else {
                 CountLine("Vendors", firmOps?.obj("vendors")?.totalOf() ?: 0)
                 CountLine("Owner tasks", firmOps?.obj("ownerTasks")?.totalOf() ?: 0)
@@ -605,7 +668,7 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
             val dir = staffCerts?.obj("directory")
             val staff = dir?.arr("staff")?.mapNotNull { it as? JsonObject } ?: emptyList()
             if (staffCerts == null) {
-                Text("Staff certifications could not be loaded.", color = SentinelMuted)
+                PanelLoadFailure("Staff certifications") { reloadKey++ }
             } else if (staff.isEmpty()) {
                 Text("No staff records.", color = SentinelMuted)
             }
@@ -637,7 +700,7 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
         MirrorCard("Registers") {
             val regs = p?.obj("cf2Registers")
             if (regs == null) {
-                Text("Registers could not be loaded.", color = SentinelMuted)
+                PanelLoadFailure("Registers") { reloadKey++ }
             } else {
                 listOf("warranties" to "Warranties", "licenses" to "Licenses").forEach { (key, label) ->
                     val reg = regs.obj(key)
@@ -683,7 +746,7 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
         MirrorCard("Calendar sync (Google)") {
             val cal = calendar
             if (cal == null) {
-                Text("Calendar sync status could not be loaded.", color = SentinelMuted)
+                PanelLoadFailure("Calendar sync status") { reloadKey++ }
             } else {
                 Text("Enabled: ${if (cal.enabled) "yes" else "no"} · Prepared: ${if (cal.prepared) "yes" else "no"} · Live: ${if (cal.live) "yes" else "no"}")
                 if (cal.lastSummary.isNotBlank()) Text(cal.lastSummary)
@@ -750,22 +813,36 @@ fun TodayDigestCards(
     var reportsSummary by remember { mutableStateOf<JsonObject?>(null) }
     var urgent by remember { mutableStateOf<JsonObject?>(null) }
     var loaded by remember { mutableStateOf(false) }
+    var reloadKey by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) {
-        platform = try {
-            viewModel.api.todayPlatformDigest()
-        } catch (e: Exception) {
-            null
-        }
-        reportsSummary = try {
-            viewModel.api.todayReportsSummary()
-        } catch (e: Exception) {
-            null
-        }
-        urgent = try {
-            viewModel.api.todayUrgent().obj("urgent")
-        } catch (e: Exception) {
-            null
+    LaunchedEffect(reloadKey) {
+        // AUDIT-171 H-02: independent loads, fanned out together
+        // (was a sequential 3-chain).
+        coroutineScope {
+            val dPlatform = async {
+                try {
+                    viewModel.api.todayPlatformDigest()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val dReports = async {
+                try {
+                    viewModel.api.todayReportsSummary()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            val dUrgent = async {
+                try {
+                    viewModel.api.todayUrgent().obj("urgent")
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            platform = dPlatform.await()
+            reportsSummary = dReports.await()
+            urgent = dUrgent.await()
         }
         loaded = true
     }
@@ -782,7 +859,19 @@ fun TodayDigestCards(
                 RollingCountLine("Follow-ups due today", today.followUps.total)
                 RollingCountLine("New tickets waiting", today.newTickets.total)
                 RollingCountLine("Overdue cases", today.overdueCases.total)
-                RollingCountLine("Urgent right now", urgent?.totalOf() ?: 0)
+                // AUDIT-171 M-06: a failed urgent load printed as
+                // "0" — a false all-clear in the Morning Brief.
+                // It now says it could not be checked, with a retry.
+                val urgentNow = urgent
+                if (urgentNow != null) {
+                    RollingCountLine("Urgent right now", urgentNow.totalOf())
+                } else {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                        Text("Urgent right now", modifier = Modifier.weight(1f))
+                        Text("couldn't check", color = SentinelMuted)
+                        TextButton(onClick = { reloadKey++ }) { Text("Try again") }
+                    }
+                }
                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
                     Text("Money overdue", modifier = Modifier.weight(1f))
                     Text(
@@ -803,10 +892,7 @@ fun TodayDigestCards(
                     ?: emptyList()
                 val day = digest?.str("day") ?: digest?.str("title")
                 if (digest == null) {
-                    Text(
-                        "The platform digest could not be loaded.",
-                        color = SentinelMuted,
-                    )
+                    PanelLoadFailure("The platform digest") { reloadKey++ }
                 } else if (lines.isEmpty()) {
                     Text(
                         "No platform digest yet${day?.let { " for $it" } ?: ""}.",

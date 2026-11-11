@@ -447,20 +447,31 @@ class SentinelApi(
      * assignedUserId / dueDate are sent as explicit JSON nulls
      * when cleared — saveticket semantics need the key present.
      */
+    /**
+     * The full-edit wire body, shared by [patchTicketFull] and
+     * the offline queue (AUDIT-171 B-08) so a queued patch is
+     * byte-identical to the live one.
+     */
+    fun ticketFullBody(edit: TicketFullEdit): JsonObject = buildJsonObject {
+        put("title", edit.title)
+        put("status", edit.status)
+        put("priority", edit.priority)
+        if (edit.assignedUserId != null) put("assignedUserId", edit.assignedUserId)
+        else put("assignedUserId", JsonNull)
+        put("category", edit.category)
+        if (edit.dueDate != null) put("dueDate", edit.dueDate) else put("dueDate", JsonNull)
+        if (edit.clientId != null) put("clientId", edit.clientId) else put("clientId", JsonNull)
+        if (edit.caseId != null) put("caseId", edit.caseId) else put("caseId", JsonNull)
+        put("adMaterial", edit.adMaterial)
+        put("notes", edit.notes)
+    }
+
+    /** The create wire body as a JSON object (offline queue). */
+    fun ticketCreateBody(request: TicketCreateRequest): JsonObject =
+        json.encodeToJsonElement(TicketCreateRequest.serializer(), request).jsonObject
+
     suspend fun patchTicketFull(id: Int, edit: TicketFullEdit): Ticket {
-        val body = buildJsonObject {
-            put("title", edit.title)
-            put("status", edit.status)
-            put("priority", edit.priority)
-            if (edit.assignedUserId != null) put("assignedUserId", edit.assignedUserId)
-            else put("assignedUserId", JsonNull)
-            put("category", edit.category)
-            if (edit.dueDate != null) put("dueDate", edit.dueDate) else put("dueDate", JsonNull)
-            if (edit.clientId != null) put("clientId", edit.clientId) else put("clientId", JsonNull)
-            if (edit.caseId != null) put("caseId", edit.caseId) else put("caseId", JsonNull)
-            put("adMaterial", edit.adMaterial)
-            put("notes", edit.notes)
-        }
+        val body = ticketFullBody(edit)
         return json.decodeFromString<TicketWriteResponse>(
             ensureOk(call("PATCH", "/api/app/tickets/$id", body.toString())).body
         ).ticket

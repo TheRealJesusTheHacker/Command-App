@@ -894,6 +894,45 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
                 }
                 }
 
+                // AUDIT-171 tier order: the record's tier is always
+                // visible here with what it means for charging. The
+                // grant control below renders ONLY for the owner
+                // account (server-issued role on /api/app/me).
+                MirrorCard("Tier") {
+                    val tier = TierLogic.tierOf(c)
+                    DetailLine("Status", TierLogic.label(tier))
+                    Text(
+                        TierLogic.chargeNote(tier),
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (TierLogic.isOwner(viewModel.me?.user?.role)) {
+                        Spacer(Modifier.height(8.dp))
+                        // OWNER grant control — render gate proven by
+                        // TierLogic.isOwner (server payload role).
+                        // WRITE PATH: PENDING Main's owner-only tier
+                        // endpoint contract (app twin), being built
+                        // by the server tier crew 2026-11-11. Until
+                        // that contract lands there is deliberately
+                        // NO button here: a control that cannot write
+                        // would be a dead control. When the contract
+                        // arrives, the three-way grant (Standard /
+                        // Friends / Family) wires to
+                        // SentinelApi.setClientTier at this seam and
+                        // this note is replaced by the control.
+                        Text(
+                            "You are the owner. Granting or changing tier " +
+                                "status from the app activates with the " +
+                                "server's owner-only tier update — until " +
+                                "then this page shows the current status, " +
+                                "and any change made in Command appears " +
+                                "here on refresh.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SentinelMuted,
+                        )
+                    }
+                }
+
                 MirrorCard("Contact") {
                     DetailLine("Contact", c.contactName)
                     DetailLine("Title", c.contactTitle)
@@ -1097,7 +1136,9 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
     var state by remember { mutableStateOf("") }
     var zip by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf("") }
-    var friends by remember { mutableStateOf(false) }
+    // AUDIT-171 T-1: the record's tier, loaded read-only for the
+    // status line below; never edited or re-sent by this form.
+    var loadedTier by remember { mutableStateOf<TierLogic.Tier?>(null) }
     var notes by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf<String?>(null) }
     var emailError by remember { mutableStateOf<String?>(null) }
@@ -1123,7 +1164,7 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
             contactName = c.contactName; contactTitle = c.contactTitle
             email = c.email; phone = c.phone
             street = c.street; city = c.city; state = c.state; zip = c.zip
-            tags = c.tags ?: ""; friends = c.friends; notes = c.notes
+            tags = c.tags ?: ""; loadedTier = TierLogic.tierOf(c); notes = c.notes
             loaded = true
         } catch (e: Exception) {
             loadError = plainError(e, "The form could not be loaded. Go back and try again.")
@@ -1244,11 +1285,30 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
                     label = { Text("Tags (comma list)") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = friends, onCheckedChange = { friends = it })
+                // AUDIT-171 T-1: tier is NOT editable in this form.
+                // Family/Friends status is granted by the owner
+                // alone, from the client's page (owner-gated control)
+                // — a generic save never carries a tier field, so it
+                // can neither grant nor clear one. This line only
+                // reports the record's current standing.
+                Column {
                     Text(
-                        "Friends tier — 20% off all prices (Family records are never " +
-                            "charged and take precedence)"
+                        "Tier",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = SentinelMuted,
+                    )
+                    Text(
+                        if (loadedTier == null) {
+                            "Standard — new clients start at standard pricing."
+                        } else {
+                            "${TierLogic.label(loadedTier!!)} — " +
+                                TierLogic.chargeNote(loadedTier!!)
+                        }
+                    )
+                    Text(
+                        "Tier status is set by the owner from the client's page.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SentinelMuted,
                     )
                 }
                 OutlinedTextField(
@@ -1287,7 +1347,7 @@ fun ClientFormScreen(viewModel: AppViewModel, nav: NavController, clientId: Int?
                                     contactName = contactName, contactTitle = contactTitle,
                                     email = email, phone = phone,
                                     street = street, city = city, state = state, zip = zip,
-                                    tags = tags, friends = friends, notes = notes,
+                                    tags = tags, notes = notes,
                                 )
                                 val saved = if (clientId == null) {
                                     viewModel.api.createClient(request)

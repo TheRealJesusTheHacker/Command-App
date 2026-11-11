@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import net.sentinelsafeguard.app.data.api.ApiException
 import net.sentinelsafeguard.app.data.api.SignedOutException
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
+import net.sentinelsafeguard.app.ui.theme.SentinelDangerBright
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import net.sentinelsafeguard.app.ui.theme.SentinelOutline
 import net.sentinelsafeguard.app.ui.theme.SentinelSurface
@@ -87,6 +88,17 @@ val LocalSkeletonAlpha = androidx.compose.runtime.compositionLocalOf { 0.6f }
 /** Installs the shared skeleton pulse above [content]. */
 @Composable
 fun SkeletonPulseHost(content: @Composable () -> Unit) {
+    // AUDIT-171 L-04: the pulse was the one always-on animation
+    // that ignored reduced motion — against Motion.kt's own rule
+    // ("a pattern with no fallback does not ship"). Under reduced
+    // motion the alpha rests at its static mid value.
+    if (rememberReducedMotion()) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalSkeletonAlpha provides 0.6f,
+            content = content,
+        )
+        return
+    }
     val pulse = rememberInfiniteTransition(label = "skeletonShared")
     val alpha by pulse.animateFloat(
         initialValue = 0.35f,
@@ -98,6 +110,30 @@ fun SkeletonPulseHost(content: @Composable () -> Unit) {
         LocalSkeletonAlpha provides alpha,
         content = content,
     )
+}
+
+/**
+ * AUDIT-171 M-04: decode a photo for display, downsampled so the
+ * long edge is at most [maxDim] px. The photo surfaces used to
+ * decode full-resolution camera bytes in composition — a
+ * 4000px photo is ~64MB of bitmap to show in a dialog. Bounds
+ * first, then a power-of-two sample; undecodable bounds fall
+ * back to the plain decode (which returns null on junk, as
+ * before).
+ */
+fun decodeForDisplay(bytes: ByteArray, maxDim: Int = 1600): android.graphics.Bitmap? {
+    val bounds = android.graphics.BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+        return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    }
+    var sample = 1
+    val longEdge = maxOf(bounds.outWidth, bounds.outHeight)
+    while (longEdge / sample > maxDim) sample *= 2
+    val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+    return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
 }
 
 /**
@@ -171,7 +207,7 @@ fun ErrorBox(message: String, onRetry: (() -> Unit)? = null) {
             .padding(16.dp),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Something went wrong", style = MaterialTheme.typography.titleMedium, color = SentinelDanger)
+            Text("Something went wrong", style = MaterialTheme.typography.titleMedium, color = SentinelDangerBright)
             Spacer(Modifier.height(6.dp))
             Text(message, style = MaterialTheme.typography.bodyMedium)
             if (onRetry != null) {

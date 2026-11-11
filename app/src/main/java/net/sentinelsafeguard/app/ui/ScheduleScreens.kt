@@ -152,15 +152,26 @@ fun ScheduleScreen(viewModel: AppViewModel, nav: NavController) {
                 listOf("All") + MirrorVocab.JOB_STATUSES,
             ) { status = it }
             if (isOwner && data != null) {
+                // AUDIT-171 B-07: unique options + positional
+                // resolution (namesakes filtered to the wrong
+                // person's schedule before).
                 val empOptions = listOf("All") +
-                    data!!.employees.map { it.displayName } + listOf("Unassigned")
+                    data!!.employees.map { u ->
+                        if (data!!.employees.count { it.displayName == u.displayName } > 1) {
+                            "${u.displayName} (#${u.id})"
+                        } else {
+                            u.displayName
+                        }
+                    } + listOf("Unassigned")
                 ChoiceMenu("Employee", employeeLabel, empOptions) { picked ->
                     employeeLabel = picked
                     employee = when (picked) {
                         "All" -> "All"
                         "Unassigned" -> "unassigned"
-                        else -> data!!.employees
-                            .firstOrNull { it.displayName == picked }?.id?.toString() ?: "All"
+                        else -> {
+                            val idx = empOptions.indexOf(picked)
+                            data!!.employees.getOrNull(idx - 1)?.id?.toString() ?: "All"
+                        }
                     }
                 }
             }
@@ -429,13 +440,22 @@ private fun EntryForm(
         Text("New schedule entry", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
         if (employees.isNotEmpty()) {
-            val options = employees.map { it.displayName }
+            // AUDIT-171 B-07: unique options + positional
+            // resolution, as everywhere else.
+            val options = employees.map { u ->
+                if (employees.count { it.displayName == u.displayName } > 1) {
+                    "${u.displayName} (#${u.id})"
+                } else {
+                    u.displayName
+                }
+            }
             ChoiceMenu(
                 "Person",
                 options[employees.indexOfFirst { it.id == userId }.let { if (it < 0) 0 else it }],
                 options,
             ) { picked ->
-                userId = employees.firstOrNull { it.displayName == picked }?.id ?: userId
+                val idx = options.indexOf(picked)
+                userId = employees.getOrNull(idx)?.id ?: userId
             }
             Spacer(Modifier.height(12.dp))
         }
@@ -725,7 +745,7 @@ fun JobFormScreen(viewModel: AppViewModel, nav: NavController, jobId: Int?, pres
                     Text(titleError!!, color = MaterialTheme.colorScheme.error)
                 }
                 Spacer(Modifier.height(12.dp))
-                val clientOptions = listOf("No client") + clients.map { it.legalName }
+                val clientOptions = listOf("No client") + MirrorVocab.clientOptions(clients)
                 ChoiceMenu(
                     "Client",
                     clientOptions[
@@ -735,7 +755,7 @@ fun JobFormScreen(viewModel: AppViewModel, nav: NavController, jobId: Int?, pres
                     clientOptions,
                 ) { picked ->
                     clientId = if (picked == "No client") null
-                    else clients.firstOrNull { it.legalName == picked }?.id
+                    else MirrorVocab.clientIdAt(clients, clientOptions, picked, sentinelCount = 1)
                 }
                 Spacer(Modifier.height(12.dp))
                 val caseOptions = listOf("No case") + cases.map { "#${it.id} · ${it.title}" }

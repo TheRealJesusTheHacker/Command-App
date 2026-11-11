@@ -40,6 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -412,9 +414,20 @@ fun StageStepper(
     Row(verticalAlignment = Alignment.CenterVertically) {
         val back = MirrorVocab.stepStage(current, -1)
         val fwd = MirrorVocab.stepStage(current, +1)
-        TextButton(onClick = { back?.let { tick(); onStep(it) } }, enabled = back != null) { Text("‹") }
+        // AUDIT-171 L-03: the glyph-only steppers got real
+        // accessibility names — a screen reader used to voice
+        // the punctuation, not the action.
+        TextButton(
+            onClick = { back?.let { tick(); onStep(it) } },
+            enabled = back != null,
+            modifier = Modifier.semantics { contentDescription = "Previous stage" },
+        ) { Text("‹") }
         TextButton(onClick = onOpen) { Text(openLabel) }
-        TextButton(onClick = { fwd?.let { tick(); onStep(it) } }, enabled = fwd != null) { Text("›") }
+        TextButton(
+            onClick = { fwd?.let { tick(); onStep(it) } },
+            enabled = fwd != null,
+            modifier = Modifier.semantics { contentDescription = "Next stage" },
+        ) { Text("›") }
         Spacer(Modifier.width(4.dp))
     }
 }

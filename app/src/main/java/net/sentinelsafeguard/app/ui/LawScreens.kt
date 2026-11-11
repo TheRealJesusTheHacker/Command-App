@@ -268,7 +268,10 @@ fun LawScreen(viewModel: AppViewModel, nav: NavController) {
                     LawDocSheet(viewModel, doc,
                         onClose = { openDoc = null },
                         onDelete = { confirmDelete = Phase3Logic.int(doc, "id"); openDoc = null },
-                        onShared = { },
+                        // AUDIT-171 B-02: the post-share hook was an
+                        // empty lambda — a share now closes the
+                        // sheet, like every other completed action.
+                        onShared = { openDoc = null },
                         share = { title, body -> shareText(context, title, body) })
                 }
             }

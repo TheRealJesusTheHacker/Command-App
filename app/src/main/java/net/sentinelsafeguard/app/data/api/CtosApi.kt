@@ -41,6 +41,15 @@ suspend fun SentinelApi.ctosDeleteCase(caseId: Int): JsonObject =
 suspend fun SentinelApi.ctosExportCase(caseId: Int): JsonObject =
     callJson("GET", "/api/app/osint/ctos/cases/$caseId/export")
 
+/**
+ * AUDIT-171 B-18 [OSINT]: the printable case report twin
+ * (a_ctosreport — structured report with the honesty footer).
+ * The endpoint shipped with Wave 2 but had no app method and no
+ * UI; only the raw export JSON could be shared.
+ */
+suspend fun SentinelApi.ctosCaseReport(caseId: Int): JsonObject =
+    callJson("GET", "/api/app/osint/ctos/cases/$caseId/report")
+
 suspend fun SentinelApi.ctosRecord(caseId: Int, body: JsonObject): JsonObject =
     callJson("POST", "/api/app/osint/ctos/cases/$caseId/record", body.toBodyC())
 

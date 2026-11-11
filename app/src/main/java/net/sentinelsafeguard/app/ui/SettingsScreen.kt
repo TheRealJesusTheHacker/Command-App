@@ -66,6 +66,7 @@ import net.sentinelsafeguard.app.notify.NotifPermissionState
 import net.sentinelsafeguard.app.notify.PushPrefsLogic
 import net.sentinelsafeguard.app.notify.QuietHours
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
+import net.sentinelsafeguard.app.ui.theme.SentinelDangerBright
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import net.sentinelsafeguard.app.ui.theme.SentinelOutline
 import net.sentinelsafeguard.app.ui.theme.SentinelSurface
@@ -356,7 +357,7 @@ fun SettingsScreen(
                 if (pushPrefsError != null) {
                     Text(
                         pushPrefsError!!,
-                        color = SentinelDanger,
+                        color = SentinelDangerBright,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -377,7 +378,7 @@ fun SettingsScreen(
                 if (pushPrefsError != null) {
                     Text(
                         pushPrefsError!!,
-                        color = SentinelDanger,
+                        color = SentinelDangerBright,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -394,7 +395,7 @@ fun SettingsScreen(
         }
         ToggleRow(
             "Sign-in alerts",
-            "Someone signed in to Sentinel Command. These come through even during quiet hours.",
+            "Someone signed in to Command. These come through even during quiet hours.",
             notifyAlerts,
         ) {
             notifyAlerts = it; settings.notifySignInAlerts = it
@@ -433,7 +434,7 @@ fun SettingsScreen(
             )
         }
         if (quietError != null) {
-            Text(quietError!!, color = SentinelDanger, style = MaterialTheme.typography.bodyMedium)
+            Text(quietError!!, color = SentinelDangerBright, style = MaterialTheme.typography.bodyMedium)
         }
         OutlinedButton(onClick = {
             val start = QuietHours.parseTime(quietStart)
@@ -691,7 +692,7 @@ private fun NotificationExplainerBody(deniedFinal: Boolean = false) {
         )
         NotifyChannelLine(
             "Sign-in alerts",
-            "Someone signs in to Sentinel Command. These come through even during quiet hours.",
+            "Someone signs in to Command. These come through even during quiet hours.",
         )
         NotifyChannelLine(
             "Critical alerts",

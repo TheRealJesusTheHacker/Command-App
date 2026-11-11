@@ -251,8 +251,29 @@ android {
         // Command settings; the app never accepts one).
         // versionCode 118 steps over 117 so it upgrades in
         // place over 1.6.5.
-        versionCode = 118
-        versionName = "1.7.0"
+        // 1.7.1 (2026-11-11, AUDIT-171): the full bug-hunt +
+        // security-audit + polish fix pass over 1.7.0. Security:
+        // the self-updater fails CLOSED (a version payload with
+        // no SHA-256 is a refusal, and the downloaded APK's
+        // signer must match the installed app's before install);
+        // FLAG_SECURE; the client save can no longer carry a
+        // tier field (T-1). Push: deep links land on their
+        // target, batches no longer collapse, seen-id memory is
+        // recorded before the ACK, sign-out unregisters.
+        // OSINT [OSINT]: the five CToS command builders and the
+        // OPSEC profile panel are real (they never reach the
+        // server run path), the printable case report has its
+        // screen, gated tools are badged, server URLs pass an
+        // http/https allowlist. Offline: the ticket form queues
+        // on transport failure and flushes via /api/app/sync.
+        // Polish: every Material 3 colour role is set (no
+        // baseline purple anywhere), error text meets 4.5:1,
+        // Today loads in parallel with honest retry states.
+        // Suites 554 → 593 green; staging rehearsal 18/18.
+        // versionCode 119 steps over 118 so it upgrades in
+        // place over 1.7.0.
+        versionCode = 119
+        versionName = "1.7.1"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         // The CF Access values are deliberately NOT build config

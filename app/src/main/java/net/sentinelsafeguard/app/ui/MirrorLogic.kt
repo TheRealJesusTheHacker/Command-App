@@ -14,6 +14,33 @@ import java.util.Locale
  * Command's exact sets (mirror inventory §4/§5).
  */
 object MirrorVocab {
+    /**
+     * AUDIT-171 B-07: picker options for a client list. Two
+     * clients can share a legal name; a name-keyed pick silently
+     * chose the FIRST namesake (wrong client on tickets, cases,
+     * invoices). Options are unique by construction — a shared
+     * name carries its record id — and picks resolve by
+     * POSITION in the option list, never by name matching.
+     */
+    fun clientOptionLabel(clients: List<Client>, client: Client): String =
+        if (clients.count { it.legalName == client.legalName } > 1) {
+            "${client.legalName} (#${client.id})"
+        } else {
+            client.legalName
+        }
+
+    fun clientOptions(clients: List<Client>): List<String> =
+        clients.map { clientOptionLabel(clients, it) }
+
+    /** The id behind [picked] in [options] (which may carry
+     *  [sentinelCount] leading non-client entries). */
+    fun clientIdAt(
+        clients: List<Client>,
+        options: List<String>,
+        picked: String,
+        sentinelCount: Int = 0,
+    ): Int? = clients.getOrNull(options.indexOf(picked) - sentinelCount)?.id
+
     val TICKET_STAGES = listOf("New", "Open", "In Progress", "On Hold", "Resolved", "Closed")
     val PRIORITIES = listOf("Low", "Normal", "High", "Critical")
     val CATEGORIES = listOf("Assessment", "Incident Response", "Install", "Support", "Audit", "Other")

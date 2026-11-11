@@ -137,6 +137,13 @@ private fun BuilderCard(
             }
             if (Phase3Logic.bool(selected, "familyLinked") == true) {
                 Text("Family records are never charged.", color = SentinelMuted)
+            } else if (Phase3Logic.bool(selected, "friends") == true) {
+                // AUDIT-171 T-4: the Friends standing was previously
+                // invisible here; the 20% shows on the built quote.
+                Text(
+                    "Friends — 20% off applies to this quote as a discount line.",
+                    color = SentinelMuted,
+                )
             }
         }
         items.forEach { item ->
@@ -154,7 +161,19 @@ private fun BuilderCard(
                 TextFieldRow("Quantity", quantities[id] ?: "1", { v -> quantities = quantities + (id to v) })
             }
         }
-        Button(onClick = {
+        // AUDIT-171 T-2: a Family selection disables the build —
+        // the app KNOWS this record is never charged (the payload
+        // says so and the note above states it), so offering the
+        // action and letting the server refuse was a false path.
+        // The selection's family state (not just the raw rows) is
+        // what the button acts on.
+        val effectiveClient = clients.firstOrNull { Phase3Logic.int(it, "id") == clientId }
+            ?: clients.firstOrNull()
+        val selectedFamily = effectiveClient
+            ?.let { Phase3Logic.bool(it, "familyLinked") == true } == true
+        Button(
+            enabled = !selectedFamily,
+            onClick = {
             val cid = clientId ?: clients.firstOrNull()?.let { Phase3Logic.int(it, "id") }
             if (cid == null) onError("Choose a client first.")
             else if (quantities.isEmpty()) onError("Pick at least one price book line.")
@@ -168,6 +187,12 @@ private fun BuilderCard(
                 onNotice(Phase3Logic.str(out, "message"))
             }
         }) { Text("Build draft quote") }
+        if (selectedFamily) {
+            Text(
+                "Quotes are not built for Family records — they are never charged.",
+                color = SentinelMuted, style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 

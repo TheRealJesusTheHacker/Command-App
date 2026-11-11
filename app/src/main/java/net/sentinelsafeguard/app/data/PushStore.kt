@@ -58,6 +58,23 @@ class PushStore(context: Context) {
         get() = prefs.getLong(KEY_CURSOR, 0L)
         set(value) = prefs.edit().putLong(KEY_CURSOR, value).apply()
 
+    /**
+     * AUDIT-171 B-13: ids of outbox events this device has already
+     * processed (shown or deliberately silenced), most recent last.
+     * Recorded BEFORE the batch ACK so a failed ACK — which makes
+     * the server redeliver — never re-alerts the owner. This is
+     * device-level delivery memory, not session state: like the
+     * push token it survives sign-out ([resetDeliveryState] does
+     * not clear it), because redelivery after a fresh sign-in is
+     * exactly the case it exists for.
+     */
+    var seenEventIds: List<String>
+        get() = prefs.getString(KEY_SEEN_EVENT_IDS, null)
+            ?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+        set(value) = prefs.edit()
+            .putString(KEY_SEEN_EVENT_IDS, value.joinToString(","))
+            .apply()
+
     /** Forgets registration, its version record, and the cursor
      *  (sign-out); the token itself is kept — it identifies the
      *  install, not the session. Called from AppViewModel.signOut
@@ -76,5 +93,6 @@ class PushStore(context: Context) {
         private const val KEY_REGISTERED = "push_registered"
         private const val KEY_REGISTERED_VERSION_CODE = "push_registered_version_code"
         private const val KEY_CURSOR = "push_cursor"
+        private const val KEY_SEEN_EVENT_IDS = "push_seen_event_ids"
     }
 }

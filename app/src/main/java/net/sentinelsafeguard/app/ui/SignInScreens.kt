@@ -36,6 +36,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import net.sentinelsafeguard.app.data.api.LoginResult
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
+import net.sentinelsafeguard.app.ui.theme.SentinelDangerBright
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 import net.sentinelsafeguard.app.ui.theme.SentinelSurfaceLow
 
@@ -101,7 +102,7 @@ fun SignInScreen(viewModel: AppViewModel) {
             // them by swiping.
             Text(
                 notice,
-                color = SentinelDanger,
+                color = SentinelDangerBright,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.semantics {
                     liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
@@ -161,7 +162,7 @@ fun SignInScreen(viewModel: AppViewModel) {
             Spacer(Modifier.height(12.dp))
             Text(
                 error!!,
-                color = SentinelDanger,
+                color = SentinelDangerBright,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.semantics {
                     liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
@@ -322,7 +323,7 @@ fun LockScreen(viewModel: AppViewModel) {
         )
         if (error != null) {
             Spacer(Modifier.height(12.dp))
-            Text(error!!, color = SentinelDanger, style = MaterialTheme.typography.bodyMedium)
+            Text(error!!, color = SentinelDangerBright, style = MaterialTheme.typography.bodyMedium)
         }
         Spacer(Modifier.height(24.dp))
         GradientPrimaryButton(

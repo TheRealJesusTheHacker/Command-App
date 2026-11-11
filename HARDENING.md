@@ -91,12 +91,22 @@ the new values. The fragments change only if the *format* is ever
 revised — that is a code change (GateCrypto + generator + tests
 move together), not an operational task.
 
-## 3. Certificate pinning — mail pinned, command host not
+## 3. Certificate pinning — command host not pinned
 
-### Mail (`mail.sentinelsafeguard.net`) — pinned to CA anchors
+### Mail (`mail.sentinelsafeguard.net`) — REMOVED with the mail engine (1.6.3)
 
-The app pins the two root anchors in the chain the live server
-presents. The pins were computed from the chain fetched from
+> AUDIT-171 I-01 (2026-11-11): the mail engine this section
+> describes (`data/mail/*`, the SPKI pinning trust manager, the
+> Angus sessions) was removed from this app in 1.6.3 — mail
+> lives in the separate Sentinel Mail App now. None of the code
+> named below exists in this tree; what remains is
+> `CertificatePins.kt`, kept for the Command-host posture in
+> the next subsection. The text below is the historical record
+> of the shipped 1.4–1.6.2 design, kept because the pins and
+> the reasoning are the Mail App's heritage.
+
+The app pinned the two root anchors in the chain the live server
+presented. The pins were computed from the chain fetched from
 `mail.sentinelsafeguard.net:993` on 2026-10-25:
 
 | Chain position | Certificate | SPKI SHA-256 pin |

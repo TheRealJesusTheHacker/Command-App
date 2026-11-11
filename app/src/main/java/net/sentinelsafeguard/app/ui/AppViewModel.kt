@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import net.sentinelsafeguard.app.BuildConfig
 import net.sentinelsafeguard.app.config.AppConfig
+import net.sentinelsafeguard.app.data.OfflineQueue
 import net.sentinelsafeguard.app.data.PushStore
 import net.sentinelsafeguard.app.data.SecureStore
 import net.sentinelsafeguard.app.data.SettingsStore
@@ -16,6 +17,7 @@ import net.sentinelsafeguard.app.data.api.LoginResult
 import net.sentinelsafeguard.app.data.api.MeResponse
 import net.sentinelsafeguard.app.data.api.OkHttpTransport
 import net.sentinelsafeguard.app.data.api.SentinelApi
+import net.sentinelsafeguard.app.data.api.pushUnregister
 import net.sentinelsafeguard.app.update.UpdateManager
 import net.sentinelsafeguard.app.update.UpdateState
 
@@ -87,6 +89,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // if biometric unlock is on (spec §5).
             locked = settings.biometricEnabled
             checkForUpdate()
+            flushOfflineQueue()
         }
     }
 
@@ -154,6 +157,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         signedIn = true
         locked = false
         checkForUpdate()
+        flushOfflineQueue()
+    }
+
+    /**
+     * AUDIT-171 B-08: the offline write queue finally has its
+     * flush triggers. Queued ticket writes (made with no
+     * connection) replay against POST /api/app/sync after every
+     * sign-in and on every app start with a live session.
+     * Best-effort by design: a failed flush leaves the entries
+     * queued for the next trigger; it never blocks sign-in or
+     * startup, and the queue's own receipts logic decides each
+     * entry's fate.
+     */
+    fun flushOfflineQueue() {
+        if (!signedIn) return
+        viewModelScope.launch {
+            try {
+                OfflineQueue(getApplication()).flush(api)
+            } catch (e: Exception) {
+                // Still offline or the sync was refused — the
+                // entries stay queued; nothing is lost.
+            }
+        }
     }
 
     fun unlock() {
@@ -177,6 +203,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         settings.sessionEndedNoticePending = true
         viewModelScope.launch {
             secure.clearAll()
+            // AUDIT-171 B-15: a forced sign-out now resets the same
+            // push delivery state a manual sign-out does — the 401
+            // path used to leave the cursor and registration latch
+            // behind, so the next session inherited stale delivery
+            // state. (The seen-event memory survives on purpose:
+            // see PushStore.seenEventIds.)
+            pushStore.resetDeliveryState()
             api.deviceToken = null
             signedIn = false
             locked = false
@@ -186,6 +219,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Sign out = revoke this device (spec §2.1), then wipe local secrets. */
     fun signOut(onDone: () -> Unit) {
         viewModelScope.launch {
+            // AUDIT-171 B-15: unregister this device's push
+            // registration on the server BEFORE the token dies —
+            // pushUnregister's own doc assigns it to sign-out, but
+            // nothing ever called it, so the server kept a live
+            // registration for a signed-out device. Best-effort:
+            // a network failure must never block signing out.
+            try {
+                api.pushUnregister()
+            } catch (ignored: Exception) {
+                // Signing out proceeds regardless.
+            }
             api.logout()
             secure.clearAll()
             // Push registration belongs to the session, not the
@@ -193,6 +237,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // next sign-in's PushWorker run registers fresh —
             // the reset PushWorker's lifecycle has always assumed.
             pushStore.resetDeliveryState()
+            // AUDIT-171 M-03: the token was not the whole session.
+            // Form drafts, queued offline mutations and shared
+            // export files belong to the signed-in account too —
+            // a different person signing in on this phone must not
+            // inherit them. (Today the draft/queue stores are not
+            // yet wired into forms — AUDIT-171 B-08 — the wipe is
+            // written against their real APIs so it stays true
+            // when they are.)
+            try {
+                val drafts = net.sentinelsafeguard.app.data.DraftStore(getApplication())
+                drafts.listFormIds().forEach { drafts.clear(it) }
+                net.sentinelsafeguard.app.data.OfflineQueue(getApplication()).clear()
+                java.io.File(getApplication<Application>().cacheDir, "updates")
+                    .listFiles()?.forEach { it.delete() }
+            } catch (ignored: Exception) {
+                // Local hygiene never blocks sign-out.
+            }
             me = null
             meLoaded = false
             signedIn = false

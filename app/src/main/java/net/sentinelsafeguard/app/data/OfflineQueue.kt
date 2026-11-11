@@ -14,6 +14,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
+import net.sentinelsafeguard.app.data.api.ApiException
 import net.sentinelsafeguard.app.data.api.SentinelApi
 import net.sentinelsafeguard.app.data.api.syncMutations
 
@@ -82,6 +83,16 @@ object OfflineLogic {
     /** The next batch to send: pending entries only, at most [MAX_BATCH]. */
     fun nextBatch(entries: List<QueueEntry>, limit: Int = MAX_BATCH): List<QueueEntry> =
         entries.filter { it.status == QueueEntryStatus.PENDING }.take(limit)
+
+    /**
+     * AUDIT-171 B-08: a write belongs in this queue ONLY when the
+     * server never answered — a transport failure (no signal,
+     * timeout, DNS). An [ApiException] means the server DID answer
+     * and refused or failed the write on its merits; queueing a
+     * refusal would replay a rejected write later and hide the
+     * refusal from the person who made it.
+     */
+    fun shouldQueue(error: Throwable): Boolean = error !is ApiException
 
     /** The exact sync request body: {"mutations":[{key,kind,payload,baseUpdatedAt}]}. */
     fun buildSyncBody(batch: List<QueueEntry>): JsonObject = buildJsonObject {

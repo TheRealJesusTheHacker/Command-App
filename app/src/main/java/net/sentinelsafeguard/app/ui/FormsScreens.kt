@@ -272,7 +272,7 @@ private fun FormFileRow(viewModel: AppViewModel, file: JsonObject, onChanged: ()
                     }
                 },
                 modifier = Modifier.padding(end = 8.dp),
-            ) { Text("Download") }
+            ) { Text("Share / save") }
             OutlinedButton(
                 onClick = { editing = !editing },
                 modifier = Modifier.padding(end = 8.dp),

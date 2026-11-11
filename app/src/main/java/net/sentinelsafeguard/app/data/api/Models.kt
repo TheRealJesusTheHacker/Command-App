@@ -837,7 +837,12 @@ data class ClientWriteRequest(
     val state: String = "",
     val zip: String = "",
     val tags: String = "",
-    val friends: Boolean = false,
+    // AUDIT-171 T-1: NO tier field rides this request, by design.
+    // Family/Friends status is owner-granted state (Skyler alone
+    // issues it); a generic save must never carry it. The server
+    // treats an absent flag as "leave as-is", so saves cannot clear
+    // a tier either. Granting rides the dedicated owner-gated tier
+    // endpoint (see TierLogic).
     val notes: String = "",
 )
 

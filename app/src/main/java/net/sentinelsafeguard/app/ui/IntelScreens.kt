@@ -33,6 +33,7 @@ import net.sentinelsafeguard.app.data.api.threatPushToNews
 import net.sentinelsafeguard.app.data.api.threatSync
 import net.sentinelsafeguard.app.ui.theme.SentinelAmber
 import net.sentinelsafeguard.app.ui.theme.SentinelDanger
+import net.sentinelsafeguard.app.ui.theme.SentinelDangerBright
 import net.sentinelsafeguard.app.ui.theme.SentinelGreen
 import net.sentinelsafeguard.app.ui.theme.SentinelMuted
 
@@ -453,7 +454,7 @@ private fun FlightsTab(viewModel: AppViewModel) {
                                     if (flight.emergency) {
                                         Text(
                                             "EMERGENCY",
-                                            color = SentinelDanger,
+                                            color = SentinelDangerBright,
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                                         )

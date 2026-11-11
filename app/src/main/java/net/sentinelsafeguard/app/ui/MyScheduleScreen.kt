@@ -29,9 +29,11 @@ import java.time.LocalDate
 fun MyScheduleScreen(viewModel: AppViewModel, nav: NavController) {
     var data by remember { mutableStateOf<ScheduleResponse?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
     val start = remember { LocalDate.now().minusDays(7) }
     val end = remember { LocalDate.now().plusDays(60) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(reloadKey) {
+        error = null
         try {
             data = viewModel.api.myScheduleWindow(start.toString(), end.toString())
         } catch (e: Exception) {
@@ -41,7 +43,9 @@ fun MyScheduleScreen(viewModel: AppViewModel, nav: NavController) {
     Column {
         MirrorHeader("My Schedule", MirrorCopy.subtitle("myschedule"))
         when {
-            error != null -> ErrorBox(error!!) { }
+            // AUDIT-171 B-01: the retry lambda was empty — a failed
+            // load stranded the STAFF user on a dead button.
+            error != null -> ErrorBox(error!!) { reloadKey++ }
             data == null -> SkeletonList()
             else -> {
                 val resp = data!!

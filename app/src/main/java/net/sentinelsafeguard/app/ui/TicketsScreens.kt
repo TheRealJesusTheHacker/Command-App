@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -42,6 +43,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import net.sentinelsafeguard.app.data.OfflineLogic
+import net.sentinelsafeguard.app.data.OfflineQueue
 import net.sentinelsafeguard.app.data.api.CaseItem
 import net.sentinelsafeguard.app.data.api.Client
 import net.sentinelsafeguard.app.data.api.PortalMessagesResponse
@@ -86,6 +89,14 @@ private fun dueLabel(ticket: Ticket, today: String): String? {
 @Composable
 fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    // AUDIT-171 B-08: writes queued offline are real, durable
+    // state — the list says so instead of letting a queued
+    // ticket look lost.
+    var queuedCount by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        queuedCount = OfflineQueue(context).pending().size
+    }
     var all by remember { mutableStateOf<List<Ticket>?>(null) }
     var total by remember { mutableStateOf(0) }
     var roster by remember { mutableStateOf<List<User>>(emptyList()) }
@@ -154,6 +165,15 @@ fun TicketsScreen(viewModel: AppViewModel, nav: NavController) {
             "The internal work queue — board, directory, and full ticket files.",
         ) {
             Button(onClick = { nav.navigate("ticketNew") }) { Text("+ New ticket") }
+        }
+        if (queuedCount > 0) {
+            Text(
+                "$queuedCount ticket change(s) saved on this phone — " +
+                    "they send themselves when the connection returns.",
+                color = SentinelAmber,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
         }
         // Lane B / scope generalization (1.4.0): the queue's
         // distinct tools as a deck - Board and Directory are
@@ -1012,6 +1032,7 @@ fun TicketProfileScreen(viewModel: AppViewModel, nav: NavController, ticketId: I
 @Composable
 fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var clients by remember { mutableStateOf<List<Client>>(emptyList()) }
     var roster by remember { mutableStateOf<List<User>>(emptyList()) }
     var cases by remember { mutableStateOf<List<CaseItem>>(emptyList()) }
@@ -1031,6 +1052,14 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
     var titleError by remember { mutableStateOf<String?>(null) }
     var dueError by remember { mutableStateOf<String?>(null) }
     var saveError by remember { mutableStateOf<String?>(null) }
+    // AUDIT-171 B-04: set when a create succeeded but the follow-up
+    // ad-material patch failed — Save then retries only the patch.
+    var createdTicketId by remember { mutableStateOf<Int?>(null) }
+    // AUDIT-171 B-08: the loaded ticket's updatedAt (edit mode) and
+    // a created ticket's updatedAt — the offline queue's conflict
+    // base when a save has to be queued instead of sent.
+    var loadedUpdatedAt by remember { mutableStateOf<Long?>(null) }
+    var createdTicketUpdatedAt by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(ticketId) {
         try {
@@ -1043,6 +1072,7 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
             if (ticketId != null) {
                 val d = viewModel.api.ticketDetail(ticketId)
                 val t = d.ticket
+                loadedUpdatedAt = t.updatedAt
                 clientId = t.clientId
                 title = t.title
                 status = t.status
@@ -1091,7 +1121,7 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
             !loaded -> SkeletonList(4)
             else -> Column(Modifier.padding(horizontal = 16.dp)) {
                 val clientOptions = listOf("No client — website submission") +
-                    clients.map { it.legalName }
+                    MirrorVocab.clientOptions(clients)
                 ChoiceMenu(
                     "Client",
                     clientOptions[
@@ -1101,7 +1131,7 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
                     clientOptions,
                 ) { picked ->
                     clientId = if (picked == "No client — website submission") null
-                    else clients.firstOrNull { it.legalName == picked }?.id
+                    else MirrorVocab.clientIdAt(clients, clientOptions, picked, sentinelCount = 1)
                 }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
@@ -1120,7 +1150,17 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
                     ChoiceMenu("Priority", priority, MirrorVocab.PRIORITIES) { priority = it }
                 }
                 Spacer(Modifier.height(12.dp))
-                val assigneeOptions = listOf("Unassigned") + roster.map { it.displayName }
+                // AUDIT-171 B-07: name-keyed pickers silently chose
+                // the FIRST namesake. Options are made unique (a
+                // shared display name gets its id appended) and the
+                // pick resolves by position, never by name match.
+                val assigneeOptions = listOf("Unassigned") + roster.map { u ->
+                    if (roster.count { it.displayName == u.displayName } > 1) {
+                        "${u.displayName} (#${u.id})"
+                    } else {
+                        u.displayName
+                    }
+                }
                 ChoiceMenu(
                     "Assigned to",
                     assigneeOptions[
@@ -1129,8 +1169,8 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
                     ],
                     assigneeOptions,
                 ) { picked ->
-                    assignedUserId = if (picked == "Unassigned") null
-                    else roster.firstOrNull { it.displayName == picked }?.id
+                    val idx = assigneeOptions.indexOf(picked)
+                    assignedUserId = if (idx <= 0) null else roster.getOrNull(idx - 1)?.id
                 }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
@@ -1195,7 +1235,25 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
                         } else {
                             try {
                                 if (ticketId == null) {
-                                    val created = viewModel.api.createTicket(
+                                    // AUDIT-171 B-04: create and the
+                                    // ad-material patch are separate
+                                    // steps with separate truths. The
+                                    // old single try reported a patch
+                                    // failure as "not saved" — and a
+                                    // retry then created a DUPLICATE.
+                                    // Now a created id is remembered:
+                                    // a retry re-runs only the patch.
+                                    val created = createdTicketId?.let { existing ->
+                                        // Retry path: the ticket already
+                                        // exists; only the flag is owed.
+                                        viewModel.api.patchTicket(
+                                            existing,
+                                            TicketPatchRequest(adMaterial = true),
+                                        )
+                                        nav.popBackStack()
+                                        nav.navigate("ticket/$existing")
+                                        return@MorphSubmitButton true
+                                    } ?: viewModel.api.createTicket(
                                         TicketCreateRequest(
                                             title = title.trim(),
                                             notes = notes,
@@ -1209,10 +1267,38 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
                                         )
                                     )
                                     if (adMaterial) {
-                                        viewModel.api.patchTicket(
-                                            created.id,
-                                            TicketPatchRequest(adMaterial = true),
-                                        )
+                                        try {
+                                            viewModel.api.patchTicket(
+                                                created.id,
+                                                TicketPatchRequest(adMaterial = true),
+                                            )
+                                        } catch (patchFailure: Exception) {
+                                            // AUDIT-171 B-08: no connection
+                                            // for the flag — queue the
+                                            // patch; the ticket itself is
+                                            // safely created either way.
+                                            if (OfflineLogic.shouldQueue(patchFailure)) {
+                                                OfflineQueue(context).enqueue(
+                                                    key = "ticket-patch-ad-${created.id}",
+                                                    kind = "ticket_patch",
+                                                    payload = buildJsonObject {
+                                                        put("ticketId", created.id)
+                                                        put("adMaterial", true)
+                                                    },
+                                                    baseUpdatedAt = created.updatedAt.toString(),
+                                                )
+                                                nav.popBackStack()
+                                                nav.navigate("ticket/${created.id}")
+                                                return@MorphSubmitButton true
+                                            }
+                                            createdTicketId = created.id
+                                            createdTicketUpdatedAt = created.updatedAt
+                                            saveError = "The ticket WAS saved " +
+                                                "(#${created.id}) — only marking it " +
+                                                "as ad material failed. Save again to " +
+                                                "retry just that, or Cancel to leave it."
+                                            return@MorphSubmitButton false
+                                        }
                                     }
                                     nav.popBackStack()
                                     nav.navigate("ticket/${created.id}")
@@ -1236,6 +1322,82 @@ fun TicketFormScreen(viewModel: AppViewModel, nav: NavController, ticketId: Int?
                                 }
                                 true
                             } catch (e: Exception) {
+                                // AUDIT-171 B-08: the server never
+                                // answered — the write belongs in
+                                // the offline queue, not in an
+                                // error the user has to retype from.
+                                // A server REFUSAL (ApiException)
+                                // still lands as an error below.
+                                if (OfflineLogic.shouldQueue(e)) {
+                                    val queue = OfflineQueue(context)
+                                    when {
+                                        ticketId != null -> {
+                                            val edit = TicketFullEdit(
+                                                title = title.trim(),
+                                                status = status,
+                                                priority = priority,
+                                                assignedUserId = assignedUserId,
+                                                category = category,
+                                                dueDate = dueDate.ifBlank { null },
+                                                clientId = clientId,
+                                                caseId = caseId,
+                                                adMaterial = adMaterial,
+                                                notes = notes,
+                                            )
+                                            queue.enqueue(
+                                                // Stable key per ticket:
+                                                // re-saving the same edit
+                                                // offline replaces, never
+                                                // duplicates.
+                                                key = "ticket-patch-$ticketId",
+                                                kind = "ticket_patch",
+                                                payload = buildJsonObject {
+                                                    put("ticketId", ticketId)
+                                                    viewModel.api.ticketFullBody(edit).forEach { (k, v) -> put(k, v) }
+                                                },
+                                                baseUpdatedAt = loadedUpdatedAt?.toString(),
+                                            )
+                                            nav.popBackStack()
+                                            return@MorphSubmitButton true
+                                        }
+                                        createdTicketId != null -> {
+                                            queue.enqueue(
+                                                key = "ticket-patch-ad-$createdTicketId",
+                                                kind = "ticket_patch",
+                                                payload = buildJsonObject {
+                                                    put("ticketId", createdTicketId!!)
+                                                    put("adMaterial", true)
+                                                },
+                                                baseUpdatedAt = createdTicketUpdatedAt?.toString(),
+                                            )
+                                            nav.popBackStack()
+                                            nav.navigate("ticket/$createdTicketId")
+                                            return@MorphSubmitButton true
+                                        }
+                                        else -> {
+                                            queue.enqueue(
+                                                key = "ticket-create-" +
+                                                    java.util.UUID.randomUUID().toString(),
+                                                kind = "ticket_create",
+                                                payload = viewModel.api.ticketCreateBody(
+                                                    TicketCreateRequest(
+                                                        title = title.trim(),
+                                                        notes = notes,
+                                                        priority = priority,
+                                                        clientId = clientId,
+                                                        caseId = caseId,
+                                                        assignedUserId = assignedUserId,
+                                                        category = category,
+                                                        status = status,
+                                                        dueDate = dueDate.ifBlank { null },
+                                                    )
+                                                ),
+                                            )
+                                            nav.popBackStack()
+                                            return@MorphSubmitButton true
+                                        }
+                                    }
+                                }
                                 saveError = plainError(e, "The ticket could not be saved. Try again.")
                                 false
                             }

@@ -11,12 +11,47 @@ import org.junit.Test
 
 class PushLogicTest {
 
+    // AUDIT-171 B-14: this test previously asserted critical_alert
+    // → SIGN_IN_ALERT — the defect itself (it left the Settings
+    // "Critical alerts" toggle governing nothing). NotifyRouting is
+    // the single kind → category truth and maps critical alerts to
+    // their own CRITICAL category, which the notifyCritical toggle
+    // and the quiet-hours exemption both key off.
     @Test
-    fun criticalAlertUsesSignInAlertCategory() {
+    fun criticalAlertUsesCriticalCategory() {
         assertEquals(
-            NotifyCategory.SIGN_IN_ALERT,
+            NotifyCategory.CRITICAL,
             PushLogic.categoryFor("critical_alert"),
         )
+    }
+
+    // AUDIT-171 B-13: redelivered events must not re-alert.
+    @Test
+    fun unseenEventsFiltersAlreadySeenIds() {
+        val events = listOf(
+            net.sentinelsafeguard.app.notify.PushEvent("1", "ticket_assigned", "t", "b"),
+            net.sentinelsafeguard.app.notify.PushEvent("2", "ticket_replied", "t", "b"),
+            net.sentinelsafeguard.app.notify.PushEvent("3", "critical_alert", "t", "b"),
+        )
+        val unseen = PushLogic.unseenEvents(events, setOf("1", "3"))
+        assertEquals(listOf("2"), unseen.map { it.id })
+    }
+
+    @Test
+    fun seenAfterMergesInArrivalOrderAndCaps() {
+        val events = (1..5).map {
+            net.sentinelsafeguard.app.notify.PushEvent("$it", "ticket_assigned", "t", "b")
+        }
+        val merged = PushLogic.seenAfter(listOf("0"), events, cap = 3)
+        assertEquals(listOf("3", "4", "5"), merged)
+    }
+
+    @Test
+    fun seenAfterDeduplicatesRedeliveredIds() {
+        val events = listOf(
+            net.sentinelsafeguard.app.notify.PushEvent("7", "ticket_assigned", "t", "b"),
+        )
+        assertEquals(listOf("7"), PushLogic.seenAfter(listOf("7"), events))
     }
 
     @Test

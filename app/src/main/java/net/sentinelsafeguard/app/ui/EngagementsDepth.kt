@@ -95,8 +95,9 @@ fun ContractsCard(viewModel: AppViewModel, nav: NavController) {
             Text("Loading clients…", color = SentinelMuted)
         } else {
             val selected = clients.firstOrNull { it.id == clientId } ?: clients.first()
-            ChoiceMenu("Client", selected.legalName, clients.map { it.legalName }) { picked ->
-                clientId = clients.firstOrNull { it.legalName == picked }?.id
+            val clientOpts = MirrorVocab.clientOptions(clients)
+            ChoiceMenu("Client", MirrorVocab.clientOptionLabel(clients, selected), clientOpts) { picked ->
+                clientId = MirrorVocab.clientIdAt(clients, clientOpts, picked)
             }
         }
         var templateType by remember { mutableStateOf(types.firstOrNull() ?: "authorization") }
@@ -426,7 +427,7 @@ fun FindingsDepth(
                         }
                     }
                 }
-            }) { Text("Download report") }
+            }) { Text("Share report") }
         }
         if (notice != null) Text(notice!!, color = SentinelMuted)
         ActionErrorText(error)
