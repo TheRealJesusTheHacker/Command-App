@@ -264,7 +264,8 @@ class CtosLogicTest {
 
     @Test
     fun prettyKeyHumanizesServerKeys() {
-        assertEquals("Spf record", CtosLogic.prettyKey("spfRecord"))
+        // "spf" is a known acronym: it stays upper-case.
+        assertEquals("SPF record", CtosLogic.prettyKey("spfRecord"))
         assertEquals("Detected type", CtosLogic.prettyKey("detected_type"))
         assertEquals("Sha256", CtosLogic.prettyKey("sha256"))
         assertEquals("Size bytes", CtosLogic.prettyKey("sizeBytes"))
