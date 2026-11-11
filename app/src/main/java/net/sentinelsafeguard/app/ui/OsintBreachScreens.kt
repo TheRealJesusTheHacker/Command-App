@@ -491,6 +491,7 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
             "tail" -> TailToolScreen(viewModel, workspace, prefill, back, openReport)
             "callsign" -> CallsignToolScreen(viewModel, workspace, prefill, back, openReport)
             "criminal" -> CriminalToolScreen(viewModel, workspace, back, openReport)
+            "ctos" -> CtosScreen(viewModel, back)
             "exif" -> ExifToolScreen(back)
             else -> back()
         }
@@ -518,6 +519,25 @@ fun OsintScreen(viewModel: AppViewModel, nav: NavController) {
                             )
                             ActionErrorText(error)
                             if (notice != null) Text(notice!!)
+                        }
+                    }
+                    item {
+                        MirrorCard("CToS — OSINT tools", topTier = true) {
+                            Text(
+                                "The working deck: open a case on a target, then run " +
+                                    "the Wave 1 tools against it — Username Profiler " +
+                                    "across the full platform catalog, DNS with its " +
+                                    "spoofability verdict, IP intelligence, WHOIS, " +
+                                    "fingerprinting, metadata, and the local-compute " +
+                                    "toolbox. Findings collect in the case and export " +
+                                    "as one document.",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            GradientPrimaryButton(
+                                text = "Open OSINT tools",
+                                onClick = { route = "ctos" },
+                            )
                         }
                     }
                     item {

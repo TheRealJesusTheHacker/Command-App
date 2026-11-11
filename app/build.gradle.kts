@@ -236,8 +236,23 @@ android {
         // no features, no other vocabulary, no mail (the
         // separation stands), no auth changes. versionCode
         // 117 steps over 116 so it upgrades in place.
-        versionCode = 117
-        versionName = "1.6.5"
+        // 1.7.0 (2026-11-11, CTOS-APP): the native "OSINT
+        // tools" section — CToS Wave 1 in the OSINT view, on
+        // the /api/app/osint/ctos/* twins of the web ctos*
+        // actions (same handler cores, same osint gate): the
+        // case bar (create / open / export / clear / delete),
+        // case files with type-filtered findings and manual
+        // records, the full Wave 1 tool deck with native
+        // forms and structured results (profiler statuses stay
+        // honest — unknown is never a negative), the File Hash
+        // Generator computed on-device exactly as web computes
+        // it in the browser, and a premium-sources card showing
+        // configured state only (keys are entered in web
+        // Command settings; the app never accepts one).
+        // versionCode 118 steps over 117 so it upgrades in
+        // place over 1.6.5.
+        versionCode = 118
+        versionName = "1.7.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         // The CF Access values are deliberately NOT build config
