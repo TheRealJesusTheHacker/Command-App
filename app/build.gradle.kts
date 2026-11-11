@@ -225,8 +225,19 @@ android {
         // decision. Full detail in the PROGRAM-RECORD 1.6.4
         // addendum. versionCode 116 steps over 115 so it
         // upgrades in place.
-        versionCode = 116
-        versionName = "1.6.4"
+        // 1.6.5 (2026-11-11, owner ruling): ONE vocabulary
+        // change — "Active Partner" joins MirrorVocab's
+        // CLIENT_STAGES immediately after "Active Client".
+        // A partner is not a client: clients receive services
+        // from Sentinel; partners trade services mutually.
+        // The app learns the stage FIRST (owner's sequencing)
+        // so the server-side stage, when it lands, renders on
+        // the pipeline board with no gap. Nothing else moves:
+        // no features, no other vocabulary, no mail (the
+        // separation stands), no auth changes. versionCode
+        // 117 steps over 116 so it upgrades in place.
+        versionCode = 117
+        versionName = "1.6.5"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         // The CF Access values are deliberately NOT build config

@@ -19,7 +19,7 @@ object MirrorVocab {
     val CATEGORIES = listOf("Assessment", "Incident Response", "Install", "Support", "Audit", "Other")
     val CLIENT_STAGES = listOf(
         "Lead", "Contacted", "Qualified", "Proposal", "Negotiation",
-        "Active Client", "Past Client", "Lost",
+        "Active Client", "Active Partner", "Past Client", "Lost",
     )
     val CLIENT_STATUSES = listOf("Prospect", "Active", "Inactive", "Former")
     val CLIENT_TYPES = listOf("Corporate", "Individual")
