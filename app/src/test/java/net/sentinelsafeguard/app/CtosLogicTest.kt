@@ -254,7 +254,7 @@ class CtosLogicTest {
         assertFalse(lines.any { it.label == "Blank" || it.label == "Nothing" })
         val posture = sections.first { it.title == "Posture" }
         assertTrue(posture.children.any {
-            it is CtosLogic.DataNode.Line && it.label == "Spf" && it.value == "Yes"
+            it is CtosLogic.DataNode.Line && it.label == "SPF" && it.value == "Yes"
         })
         val ports = sections.first { it.title == "Ports" }
         assertEquals(2, ports.children.size)
