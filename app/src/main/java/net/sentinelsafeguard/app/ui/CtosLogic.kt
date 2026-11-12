@@ -4,6 +4,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.security.MessageDigest
@@ -278,8 +279,25 @@ object CtosLogic {
             .filter { it.isNotBlank() }
 
     // ---- Source keys (configured state ONLY) -------------------------
+    //
+    // W-5 (1.7.3): the key-status model. The workspace payload's
+    // keySources map carries one strict JSON boolean per wired
+    // source (the server computes {s: bool(_ctos_key(c, s))} in
+    // a_ctosget) — true means a key is stored server-side, false
+    // means none is. That boolean is ALL the app ever sees: key
+    // values are write-only through the web ctossetkey flow and
+    // never ride this payload. A value that is not a strict
+    // boolean (a string, a number, null) is not a state the
+    // server reported — it renders "Status unavailable", never
+    // a guessed configured / not-configured.
 
-    data class KeySource(val source: String, val label: String, val configured: Boolean)
+    enum class KeyStatus { CONFIGURED, NOT_CONFIGURED, UNAVAILABLE }
+
+    data class KeySource(
+        val source: String,
+        val label: String,
+        val status: KeyStatus,
+    )
 
     /** Friendly names for the server's wired key sources
      *  (CTOS_KEY_SOURCES). An unlisted source still renders —
@@ -294,15 +312,71 @@ object CtosLogic {
         "securitytrails" to "SecurityTrails",
     )
 
+    /** What a stored key deepens, per source — the honest
+     *  one-line answer to "why set it", shown only while the
+     *  source is NOT_CONFIGURED. An unlisted source gets no
+     *  invented claim, just where keys are set. */
+    val KEY_UNLOCKS: Map<String, String> = mapOf(
+        "hibp" to "breach exposure lookups",
+        "greynoise" to "internet-noise context for IP addresses",
+        "virustotal" to "file and URL verdicts",
+        "abuseipdb" to "IP abuse reports",
+        "shodan" to "host intelligence",
+        "securitytrails" to "DNS and domain history",
+    )
+
+    /** Strict-boolean read: only a JSON true / false literal
+     *  is a reported state; anything else is UNAVAILABLE. (A
+     *  string primitive is rejected first — booleanOrNull
+     *  alone would parse the string "true" as a state, which
+     *  is exactly the guess this surface must never make.) */
+    fun keyStatusOf(v: JsonElement?): KeyStatus {
+        val p = v as? JsonPrimitive ?: return KeyStatus.UNAVAILABLE
+        if (p.isString) return KeyStatus.UNAVAILABLE
+        return when (p.booleanOrNull) {
+            true -> KeyStatus.CONFIGURED
+            false -> KeyStatus.NOT_CONFIGURED
+            null -> KeyStatus.UNAVAILABLE
+        }
+    }
+
+    /** Whether the payload reported keySources at all. Absent
+     *  means key status is unavailable as a whole — the surface
+     *  says so instead of rendering a settled-looking card. */
+    fun keySourcesReported(workspace: JsonObject?): Boolean =
+        Phase3Logic.obj(workspace, "keySources") != null
+
     fun parseKeySources(workspace: JsonObject?): List<KeySource> {
         val obj = Phase3Logic.obj(workspace, "keySources") ?: return emptyList()
         return obj.entries.map { (k, v) ->
             KeySource(
                 source = k,
                 label = KEY_LABELS[k] ?: k,
-                configured = (v as? JsonPrimitive)?.content == "true",
+                status = keyStatusOf(v),
             )
         }.sortedBy { it.label.lowercase() }
+    }
+
+    /** The status word the surface shows for a source — the
+     *  whole vocabulary: configured, not configured, or an
+     *  honest unavailable. Nothing else is ever rendered. */
+    fun keyStatusWord(status: KeyStatus): String = when (status) {
+        KeyStatus.CONFIGURED -> "Configured"
+        KeyStatus.NOT_CONFIGURED -> "Not configured"
+        KeyStatus.UNAVAILABLE -> "Status unavailable"
+    }
+
+    /** The one-line guidance under a source row, or null when
+     *  the row needs none (a configured source). Keys are set
+     *  in web Command settings — the app deliberately has no
+     *  key entry field (the custody rule: values are web-only). */
+    fun keyGuidance(ks: KeySource): String? = when (ks.status) {
+        KeyStatus.CONFIGURED -> null
+        KeyStatus.NOT_CONFIGURED -> KEY_UNLOCKS[ks.source]
+            ?.let { "Unlocks $it. Set in web Command settings." }
+            ?: "Set in web Command settings."
+        KeyStatus.UNAVAILABLE ->
+            "The server did not report a state for this source."
     }
 
     // ---- OPSEC profile + authorization gate (AUDIT-171 B-17) ------

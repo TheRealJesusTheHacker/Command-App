@@ -287,8 +287,22 @@ android {
         // profile, sending only changed fields (absent =
         // preserve). versionCode 120 steps over 119 so it
         // upgrades in place over 1.7.1.
-        versionCode = 120
-        versionName = "1.7.2"
+        //
+        // 1.7.3 (W-5 key-status): the OSINT deck's "Source API
+        // keys" card becomes the full key-status surface. Key
+        // state is a tri-state (Configured / Not configured /
+        // Status unavailable) read from the workspace payload's
+        // keySources strict booleans — a value that is not a
+        // strict boolean, and a payload with no keySources at
+        // all, render "Status unavailable", never a guessed
+        // state. Not-configured sources carry one honest line
+        // on what a key unlocks and that keys are set in web
+        // Command settings; the app still never asks for,
+        // accepts, or stores a key (values are web-only by
+        // design). versionCode 121 steps over 120 so it
+        // upgrades in place over 1.7.2.
+        versionCode = 121
+        versionName = "1.7.3"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         // The CF Access values are deliberately NOT build config

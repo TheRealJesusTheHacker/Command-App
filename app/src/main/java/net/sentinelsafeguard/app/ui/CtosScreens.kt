@@ -43,6 +43,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -370,30 +371,57 @@ fun CtosScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                             )
                         }
                     }
+                    // W-5 (1.7.3): the key-status surface — status
+                    // words only. The payload carries booleans,
+                    // never values; a state the server did not
+                    // report renders "Status unavailable", never a
+                    // guessed configured / not-configured.
                     item { SectionHeader("Premium sources") }
                     item {
                         MirrorCard("Source API keys") {
                             Text(
                                 "Keys deepen tools that already work on free sources. " +
-                                    "They are entered in web Command settings by the " +
+                                    "They are set in web Command settings by the " +
                                     "Owner — the app never asks for, accepts, or " +
                                     "stores a key.",
                                 color = SentinelMuted,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                             Spacer(Modifier.height(6.dp))
-                            CtosLogic.parseKeySources(data).forEach { ks ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 3.dp),
-                                ) {
-                                    Text(ks.label, modifier = Modifier.weight(1f))
-                                    StatusPill(
-                                        if (ks.configured) "CONFIGURED" else "NOT CONFIGURED",
-                                        if (ks.configured) "paid" else "muted",
-                                    )
+                            if (!CtosLogic.keySourcesReported(data)) {
+                                Text(
+                                    "Key status is unavailable — the server did " +
+                                        "not report it in this workspace, and " +
+                                        "nothing is guessed here.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            } else {
+                                CtosLogic.parseKeySources(data).forEach { ks ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 3.dp),
+                                    ) {
+                                        Text(ks.label, modifier = Modifier.weight(1f))
+                                        StatusPill(
+                                            CtosLogic.keyStatusWord(ks.status)
+                                                .uppercase(Locale.US),
+                                            when (ks.status) {
+                                                CtosLogic.KeyStatus.CONFIGURED -> "paid"
+                                                CtosLogic.KeyStatus.NOT_CONFIGURED -> "muted"
+                                                CtosLogic.KeyStatus.UNAVAILABLE -> "amber"
+                                            },
+                                        )
+                                    }
+                                    CtosLogic.keyGuidance(ks)?.let { line ->
+                                        Text(
+                                            line,
+                                            color = SentinelMuted,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier.padding(bottom = 3.dp),
+                                        )
+                                    }
                                 }
                             }
                             CtosLogic.catalogLine(data)?.let { line ->

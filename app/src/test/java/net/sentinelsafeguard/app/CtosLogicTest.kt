@@ -146,14 +146,85 @@ class CtosLogicTest {
         val hibp = keys.first { it.source == "hibp" }
         val shodan = keys.first { it.source == "shodan" }
         assertEquals("Have I Been Pwned", hibp.label)
-        assertFalse(hibp.configured)
-        assertTrue(shodan.configured)
+        assertEquals(CtosLogic.KeyStatus.NOT_CONFIGURED, hibp.status)
+        assertEquals(CtosLogic.KeyStatus.CONFIGURED, shodan.status)
         // A source the app has no friendly name for still renders.
         val extra = CtosLogic.parseKeySources(
             obj("""{"keySources": {"newsource": true}}"""),
         )
         assertEquals("newsource", extra[0].label)
-        assertTrue(extra[0].configured)
+        assertEquals(CtosLogic.KeyStatus.CONFIGURED, extra[0].status)
+    }
+
+    @Test
+    fun keyStatusNonBooleanIsUnavailableNeverGuessed() {
+        // W-5 (1.7.3): only a strict JSON boolean is a reported
+        // state. A string "true", a number, or null must NOT
+        // collapse into configured / not-configured.
+        val keys = CtosLogic.parseKeySources(
+            obj(
+                """{"keySources": {"hibp": "true", "shodan": 1,
+                    "virustotal": null, "greynoise": false}}""",
+            ),
+        )
+        val bySource = keys.associate { it.source to it.status }
+        assertEquals(CtosLogic.KeyStatus.UNAVAILABLE, bySource["hibp"])
+        assertEquals(CtosLogic.KeyStatus.UNAVAILABLE, bySource["shodan"])
+        assertEquals(CtosLogic.KeyStatus.UNAVAILABLE, bySource["virustotal"])
+        assertEquals(CtosLogic.KeyStatus.NOT_CONFIGURED, bySource["greynoise"])
+    }
+
+    @Test
+    fun keySourcesAbsentMeansStatusUnavailable() {
+        // W-5: no keySources object at all -> the surface says
+        // status is unavailable; it never renders a settled,
+        // empty card as if that were an answer.
+        assertFalse(CtosLogic.keySourcesReported(obj("""{"ok": true}""")))
+        assertTrue(CtosLogic.parseKeySources(obj("""{"ok": true}""")).isEmpty())
+        assertTrue(CtosLogic.keySourcesReported(obj("""{"keySources": {}}""")))
+        assertTrue(CtosLogic.keySourcesReported(obj(workspace)))
+    }
+
+    @Test
+    fun keyStatusWordsAndGuidance() {
+        // W-5: the whole rendered vocabulary is three states.
+        assertEquals(
+            "Configured",
+            CtosLogic.keyStatusWord(CtosLogic.KeyStatus.CONFIGURED),
+        )
+        assertEquals(
+            "Not configured",
+            CtosLogic.keyStatusWord(CtosLogic.KeyStatus.NOT_CONFIGURED),
+        )
+        assertEquals(
+            "Status unavailable",
+            CtosLogic.keyStatusWord(CtosLogic.KeyStatus.UNAVAILABLE),
+        )
+        val hibpOff = CtosLogic.KeySource(
+            "hibp", "Have I Been Pwned", CtosLogic.KeyStatus.NOT_CONFIGURED,
+        )
+        assertEquals(
+            "Unlocks breach exposure lookups. Set in web Command settings.",
+            CtosLogic.keyGuidance(hibpOff),
+        )
+        // A configured source needs no guidance line.
+        assertNull(
+            CtosLogic.keyGuidance(
+                hibpOff.copy(status = CtosLogic.KeyStatus.CONFIGURED),
+            ),
+        )
+        // An unavailable state explains itself, invents nothing.
+        assertEquals(
+            "The server did not report a state for this source.",
+            CtosLogic.keyGuidance(
+                hibpOff.copy(status = CtosLogic.KeyStatus.UNAVAILABLE),
+            ),
+        )
+        // An unlisted source gets no invented unlock claim.
+        val unknownOff = CtosLogic.KeySource(
+            "newsource", "newsource", CtosLogic.KeyStatus.NOT_CONFIGURED,
+        )
+        assertEquals("Set in web Command settings.", CtosLogic.keyGuidance(unknownOff))
     }
 
     // ---- case detail parsing ----------------------------------------------
