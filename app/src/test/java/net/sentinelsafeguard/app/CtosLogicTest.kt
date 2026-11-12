@@ -291,4 +291,60 @@ class CtosLogicTest {
         assertEquals("0 B", CtosLogic.sizeText(0))
         assertEquals("1.5 KB", CtosLogic.sizeText(1536))
     }
+
+    // ---- S-2: the OPSEC save payload omits what did not change --
+
+    private val baseProfile = CtosLogic.OpsecProfile(
+        doh = "google", dohCustom = "", uaRotate = false, jitterMs = 250,
+    )
+
+    @Test
+    fun profileSavePayloadIsEmptyWhenNothingChanged() {
+        val payload = CtosLogic.profileSavePayload(
+            baseProfile, doh = "google", dohCustom = "",
+            uaRotate = false, jitterMs = 250,
+        )
+        assertTrue(payload.isEmpty())
+    }
+
+    @Test
+    fun profileSavePayloadCarriesOnlyTheChangedFields() {
+        val payload = CtosLogic.profileSavePayload(
+            baseProfile, doh = "quad9", dohCustom = "",
+            uaRotate = false, jitterMs = 250,
+        )
+        assertEquals(setOf("doh"), payload.keys)
+        assertEquals("\"quad9\"", payload["doh"].toString())
+
+        val flip = CtosLogic.profileSavePayload(
+            baseProfile, doh = "google", dohCustom = "",
+            uaRotate = true, jitterMs = 0,
+        )
+        assertEquals(setOf("uaRotate", "jitterMs"), flip.keys)
+        assertEquals("true", flip["uaRotate"].toString())
+        assertEquals("0", flip["jitterMs"].toString())
+    }
+
+    @Test
+    fun profileSavePayloadTrimsAndClamps() {
+        val payload = CtosLogic.profileSavePayload(
+            baseProfile, doh = "custom",
+            dohCustom = "  https://dns.example.test/dns-query  ",
+            uaRotate = false, jitterMs = 9999,
+        )
+        assertEquals(
+            "https://dns.example.test/dns-query",
+            (payload["dohCustom"] as kotlinx.serialization.json.JsonPrimitive).content,
+        )
+        // Out-of-range jitter clamps to the handler's own cap.
+        assertEquals("2000", payload["jitterMs"].toString())
+        // A custom endpoint equal after trimming is not a change.
+        val same = CtosLogic.profileSavePayload(
+            baseProfile.copy(dohCustom = "https://dns.example.test/dns-query"),
+            doh = "google",
+            dohCustom = " https://dns.example.test/dns-query ",
+            uaRotate = false, jitterMs = 250,
+        )
+        assertFalse(same.containsKey("dohCustom"))
+    }
 }

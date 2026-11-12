@@ -796,6 +796,10 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
     var error by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
+    // TIER Phase B: the owner grant control's write state.
+    var tierBusy by remember { mutableStateOf(false) }
+    var tierNotice by remember { mutableStateOf<String?>(null) }
+    var tierWriteError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(clientId, reloadKey) {
         error = null
@@ -909,27 +913,72 @@ fun ClientProfileScreen(viewModel: AppViewModel, nav: NavController, clientId: I
                     if (TierLogic.isOwner(viewModel.me?.user?.role)) {
                         Spacer(Modifier.height(8.dp))
                         // OWNER grant control — render gate proven by
-                        // TierLogic.isOwner (server payload role).
-                        // WRITE PATH: PENDING Main's owner-only tier
-                        // endpoint contract (app twin), being built
-                        // by the server tier crew 2026-11-11. Until
-                        // that contract lands there is deliberately
-                        // NO button here: a control that cannot write
-                        // would be a dead control. When the contract
-                        // arrives, the three-way grant (Standard /
-                        // Friends / Family) wires to
-                        // SentinelApi.setClientTier at this seam and
-                        // this note is replaced by the control.
+                        // TierLogic.isOwner (server payload role); it
+                        // renders ONLY for the owner account and never
+                        // for any other session. The write rides
+                        // SentinelApi.setClientTier (TIER Phase B app
+                        // twin of setclienttier — the server locks the
+                        // write to the owner in-handler too, so this
+                        // gate is presentation, not the enforcement).
+                        // On success the server's fresh client record
+                        // replaces the one on screen; on refusal the
+                        // server's own message shows verbatim.
                         Text(
-                            "You are the owner. Granting or changing tier " +
-                                "status from the app activates with the " +
-                                "server's owner-only tier update — until " +
-                                "then this page shows the current status, " +
-                                "and any change made in Command appears " +
-                                "here on refresh.",
+                            "Owner — grant or change this record's tier:",
                             style = MaterialTheme.typography.bodySmall,
                             color = SentinelMuted,
                         )
+                        ChoiceMenu(
+                            "Set tier",
+                            TierLogic.label(tier),
+                            listOf(
+                                TierLogic.label(TierLogic.Tier.FAMILY),
+                                TierLogic.label(TierLogic.Tier.FRIENDS),
+                                TierLogic.label(TierLogic.Tier.STANDARD),
+                            ),
+                        ) { pickedLabel ->
+                            val target = TierLogic.Tier.values()
+                                .first { TierLogic.label(it) == pickedLabel }
+                            if (target != tier && !tierBusy) {
+                                tierBusy = true
+                                tierNotice = null
+                                tierWriteError = null
+                                scope.launch {
+                                    try {
+                                        val fresh = viewModel.api.setClientTier(
+                                            c.id, TierLogic.wireToken(target),
+                                        )
+                                        detail = d.copy(client = fresh)
+                                        tierNotice = "Tier updated — now " +
+                                            TierLogic.label(TierLogic.tierOf(fresh)) + "."
+                                    } catch (e: Exception) {
+                                        tierWriteError = plainError(
+                                            e,
+                                            "That tier change could not be saved. Try again.",
+                                        )
+                                    } finally {
+                                        tierBusy = false
+                                    }
+                                }
+                            }
+                        }
+                        if (tierBusy) {
+                            Text(
+                                "Saving…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SentinelMuted,
+                            )
+                        }
+                        tierNotice?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SentinelMuted,
+                            )
+                        }
+                        tierWriteError?.let {
+                            Text(it, color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
 

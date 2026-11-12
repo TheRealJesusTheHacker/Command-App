@@ -1,6 +1,8 @@
 package net.sentinelsafeguard.app.data.api
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * CToS twins (CTOS-APP-2026-11-11; BUILD-PLAN section 6) — the
@@ -52,6 +54,21 @@ suspend fun SentinelApi.ctosCaseReport(caseId: Int): JsonObject =
 
 suspend fun SentinelApi.ctosRecord(caseId: Int, body: JsonObject): JsonObject =
     callJson("POST", "/api/app/osint/ctos/cases/$caseId/record", body.toBodyC())
+
+/**
+ * TIER-PHASE-B S-2: the OPSEC profile save twin (the web
+ * ctossetprofile handler verbatim behind the route). [profile]
+ * carries ONLY the fields being changed — the handler treats an
+ * absent field as "preserve the current value", so callers build
+ * it with CtosLogic.profileSavePayload, never a full snapshot.
+ * Success answers {ok, profile, profileOptions}; refusals are
+ * the handler's own 403 messages and ride callJson verbatim.
+ */
+suspend fun SentinelApi.ctosSaveProfile(profile: JsonObject): JsonObject =
+    callJson(
+        "POST", "/api/app/osint/ctos/profile",
+        buildJsonObject { put("profile", profile) }.toString(),
+    )
 
 suspend fun SentinelApi.ctosRunTool(tool: String, body: JsonObject): JsonObject =
     callJson("POST", "/api/app/osint/ctos/tools/$tool", body.toBodyC())

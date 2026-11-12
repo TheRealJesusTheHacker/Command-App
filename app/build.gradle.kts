@@ -272,8 +272,23 @@ android {
         // Suites 554 → 593 green; staging rehearsal 18/18.
         // versionCode 119 steps over 118 so it upgrades in
         // place over 1.7.0.
-        versionCode = 119
-        versionName = "1.7.1"
+        //
+        // 1.7.2 (TIER Phase B wiring): the client record's
+        // server-computed tierState is parsed everywhere and is
+        // the source of truth for tier display + charge gating
+        // (the record's `tier` key stays the triage tag, never
+        // billing). The profile Tier card gains the owner-only
+        // grant control at the AUDIT-171 seam: three-state
+        // Family / Friends / Standard, rendered only for the
+        // OWNER role, writing via POST /api/app/clients/{id}/tier
+        // with the server's refusal messages verbatim and the
+        // fresh record applied on success. S-2: the OPSEC
+        // profile panel saves via POST /api/app/osint/ctos/
+        // profile, sending only changed fields (absent =
+        // preserve). versionCode 120 steps over 119 so it
+        // upgrades in place over 1.7.1.
+        versionCode = 120
+        versionName = "1.7.2"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         // The CF Access values are deliberately NOT build config

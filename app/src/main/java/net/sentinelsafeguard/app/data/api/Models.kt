@@ -164,11 +164,22 @@ data class Client(
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
     // Added by the app-surface builders (list / detail / Today).
+    // ⚠️ [tier] is the TRIAGE tag token ("tier-a"…"tier-d" or "")
+    // — never read it for billing. The billing tier is [tierState].
     val tier: String = "",
     val familyLinked: Boolean = false,
     /** Friends tier (migration 0143, live in production): 20% off;
      *  Family-linked records are never charged and take precedence. */
     val friends: Boolean = false,
+    /** The record's Family flag (TIER Phase B): the stored tier
+     *  fact [familyLinked] mirrors on the staff surface. */
+    val family: Boolean = false,
+    /** The server's three-state billing tier ("family" |
+     *  "friends" | "standard", Family precedence — TIER Phase B).
+     *  The source of truth for tier display and charge gating
+     *  (see TierLogic). Empty when a payload predates the field;
+     *  TierLogic then derives from the flags, as it always has. */
+    val tierState: String = "",
 )
 
 /** pub_case — also the shape of Today's overdue-case rows. */
@@ -811,6 +822,18 @@ data class ClientWriteResponse(
 data class ClientStageResponse(
     val ok: Boolean = true,
     val stage: String = "",
+    val client: Client,
+)
+
+/** POST /api/app/clients/{id}/tier success envelope (TIER
+ *  Phase B app twin of setclienttier): the fresh three-state
+ *  tier plus the full client record as the server now holds it.
+ *  Refusals ride the shared {ok:false, message} envelope and
+ *  surface through callJson's verbatim message path. */
+@Serializable
+data class ClientTierResponse(
+    val ok: Boolean = true,
+    val tierState: String = "",
     val client: Client,
 )
 

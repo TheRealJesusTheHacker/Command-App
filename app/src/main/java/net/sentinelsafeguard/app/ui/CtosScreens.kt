@@ -59,6 +59,7 @@ import net.sentinelsafeguard.app.data.api.ctosDeleteCase
 import net.sentinelsafeguard.app.data.api.ctosExportCase
 import net.sentinelsafeguard.app.data.api.ctosRecord
 import net.sentinelsafeguard.app.data.api.ctosRunTool
+import net.sentinelsafeguard.app.data.api.ctosSaveProfile
 import net.sentinelsafeguard.app.data.api.ctosWorkspace
 import net.sentinelsafeguard.app.ui.theme.SentinelAmber
 import net.sentinelsafeguard.app.ui.theme.SentinelGreen
@@ -1067,7 +1068,7 @@ private fun CtosToolScreen(
             tool.kind == "browser" -> CtosFileHashPanel()
             CtosBuilders.isBuilder(tool.name) -> CtosBuilderPanel(tool)
             tool.kind == "settings" || tool.name == "encsettings" ->
-                CtosOpsecPanel(workspace)
+                CtosOpsecPanel(viewModel, workspace)
             else -> CtosServerToolPanel(viewModel, tool, cases, initialCaseId)
         }
     }
@@ -1233,14 +1234,36 @@ private fun BuilderCheck(
  * AUDIT-171 B-17 [OSINT]: the OPSEC profile panel (the
  * encsettings tile's real home). Shows the operator's current
  * profile values and the server's own wired/unavailable rows
- * with their reasons. Editing the profile has no app twin on
- * the server today — the panel says where editing lives rather
- * than faking a save (server-side ask, audit record).
+ * with their reasons. Since TIER Phase B (S-2) the profile is
+ * also EDITABLE here: the save rides POST
+ * /api/app/osint/ctos/profile (the web ctossetprofile handler),
+ * sending only the changed fields — the handler preserves the
+ * rest — and its refusals show verbatim. The panel re-reads its
+ * state from the save's own answer ({profile, profileOptions}),
+ * the same shapes the workspace payload carries.
  */
 @Composable
-private fun CtosOpsecPanel(workspace: JsonObject?) {
-    val profile = CtosLogic.parseProfile(workspace)
-    val options = CtosLogic.parseProfileOptions(workspace)
+private fun CtosOpsecPanel(viewModel: AppViewModel, workspace: JsonObject?) {
+    val scope = rememberCoroutineScope()
+    var ws by remember { mutableStateOf(workspace) }
+    val profile = CtosLogic.parseProfile(ws)
+    val options = CtosLogic.parseProfileOptions(ws)
+    // Edit state seeded from the server-confirmed profile; the
+    // remember key reseeds it whenever a save confirms new values.
+    var doh by remember(profile) { mutableStateOf(profile?.doh ?: "google") }
+    var dohCustom by remember(profile) { mutableStateOf(profile?.dohCustom ?: "") }
+    var uaRotate by remember(profile) { mutableStateOf(profile?.uaRotate ?: false) }
+    var jitterText by remember(profile) {
+        mutableStateOf((profile?.jitterMs ?: 0).toString())
+    }
+    var busy by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    var saveError by remember { mutableStateOf<String?>(null) }
+    val payload = profile?.let {
+        CtosLogic.profileSavePayload(
+            it, doh, dohCustom, uaRotate, jitterText.toIntOrNull() ?: it.jitterMs,
+        )
+    }
     LazyColumn {
         item {
             MirrorCard("Encryption Settings — OPSEC profile", topTier = true) {
@@ -1270,14 +1293,72 @@ private fun CtosOpsecPanel(workspace: JsonObject?) {
                     DetailLine("User-Agent rotation", if (profile.uaRotate) "On" else "Off")
                     DetailLine("Request jitter", if (profile.jitterMs > 0) "Up to ${profile.jitterMs} ms" else "Off")
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "To change these, use Encryption Settings in web Command — " +
-                        "the app shows the profile but the server offers no " +
-                        "app-side save for it yet.",
-                    color = SentinelMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                if (profile != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Change the profile",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    ChoiceMenu(
+                        "DNS-over-HTTPS provider",
+                        doh,
+                        options?.providers?.takeIf { it.isNotEmpty() }
+                            ?: listOf("google", "cloudflare", "quad9", "custom"),
+                    ) { doh = it }
+                    if (doh == "custom") {
+                        TextFieldRow(
+                            "Custom DoH endpoint (https://…)",
+                            dohCustom,
+                            onChange = { dohCustom = it },
+                        )
+                    }
+                    SwitchRow("User-Agent rotation", uaRotate) { uaRotate = it }
+                    TextFieldRow(
+                        "Request jitter (ms, 0–2000)",
+                        jitterText,
+                        onChange = { jitterText = it.filter { ch -> ch.isDigit() }.take(4) },
+                        kind = InteractionLogic.FieldKind.NUMBER,
+                    )
+                    Button(
+                        enabled = !busy && payload != null && payload.isNotEmpty(),
+                        onClick = {
+                            val body = payload ?: return@Button
+                            busy = true
+                            notice = null
+                            saveError = null
+                            scope.launch {
+                                try {
+                                    ws = viewModel.api.ctosSaveProfile(body)
+                                    notice = "Profile saved."
+                                } catch (e: Exception) {
+                                    saveError = plainError(
+                                        e,
+                                        "The profile could not be saved. Try again.",
+                                    )
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        },
+                    ) { Text(if (busy) "Saving…" else "Save profile") }
+                    notice?.let {
+                        Text(
+                            it,
+                            color = SentinelMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    saveError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Changes save to your server profile. Only the fields " +
+                            "you change are sent — the rest stay as they are.",
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         }
         if (options != null && options.unavailable.isNotEmpty()) {

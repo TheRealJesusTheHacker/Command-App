@@ -5,6 +5,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
@@ -529,6 +530,25 @@ class SentinelApi(
                 )
             ).body
         ).client
+
+    /**
+     * TIER Phase B: the owner-only three-state tier write — the
+     * app twin of the web's setclienttier. [tier] is the wire
+     * token ("family" | "friends" | "standard"; see
+     * TierLogic.wireToken). The server locks the write to the
+     * OWNER in-handler and answers refusals in its own words
+     * (owner lock, Family precedence, unknown tier) — those ride
+     * callJson so the message reaches the screen verbatim, never
+     * paraphrased. On success the fresh full client record comes
+     * back and the caller applies it as-is.
+     */
+    suspend fun setClientTier(id: Int, tier: String): Client {
+        val out = callJson(
+            "POST", "/api/app/clients/$id/tier",
+            json.encodeToString(TierRequest(tier)),
+        )
+        return json.decodeFromJsonElement<ClientTierResponse>(out).client
+    }
 
     suspend fun archiveClient(id: Int): Client =
         json.decodeFromString<ClientWriteResponse>(
@@ -1068,6 +1088,11 @@ data class TicketFullEdit(
 
 @Serializable
 private data class StageRequest(val stage: String)
+
+/** The tier write body (TIER Phase B): exactly one key — the
+ *  three-state token. Nothing else rides this request. */
+@Serializable
+private data class TierRequest(val tier: String)
 
 /** The full-edit case body (Phase 2) — see [SentinelApi.patchCase]. */
 data class CaseFullEdit(

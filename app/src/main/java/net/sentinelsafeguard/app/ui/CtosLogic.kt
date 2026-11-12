@@ -4,6 +4,8 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.security.MessageDigest
 import java.util.Locale
 
@@ -308,11 +310,11 @@ object CtosLogic {
     // The workspace payload has always carried `profile`,
     // `profileOptions` and `gate` (a_ctosget); the app parsed none
     // of them, so the OPSEC profile was web-only and the gate
-    // invisible in-app. These parses are display-only: profile
-    // EDITING has no app twin on the server (documented as a
-    // server-side ask in the audit record), and gate management is
-    // owner-only on the web — the app shows the registry state,
-    // including the server's own canManage flag, never a write.
+    // invisible in-app. Profile EDITING rode the S-2 twin from
+    // TIER Phase B (POST /api/app/osint/ctos/profile — see
+    // profileSavePayload); gate management stays owner-only on
+    // the web — the app shows the registry state, including the
+    // server's own canManage flag, never a write.
 
     data class OpsecProfile(
         val doh: String,
@@ -361,6 +363,31 @@ object CtosLogic {
                 .mapNotNull { (it as? JsonPrimitive)?.content }
                 .filter { it.isNotBlank() },
         )
+    }
+
+    /**
+     * S-2 save payload (TIER Phase B): the profile twin's rule is
+     * absent = preserve, so the payload carries ONLY the fields
+     * whose edited value differs from the profile the server last
+     * confirmed ([current]). Sending an unchanged field would be
+     * harmless on the server but dishonest about what changed —
+     * and re-sending a stale dohCustom could clobber a newer web
+     * edit. Jitter is clamped to the handler's 0..2000 range.
+     * An empty result means "nothing to save" — the panel keeps
+     * its Save button disabled rather than posting a no-op.
+     */
+    fun profileSavePayload(
+        current: OpsecProfile,
+        doh: String,
+        dohCustom: String,
+        uaRotate: Boolean,
+        jitterMs: Int,
+    ): JsonObject = buildJsonObject {
+        if (doh != current.doh) put("doh", doh)
+        if (dohCustom.trim() != current.dohCustom) put("dohCustom", dohCustom.trim())
+        if (uaRotate != current.uaRotate) put("uaRotate", uaRotate)
+        val jitter = jitterMs.coerceIn(0, 2000)
+        if (jitter != current.jitterMs) put("jitterMs", jitter)
     }
 
     /** Human line for one wired profile setting's current value. */
