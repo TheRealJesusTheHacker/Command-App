@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -203,6 +204,17 @@ fun CtosScreen(viewModel: AppViewModel, onBack: () -> Unit) {
             caseId = cid,
             findingTypes = CtosLogic.findingTypes(state.data),
             onBack = { openCaseId = null; state.reloadKey++ },
+            // PERFECTION MIRROR R-1: the case answered with the
+            // gone refusal — the deck takes over with the
+            // refreshed (scoped) list and the server's sentence
+            // as the notice, the deleted-case end state.
+            onGone = {
+                openCaseId = null
+                selectedCaseId = null
+                notice = CtosLogic.CASE_GONE_MESSAGE
+                error = null
+                state.reloadKey++
+            },
         )
         return
     }
@@ -214,7 +226,20 @@ fun CtosScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                 error = null
                 state.reloadKey++
             } catch (e: Exception) {
-                error = plainError(e, "That could not be done. Try again.")
+                // PERFECTION MIRROR R-1: a case-scoped call that
+                // answers with the gone body (export / clear /
+                // delete of a case that is gone or another
+                // operator's) lands in the same end state as a
+                // deleted case — refreshed list, the server's
+                // sentence as the notice — never an error dump.
+                if (CtosLogic.isCaseGone(e)) {
+                    notice = CtosLogic.CASE_GONE_MESSAGE
+                    error = null
+                    selectedCaseId = null
+                    state.reloadKey++
+                } else {
+                    error = plainError(e, "That could not be done. Try again.")
+                }
             }
         }
     }
@@ -257,6 +282,21 @@ fun CtosScreen(viewModel: AppViewModel, onBack: () -> Unit) {
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                             } else {
+                                // PERFECTION MIRROR R-5: the count
+                                // is the server's total (casesTotal)
+                                // beside the rows it sent. The app
+                                // loads all of them (no paging
+                                // params — the defaults reproduce
+                                // the full scoped list), and the
+                                // line shows both numbers if they
+                                // ever disagree.
+                                Text(
+                                    CtosLogic.caseCountLine(
+                                        CtosLogic.casesTotal(data), cases.size,
+                                    ),
+                                    color = SentinelMuted,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
                                 ChipRow(
                                     // AUDIT-171 B-07: chips carry the
                                     // case id — titles collide by
@@ -590,6 +630,7 @@ private fun CtosCaseScreen(
     caseId: Int,
     findingTypes: List<String>,
     onBack: () -> Unit,
+    onGone: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val ftypeState = remember { mutableStateOf<String?>(null) }
@@ -615,9 +656,26 @@ private fun CtosCaseScreen(
                 error = null
                 state.reloadKey++
             } catch (e: Exception) {
-                error = plainError(e, "That could not be done. Try again.")
+                // PERFECTION MIRROR R-1: export / record calls
+                // that answer with the gone body leave the case
+                // view for the deck's refreshed list + notice —
+                // the deleted-case end state, not an error dump.
+                if (CtosLogic.isCaseGone(e)) {
+                    onGone()
+                } else {
+                    error = plainError(e, "That could not be done. Try again.")
+                }
             }
         }
+    }
+
+    // PERFECTION MIRROR R-1: any LOAD of this case (the open
+    // itself, a filter change) that answers with the gone
+    // refusal leaves the same way — the server deliberately
+    // does not distinguish deleted from another operator's,
+    // and neither does this screen.
+    LaunchedEffect(state.errorCause) {
+        if (CtosLogic.isCaseGone(state.errorCause)) onGone()
     }
 
     if (showReport) {
@@ -625,6 +683,7 @@ private fun CtosCaseScreen(
             viewModel = viewModel,
             caseId = caseId,
             onBack = { showReport = false },
+            onGone = onGone,
         )
         return
     }
@@ -708,7 +767,20 @@ private fun CtosCaseScreen(
                             }
                         }
                     }
-                    item { SectionHeader("Findings", findings.size) }
+                    // PERFECTION MIRROR R-5: section counts are
+                    // the server's totals (findingsTotal follows
+                    // the active type filter, like the list it
+                    // heads; artifactsTotal is the case's whole
+                    // artifact count) — never the capped list's
+                    // own size dressed as the total. Payloads
+                    // predating the fields fall back to the list
+                    // sizes, which the defaults keep complete.
+                    item {
+                        SectionHeader(
+                            "Findings",
+                            CtosLogic.findingsTotal(data) ?: findings.size,
+                        )
+                    }
                     item {
                         ChipRow(
                             options = findingTypes,
@@ -756,7 +828,12 @@ private fun CtosCaseScreen(
                             }
                         }
                     }
-                    item { SectionHeader("Artifacts", artifacts.size) }
+                    item {
+                        SectionHeader(
+                            "Artifacts",
+                            CtosLogic.artifactsTotal(data) ?: artifacts.size,
+                        )
+                    }
                     if (artifacts.isEmpty()) {
                         item {
                             EmptyBox(
@@ -866,9 +943,17 @@ private fun CtosReportScreen(
     viewModel: AppViewModel,
     caseId: Int,
     onBack: () -> Unit,
+    onGone: () -> Unit,
 ) {
     val context = LocalContext.current
     val state = rememberJsonScreen(key = caseId) { viewModel.api.ctosCaseReport(caseId) }
+    // PERFECTION MIRROR R-1: a report load that answers with
+    // the gone refusal leaves for the deck's refreshed list +
+    // notice, like every other case surface — going "back" to
+    // the case view would only meet the same refusal there.
+    LaunchedEffect(state.errorCause) {
+        if (CtosLogic.isCaseGone(state.errorCause)) onGone()
+    }
     Column {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1424,6 +1509,13 @@ private fun CtosServerToolPanel(
     var mode by remember { mutableStateOf(CtosLogic.MODE_TOOLS[tool.name]?.second?.first()?.first ?: "") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    // PERFECTION MIRROR R-1: a case this panel aimed a run at
+    // that answers with the gone refusal leaves the picker for
+    // the rest of the panel's life (the deck's list refreshes
+    // from the server when the operator goes back).
+    var goneCaseIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    val panelCases = cases.filter { it.id !in goneCaseIds }
     var result by remember { mutableStateOf<JsonObject?>(null) }
     // Metadata extractor: the picked file's bytes ride as base64
     // in options (the server's own contract); parsed in memory
@@ -1481,6 +1573,7 @@ private fun CtosServerToolPanel(
         scope.launch {
             busy = true
             error = null
+            notice = null
             try {
                 val body = buildJsonObject {
                     put("input", input.trim())
@@ -1499,7 +1592,22 @@ private fun CtosServerToolPanel(
                 }
                 result = viewModel.api.ctosRunTool(tool.name, body)
             } catch (e: Exception) {
-                error = plainError(e, "The tool could not run. Try again.")
+                // PERFECTION MIRROR R-1: a run aimed at a case
+                // that answers with the gone body un-aims the
+                // panel (the case leaves the picker) and the
+                // server's sentence is the notice — not a
+                // generic run failure, and never a sign-in
+                // signal (a dead token is a different exception
+                // and never reaches this catch).
+                val aimed = caseId
+                if (aimed != null && CtosLogic.isCaseGone(e)) {
+                    goneCaseIds = goneCaseIds + aimed
+                    caseId = null
+                    notice = CtosLogic.CASE_GONE_MESSAGE
+                    error = null
+                } else {
+                    error = plainError(e, "The tool could not run. Try again.")
+                }
             } finally {
                 busy = false
             }
@@ -1580,16 +1688,16 @@ private fun CtosServerToolPanel(
                         },
                     )
                 }
-                if (cases.isNotEmpty()) {
+                if (panelCases.isNotEmpty()) {
                     Text("Record results into", style = MaterialTheme.typography.labelLarge)
                     ChipRow(
                         // AUDIT-171 B-07: id-carrying chips, as on
                         // the deck — titles collide by construction.
-                        options = cases.map { CtosLogic.caseChipLabel(it) },
-                        selected = cases.firstOrNull { it.id == caseId }
+                        options = panelCases.map { CtosLogic.caseChipLabel(it) },
+                        selected = panelCases.firstOrNull { it.id == caseId }
                             ?.let { CtosLogic.caseChipLabel(it) },
                         onPick = { chip ->
-                            caseId = chip?.let { CtosLogic.caseFromChip(cases, it)?.id }
+                            caseId = chip?.let { CtosLogic.caseFromChip(panelCases, it)?.id }
                         },
                         allLabel = "No case",
                     )
@@ -1613,6 +1721,13 @@ private fun CtosServerToolPanel(
                     }
                 }
                 ActionErrorText(error)
+                if (notice != null) {
+                    Text(
+                        notice!!,
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 GradientPrimaryButton(
                     text = "Run ${tool.label}",

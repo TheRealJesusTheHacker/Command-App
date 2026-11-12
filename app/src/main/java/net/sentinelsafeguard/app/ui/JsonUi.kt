@@ -348,6 +348,12 @@ suspend fun SentinelApi.downloadAll(path: String): ByteArray {
 class JsonScreenState {
     var data by mutableStateOf<JsonObject?>(null)
     var error by mutableStateOf<String?>(null)
+    /** The loader's failure itself, beside the plain-language
+     *  [error] string — surfaces that must distinguish refusal
+     *  kinds (the CToS case-gone 403 vs a generic failure) read
+     *  the ApiException's status/message from here instead of
+     *  pattern-matching display text. */
+    var errorCause by mutableStateOf<Throwable?>(null)
     var reloadKey by mutableStateOf(0)
 }
 
@@ -369,9 +375,11 @@ fun rememberJsonScreen(key: Any?, loader: suspend () -> JsonObject): JsonScreenS
     val state = remember(key) { JsonScreenState() }
     LaunchedEffect(key, state.reloadKey) {
         state.error = null
+        state.errorCause = null
         try {
             state.data = loader()
         } catch (e: Exception) {
+            state.errorCause = e
             state.error = plainError(e, "This could not be loaded. Check your connection and try again.")
         }
     }

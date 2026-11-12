@@ -17,6 +17,19 @@ import kotlinx.serialization.json.put
  * entered in web Command settings only. The workspace payload's
  * keySources carry configured booleans — that is all the app
  * ever sees.
+ *
+ * PERFECTION MIRROR R-1 (F-C1): the case twins are creator-
+ * scoped server-side. The workspace list arrives already
+ * scoped (the app renders it verbatim, never filters it), and
+ * every case-scoped twin answers a case the caller may not
+ * touch with the unknown-id refusal — 403 with the message
+ * CtosLogic.CASE_GONE_MESSAGE — which callJson surfaces as an
+ * ApiException the screens map to the deleted-case end state
+ * via CtosLogic.isCaseGone. R-5 (W-2): the workspace/case
+ * payloads also carry the server's unpaged totals
+ * (casesTotal / findingsTotal / artifactsTotal); the app
+ * sends no paging params, so the defaults reproduce the full
+ * historic payloads and the totals head the lists.
  */
 
 private fun JsonObject.toBodyC(): String = toString()

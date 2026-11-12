@@ -301,8 +301,29 @@ android {
         // accepts, or stores a key (values are web-only by
         // design). versionCode 121 steps over 120 so it
         // upgrades in place over 1.7.2.
-        versionCode = 121
-        versionName = "1.7.3"
+        //
+        // 1.7.4 (PERFECTION MIRROR): the app side of Live's
+        // Perfection Program relays R-1/R-3/R-5. R-1 (F-C1):
+        // CToS cases are creator-scoped server-side — the
+        // workspace list arrives scoped and renders verbatim,
+        // and every case-scoped call maps the server's
+        // unknown-id refusal ("That CToS case does not
+        // exist.", 403) to the deleted-case end state (leave
+        // the case view / un-aim the tool panel / refresh the
+        // list with the server's sentence as the notice) —
+        // never an error dump, never a sign-in signal. R-3:
+        // verified by grep — the app calls only the twins
+        // (GET /api/app/analytics, GET /api/app/wysaudio); no
+        // bare /actions path exists in the tree. R-5 (W-2):
+        // the server's unpaged totals (casesTotal /
+        // findingsTotal / artifactsTotal) head the case list
+        // and the case detail's sections; the app sends no
+        // paging params (load-all — the defaults reproduce
+        // the full payloads), so no partial page can be
+        // dressed as the whole set. versionCode 122 steps
+        // over 121 so it upgrades in place over 1.7.3.
+        versionCode = 122
+        versionName = "1.7.4"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         // The CF Access values are deliberately NOT build config

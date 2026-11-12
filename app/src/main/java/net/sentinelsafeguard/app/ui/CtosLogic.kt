@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import net.sentinelsafeguard.app.data.api.ApiException
 import java.security.MessageDigest
 import java.util.Locale
 
@@ -134,6 +135,65 @@ object CtosLogic {
         if (id != null) return cases.firstOrNull { it.id == id }
         return cases.firstOrNull { it.title == chip }
     }
+
+    // ---- Case scoping (PERFECTION MIRROR R-1, F-C1) ------------------
+    //
+    // The server scopes cases to their creator (OWNER/Admin see
+    // all on reads; mutations are creator-or-OWNER only). A case
+    // the caller may not touch answers EXACTLY like an unknown
+    // id — 403 {"ok": false, "authorized": false, "message":
+    // "That CToS case does not exist."} — so the surface is not
+    // an existence oracle, and the app's honest end-state for it
+    // is the deleted-case state: leave the case, refresh the
+    // list, show the server's own sentence as the notice. The
+    // recognition is deliberately EXACT (status + the server's
+    // verbatim message): any other 403 (no osint grant, the
+    // authorization gate, a profile refusal) is a different
+    // refusal and keeps its own handling, and a 401 is a dead
+    // token (SignedOutException), never this.
+
+    const val CASE_GONE_MESSAGE = "That CToS case does not exist."
+
+    fun isCaseGoneRefusal(status: Int, message: String?): Boolean =
+        status == 403 && message == CASE_GONE_MESSAGE
+
+    fun isCaseGone(error: Throwable?): Boolean =
+        error is ApiException &&
+            isCaseGoneRefusal(error.status, error.message)
+
+    // ---- Server totals (PERFECTION MIRROR R-5, W-2) ------------------
+    //
+    // ctosget now also reports unpaged totals alongside the
+    // (default-shaped) payloads: casesTotal on the workspace,
+    // findingsTotal / artifactsTotal on a case detail
+    // (findingsTotal follows the active type filter, exactly
+    // like the findings list it heads). The app loads ALL rows
+    // (it sends no paging params — the defaults reproduce the
+    // historic payloads) and renders the SERVER's totals, so a
+    // count on screen can never disagree with the server or
+    // present a capped list as the whole set. Absent field
+    // (a payload predating W-2) reads null and the surface
+    // falls back to the counts it already had.
+
+    fun casesTotal(workspace: JsonObject?): Int? =
+        Phase3Logic.int(workspace, "casesTotal")
+
+    fun findingsTotal(casePayload: JsonObject?): Int? =
+        Phase3Logic.int(casePayload, "findingsTotal")
+
+    fun artifactsTotal(casePayload: JsonObject?): Int? =
+        Phase3Logic.int(casePayload, "artifactsTotal")
+
+    /** The deck's case-count line. When the server total and
+     *  the listed rows agree (the load-all shape), it is the
+     *  plain count; if they ever differ, both numbers show —
+     *  a partial page is never dressed as the whole set. */
+    fun caseCountLine(total: Int?, listed: Int): String =
+        if (total != null && total != listed) {
+            "$listed of $total cases"
+        } else {
+            "${total ?: listed} cases"
+        }
 
     /**
      * AUDIT-171 B-20 [OSINT]: one artifact's content out of a case
