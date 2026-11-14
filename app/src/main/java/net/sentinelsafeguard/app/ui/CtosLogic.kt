@@ -652,6 +652,102 @@ object CtosLogic {
         )
     }
 
+    // ---- Async tool runs (PERFECTION R-6 / W-4) --------------------------
+
+    /** A run's lifecycle. STARTING is the client's own brief
+     *  state before the start call answers; the server itself
+     *  only ever reports "running", "done", or "error". */
+    enum class RunPhase { STARTING, RUNNING, DONE, FAILED }
+
+    /** The poll refusal for a run that is not the caller's (or
+     *  does not exist — the server answers both identically,
+     *  the F-C1 no-oracle shape). Recognition is EXACT: status
+     *  403 and the verbatim sentence, nothing looser. */
+    const val RUN_GONE_MESSAGE = "That CToS tool run does not exist."
+
+    fun isRunGoneRefusal(status: Int, message: String?): Boolean =
+        status == 403 && message == RUN_GONE_MESSAGE
+
+    fun isRunGone(error: Throwable?): Boolean {
+        val e = error as? ApiException ?: return false
+        return isRunGoneRefusal(e.status, e.message)
+    }
+
+    /** The server's status vocabulary, verbatim: "done" is
+     *  done, "error" (and a spelled "failed") is failed, and
+     *  anything else the run reports while alive is running. */
+    fun runPhaseFor(status: String?): RunPhase =
+        when (status?.trim()?.lowercase()) {
+            "done" -> RunPhase.DONE
+            "error", "failed" -> RunPhase.FAILED
+            else -> RunPhase.RUNNING
+        }
+
+    data class ToolRunStart(
+        val runId: String,
+        val tool: String,
+        val phase: RunPhase,
+    )
+
+    /** The async start payload ({ok, runId, status, tool},
+     *  HTTP 202). A gate-refused active tool starts already
+     *  "done" — its result (the refusal) rides the first poll.
+     *  Null when the payload carries no run id: without one
+     *  there is nothing honest to poll. */
+    fun parseRunStart(payload: JsonObject?): ToolRunStart? {
+        val runId = Phase3Logic.str(payload, "runId")
+        if (runId.isBlank()) return null
+        return ToolRunStart(
+            runId = runId,
+            tool = Phase3Logic.str(payload, "tool"),
+            phase = runPhaseFor(Phase3Logic.str(payload, "status")),
+        )
+    }
+
+    data class ToolRunPoll(
+        val runId: String,
+        val tool: String,
+        val phase: RunPhase,
+        val recorded: Int?,
+        /** The server's own failure string on a failed run
+         *  ("TypeName: message") — rendered verbatim, never
+         *  paraphrased. Blank unless the phase is FAILED. */
+        val error: String,
+        /** The poll payload itself: on DONE it has exactly the
+         *  sync result shape ({..., recorded, result:
+         *  {sources, data, findings}}), so [parseToolResult]
+         *  renders it unchanged. */
+        val payload: JsonObject?,
+    )
+
+    fun parseRunPoll(payload: JsonObject?): ToolRunPoll {
+        val phase = runPhaseFor(Phase3Logic.str(payload, "status"))
+        return ToolRunPoll(
+            runId = Phase3Logic.str(payload, "runId"),
+            tool = Phase3Logic.str(payload, "tool"),
+            phase = phase,
+            recorded = Phase3Logic.int(payload, "recorded"),
+            error = if (phase == RunPhase.FAILED) {
+                Phase3Logic.str(payload, "error")
+            } else {
+                ""
+            },
+            payload = payload,
+        )
+    }
+
+    /** Poll cadence for a watched run: every 1.5 s, up to
+     *  ~10 minutes of watching. The cap ends the WATCH, never
+     *  the run — a run continues server-side past it and the
+     *  panel offers to check again on the same run id. */
+    const val RUN_POLL_INTERVAL_MS: Long = 1500L
+    const val RUN_POLL_MAX: Int = 400
+
+    /** Consecutive poll transport failures tolerated before
+     *  the watch surfaces an error — a single dropped request
+     *  mid-run is not the run's outcome. */
+    const val RUN_POLL_MAX_MISSES: Int = 3
+
     // ---- Username profiler result --------------------------------------
 
     data class ProfileRow(

@@ -85,3 +85,26 @@ suspend fun SentinelApi.ctosSaveProfile(profile: JsonObject): JsonObject =
 
 suspend fun SentinelApi.ctosRunTool(tool: String, body: JsonObject): JsonObject =
     callJson("POST", "/api/app/osint/ctos/tools/$tool", body.toBodyC())
+
+/**
+ * PERFECTION R-6 (W-4): the async tool-run twins. The start
+ * answers 202 with {ok, runId, status, tool} once EVERY
+ * synchronous pre-run step has run server-side (osint/write
+ * gate, network rate cap, F-C1 case scoping, the Wave 3
+ * authorization gate with its audit row committed BEFORE
+ * anything runs — a gate refusal is a completed run whose
+ * result IS the refusal, exactly as the sync path returns
+ * it). Refusals that precede any run (unknown tool, rate
+ * cap, a case the caller may not touch) raise through
+ * callJson exactly like the sync twin's. The poll answers
+ * the run's own state — {ok, runId, tool, status, recorded}
+ * plus `result` when done or `error` when failed — and a
+ * run is readable only by its starter or an OWNER/Admin:
+ * anyone else (and any unknown id) gets the server's 403
+ * "That CToS tool run does not exist."
+ */
+suspend fun SentinelApi.ctosRunToolAsync(tool: String, body: JsonObject): JsonObject =
+    callJson("POST", "/api/app/osint/ctos/tools/$tool/async", body.toBodyC())
+
+suspend fun SentinelApi.ctosToolRun(runId: String): JsonObject =
+    callJson("GET", "/api/app/osint/ctos/runs/${encodeQuery(runId)}")

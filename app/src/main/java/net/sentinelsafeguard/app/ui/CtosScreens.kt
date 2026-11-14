@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -61,7 +62,9 @@ import net.sentinelsafeguard.app.data.api.ctosDeleteCase
 import net.sentinelsafeguard.app.data.api.ctosExportCase
 import net.sentinelsafeguard.app.data.api.ctosRecord
 import net.sentinelsafeguard.app.data.api.ctosRunTool
+import net.sentinelsafeguard.app.data.api.ctosRunToolAsync
 import net.sentinelsafeguard.app.data.api.ctosSaveProfile
+import net.sentinelsafeguard.app.data.api.ctosToolRun
 import net.sentinelsafeguard.app.data.api.ctosWorkspace
 import net.sentinelsafeguard.app.ui.theme.SentinelAmber
 import net.sentinelsafeguard.app.ui.theme.SentinelGreen
@@ -1517,6 +1520,14 @@ private fun CtosServerToolPanel(
     var goneCaseIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     val panelCases = cases.filter { it.id !in goneCaseIds }
     var result by remember { mutableStateOf<JsonObject?>(null) }
+    // PERFECTION R-6 (W-4): network tools run ASYNC — the
+    // start answers immediately with a run id and the panel
+    // polls the run's own state (CtosLogic's cadence). A watch
+    // that hits its cap keeps the run id here: the run itself
+    // continues server-side and "Check again" resumes the
+    // watch on the SAME run, never a second run.
+    var runPhase by remember { mutableStateOf<CtosLogic.RunPhase?>(null) }
+    var stalledRunId by remember { mutableStateOf<String?>(null) }
     // Metadata extractor: the picked file's bytes ride as base64
     // in options (the server's own contract); parsed in memory
     // server-side, never stored.
@@ -1568,48 +1579,143 @@ private fun CtosServerToolPanel(
         }
     }
 
+    fun buildRunBody(): JsonObject = buildJsonObject {
+        put("input", input.trim())
+        caseId?.let { put("caseId", it) }
+        val opts = buildJsonObject {
+            if (tool.name in CtosLogic.DEPTH_TOOLS) put("depth", depth)
+            CtosLogic.MODE_TOOLS[tool.name]?.let { (key, _) ->
+                if (mode.isNotBlank()) put(key, mode)
+            }
+            if (tool.name == "metadata") {
+                put("fileB64", pickedB64 ?: "")
+                pickedName?.let { put("filename", it) }
+            }
+        }
+        if (opts.size > 0) put("options", opts)
+    }
+
+    /** The shared failure mapping for a run (sync, async start,
+     *  or a resumed watch). */
+    fun noteRunError(e: Exception) {
+        // PERFECTION MIRROR R-1: a run aimed at a case
+        // that answers with the gone body un-aims the
+        // panel (the case leaves the picker) and the
+        // server's sentence is the notice — not a
+        // generic run failure, and never a sign-in
+        // signal (a dead token is a different exception
+        // and never reaches this catch).
+        val aimed = caseId
+        if (aimed != null && CtosLogic.isCaseGone(e)) {
+            goneCaseIds = goneCaseIds + aimed
+            caseId = null
+            notice = CtosLogic.CASE_GONE_MESSAGE
+            error = null
+        } else {
+            error = plainError(e, "The tool could not run. Try again.")
+        }
+    }
+
+    /**
+     * Watch an async run to its outcome. DONE lands the poll
+     * payload in [result] (its shape IS the sync result shape,
+     * so the result view below renders it unchanged); FAILED
+     * surfaces the server's own error string; a run that
+     * outlives the watch cap parks its id in [stalledRunId]
+     * with an honest notice. A poll that answers with the
+     * run-gone refusal (server restarted, or the run is not
+     * this operator's) throws into the caller's error mapping
+     * — plainError renders the server's sentence verbatim.
+     */
+    suspend fun watchRun(runId: String) {
+        runPhase = CtosLogic.RunPhase.RUNNING
+        var polls = 0
+        var misses = 0
+        while (true) {
+            val payload = try {
+                viewModel.api.ctosToolRun(runId)
+            } catch (e: Exception) {
+                if (CtosLogic.isRunGone(e)) throw e
+                misses++
+                if (misses >= CtosLogic.RUN_POLL_MAX_MISSES) throw e
+                delay(CtosLogic.RUN_POLL_INTERVAL_MS)
+                continue
+            }
+            misses = 0
+            val poll = CtosLogic.parseRunPoll(payload)
+            when (poll.phase) {
+                CtosLogic.RunPhase.DONE -> {
+                    result = payload
+                    return
+                }
+                CtosLogic.RunPhase.FAILED -> {
+                    error = poll.error.ifBlank {
+                        "The run failed on Command."
+                    }
+                    return
+                }
+                else -> {
+                    polls++
+                    if (polls >= CtosLogic.RUN_POLL_MAX) {
+                        stalledRunId = runId
+                        notice = "Still running on Command — the run " +
+                            "continues on the server. Check again to " +
+                            "keep watching it here."
+                        return
+                    }
+                    delay(CtosLogic.RUN_POLL_INTERVAL_MS)
+                }
+            }
+        }
+    }
+
+    fun launchWatch(runId: String) {
+        scope.launch {
+            busy = true
+            error = null
+            notice = null
+            try {
+                watchRun(runId)
+            } catch (e: Exception) {
+                noteRunError(e)
+            } finally {
+                busy = false
+                if (stalledRunId == null) runPhase = null
+            }
+        }
+    }
+
     fun run() {
         if (busy) return
         scope.launch {
             busy = true
             error = null
             notice = null
+            stalledRunId = null
             try {
-                val body = buildJsonObject {
-                    put("input", input.trim())
-                    caseId?.let { put("caseId", it) }
-                    val opts = buildJsonObject {
-                        if (tool.name in CtosLogic.DEPTH_TOOLS) put("depth", depth)
-                        CtosLogic.MODE_TOOLS[tool.name]?.let { (key, _) ->
-                            if (mode.isNotBlank()) put(key, mode)
-                        }
-                        if (tool.name == "metadata") {
-                            put("fileB64", pickedB64 ?: "")
-                            pickedName?.let { put("filename", it) }
-                        }
-                    }
-                    if (opts.size > 0) put("options", opts)
-                }
-                result = viewModel.api.ctosRunTool(tool.name, body)
-            } catch (e: Exception) {
-                // PERFECTION MIRROR R-1: a run aimed at a case
-                // that answers with the gone body un-aims the
-                // panel (the case leaves the picker) and the
-                // server's sentence is the notice — not a
-                // generic run failure, and never a sign-in
-                // signal (a dead token is a different exception
-                // and never reaches this catch).
-                val aimed = caseId
-                if (aimed != null && CtosLogic.isCaseGone(e)) {
-                    goneCaseIds = goneCaseIds + aimed
-                    caseId = null
-                    notice = CtosLogic.CASE_GONE_MESSAGE
-                    error = null
+                val body = buildRunBody()
+                if (!tool.network) {
+                    // Local-compute tools answer in the request,
+                    // as they always have — the sync twin.
+                    result = viewModel.api.ctosRunTool(tool.name, body)
                 } else {
-                    error = plainError(e, "The tool could not run. Try again.")
+                    // PERFECTION R-6: network tools run async.
+                    // The start performs every pre-run gate
+                    // server-side and answers with a run id;
+                    // the panel then watches the run itself.
+                    runPhase = CtosLogic.RunPhase.STARTING
+                    val start = CtosLogic.parseRunStart(
+                        viewModel.api.ctosRunToolAsync(tool.name, body),
+                    ) ?: throw IllegalStateException(
+                        "Command started the run without a run id.",
+                    )
+                    watchRun(start.runId)
                 }
+            } catch (e: Exception) {
+                noteRunError(e)
             } finally {
                 busy = false
+                if (stalledRunId == null) runPhase = null
             }
         }
     }
@@ -1714,7 +1820,11 @@ private fun CtosServerToolPanel(
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            "Running on Command…",
+                            if (runPhase == CtosLogic.RunPhase.STARTING) {
+                                "Starting on Command…"
+                            } else {
+                                "Running on Command…"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = SentinelMuted,
                         )
@@ -1727,6 +1837,15 @@ private fun CtosServerToolPanel(
                         color = SentinelMuted,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+                val stalled = stalledRunId
+                if (stalled != null && !busy) {
+                    // PERFECTION R-6: resume the watch on the
+                    // SAME run — it never stopped server-side.
+                    TextButton(onClick = {
+                        stalledRunId = null
+                        launchWatch(stalled)
+                    }) { Text("Check again") }
                 }
                 Spacer(Modifier.height(8.dp))
                 GradientPrimaryButton(

@@ -322,8 +322,26 @@ android {
         // the full payloads), so no partial page can be
         // dressed as the whole set. versionCode 122 steps
         // over 121 so it upgrades in place over 1.7.3.
-        versionCode = 122
-        versionName = "1.7.4"
+        //
+        // 1.7.5 (COMMAND PULSE + R-6 ASYNC RUNS): the Today
+        // surface gains the Command Pulse — a native ECG line
+        // whose tempo is the server-computed queue bpm from
+        // GET /api/app/today/panels' top-level `pulse` object,
+        // rendered VERBATIM (never recomputed client-side),
+        // captioned from the same counts ("Queue pulse · {open}
+        // open · {urgent} urgent"); reduced motion draws the
+        // flat line with the numeric readout, and absent counts
+        // draw flat with an honest unavailable state — never an
+        // invented rhythm. And the OSINT tool panels now ride
+        // the R-6 async run twins for network tools: POST
+        // /api/app/osint/ctos/tools/<tool>/async starts a run
+        // (202, runId) after every server-side pre-run gate,
+        // GET /api/app/osint/ctos/runs/<runId> polls its own
+        // state (running / done / error in the server's words);
+        // local-compute tools keep the sync twin. versionCode
+        // 123 steps over 122 so it upgrades in place over 1.7.4.
+        versionCode = 123
+        versionName = "1.7.5"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         // The CF Access values are deliberately NOT build config

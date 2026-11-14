@@ -254,6 +254,13 @@ fun UrgentBanner(viewModel: AppViewModel, nav: NavController) {
 fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
     val scope = rememberCoroutineScope()
     var panels by remember { mutableStateOf<JsonObject?>(null) }
+    // COMMAND PULSE (1.7.5): the panels response's top level
+    // also carries the server-computed `pulse` object beside
+    // the `panels` sections — kept whole here so PulseLogic
+    // reads it off the same load (no extra request), with its
+    // own failure flag for the card's honest unavailable state.
+    var panelsResponse by remember { mutableStateOf<JsonObject?>(null) }
+    var panelsFailed by remember { mutableStateOf(false) }
     var automations by remember { mutableStateOf<JsonObject?>(null) }
     var digests by remember { mutableStateOf<JsonObject?>(null) }
     var reports by remember { mutableStateOf<JsonObject?>(null) }
@@ -272,11 +279,15 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
         // calls overlap inside the API client's in-flight
         // coalescing window, which is also what deduplicates the
         // screen's repeated todayUrgent/todayReportsSummary GETs).
+        panelsFailed = false
         coroutineScope {
             val dPanels = async {
                 try {
-                    viewModel.api.todayPanels().obj("panels")
+                    val full = viewModel.api.todayPanels()
+                    panelsResponse = full
+                    full.obj("panels")
                 } catch (e: Exception) {
+                    panelsFailed = true
                     null
                 }
             }
@@ -347,6 +358,16 @@ fun TodayPanels(viewModel: AppViewModel, nav: NavController) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
+
+        // COMMAND PULSE (1.7.5): the living ECG line heads the
+        // injected panels, as the web block heads paintToday's
+        // panel composition — tempo is the server's bpm,
+        // rendered verbatim (PulseLogic / QueuePulseCard).
+        QueuePulseCard(
+            pulse = PulseLogic.parse(panelsResponse),
+            loadFailed = panelsFailed,
+            onRetry = { reloadKey++ },
+        )
 
         // Needs your tap (Expansion A2): the approvals inbox.
         // Draft-only law — Command's automations draft, NOTHING
