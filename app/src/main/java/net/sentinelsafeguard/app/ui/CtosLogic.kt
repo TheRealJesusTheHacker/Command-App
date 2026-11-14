@@ -46,7 +46,7 @@ object CtosLogic {
      *  later wave land in [Group.INFRASTRUCTURE] until grouped
      *  here — visible, never hidden. */
     fun groupFor(toolName: String): Group = when (toolName) {
-        "quickrecon", "username", "diligence" -> Group.PROFILER
+        "quickrecon", "username", "diligence", "composite", "analyst" -> Group.PROFILER
         "dashboard", "dns", "ip", "whois", "fingerprint" -> Group.INFRASTRUCTURE
         "metadata", "filehash", "phone" -> Group.FILES
         "base64", "hex", "jsonformat", "jwt", "password", "timestamp",
@@ -370,6 +370,8 @@ object CtosLogic {
         "abuseipdb" to "AbuseIPDB",
         "shodan" to "Shodan",
         "securitytrails" to "SecurityTrails",
+        "anthropic" to "Anthropic",
+        "openai" to "OpenAI",
     )
 
     /** What a stored key deepens, per source — the honest
@@ -383,6 +385,8 @@ object CtosLogic {
         "abuseipdb" to "IP abuse reports",
         "shodan" to "host intelligence",
         "securitytrails" to "DNS and domain history",
+        "anthropic" to "AI Analyst answers over a case's findings",
+        "openai" to "AI Analyst answers over a case's findings",
     )
 
     /** Strict-boolean read: only a JSON true / false literal
@@ -747,6 +751,251 @@ object CtosLogic {
      *  the watch surfaces an error — a single dropped request
      *  mid-run is not the run's outcome. */
     const val RUN_POLL_MAX_MISSES: Int = 3
+
+    // ---- Run body (the one construction both dispatch paths ride) ----
+    //
+    // The panel's run body, extracted so the suites can pin it:
+    // {input, caseId?, options?} — the case binding rides the
+    // body's top level, where BOTH dispatch paths resolve it
+    // through the identical F-C1 mutate scoping check
+    // (a_ctostool / a_ctostoolasync read args["caseId"] or
+    // options["caseId"] and inject the resolved id into the
+    // options the tool receives). The AI Analyst REQUIRES that
+    // binding; the Composite Profiler records through it like
+    // every other tool. Options carry ONLY the form's own keys
+    // (depth / mode / the metadata file) — an empty options
+    // object is never sent.
+
+    fun toolRunBody(
+        toolName: String,
+        input: String,
+        caseId: Int?,
+        depth: String,
+        mode: String,
+        fileB64: String?,
+        fileName: String?,
+    ): JsonObject = buildJsonObject {
+        put("input", input.trim())
+        caseId?.let { put("caseId", it) }
+        val opts = buildJsonObject {
+            if (toolName in DEPTH_TOOLS) put("depth", depth)
+            MODE_TOOLS[toolName]?.let { (key, _) ->
+                if (mode.isNotBlank()) put(key, mode)
+            }
+            if (toolName == "metadata") {
+                put("fileB64", fileB64 ?: "")
+                fileName?.let { put("filename", it) }
+            }
+        }
+        if (opts.size > 0) put("options", opts)
+    }
+
+    // ---- Composite Profiler: the Identity Graph -----------------------
+    //
+    // composite's data carries the Identity Graph — the tool's
+    // headline output. Nodes are the seed target plus every
+    // identifier the passive legs actually produced, each with
+    // its provenance verbatim ({tool, source, status} per
+    // producing source) and a categorical confidence the SERVER
+    // derived from that provenance alone: high = two or more
+    // distinct tools carry a "found" source for the node,
+    // medium = one, low = none. The count rides along as
+    // `corroborations`. No numeric precision exists server-side
+    // and none is invented here. The generic data shaper would
+    // flatten all of this into field counts, so the graph gets
+    // a real parse and a native rendering; the per-leg modules
+    // keep the dashboard's rendering.
+
+    data class GraphProvenance(
+        val tool: String,
+        val source: String,
+        val status: Status,
+    )
+
+    data class GraphNode(
+        val id: String,
+        val label: String,
+        val kind: String,
+        val seed: Boolean,
+        /** The server's bucket word ("high" / "medium" /
+         *  "low"), lowercased; an unrecognized word is carried
+         *  as-is and displayed as-is — never re-bucketed here. */
+        val confidence: String,
+        val corroborations: Int,
+        val tools: List<String>,
+        val provenance: List<GraphProvenance>,
+    )
+
+    data class GraphLeg(
+        val tool: String,
+        val input: String,
+        val status: Status,
+    )
+
+    data class GraphEdge(
+        val a: String,
+        val b: String,
+        val tool: String,
+        val status: Status,
+    )
+
+    data class IdentityGraph(
+        val nodes: List<GraphNode>,
+        val edges: List<GraphEdge>,
+        val legs: List<GraphLeg>,
+        /** True when the server hit its node cap — some
+         *  identifiers exist that the graph does not show. */
+        val truncated: Boolean,
+    )
+
+    /** Parse data.identityGraph. Null when the payload carries
+     *  no graph object (any other tool's data, or a composite
+     *  payload predating the graph) — the caller then falls
+     *  back to the generic rendering rather than inventing one. */
+    fun parseIdentityGraph(data: JsonObject?): IdentityGraph? {
+        val g = Phase3Logic.obj(data, "identityGraph") ?: return null
+        val nodes = Phase3Logic.arr(g, "nodes").map { n ->
+            GraphNode(
+                id = Phase3Logic.str(n, "id"),
+                label = Phase3Logic.str(n, "label"),
+                kind = Phase3Logic.str(n, "kind"),
+                seed = Phase3Logic.bool(n, "seed") == true,
+                confidence = Phase3Logic.str(n, "confidence")
+                    .trim().lowercase(),
+                corroborations = Phase3Logic.int(n, "corroborations") ?: 0,
+                tools = Phase3Logic.arrRaw(n, "tools")
+                    .mapNotNull { (it as? JsonPrimitive)?.content }
+                    .filter { it.isNotBlank() },
+                provenance = Phase3Logic.arr(n, "sources").map { p ->
+                    GraphProvenance(
+                        tool = Phase3Logic.str(p, "tool"),
+                        source = Phase3Logic.str(p, "source"),
+                        status = statusFor(Phase3Logic.str(p, "status")),
+                    )
+                },
+            )
+        }.filter { it.id.isNotBlank() || it.label.isNotBlank() }
+        return IdentityGraph(
+            nodes = nodes,
+            edges = Phase3Logic.arr(g, "edges").map { e ->
+                GraphEdge(
+                    a = Phase3Logic.str(e, "a"),
+                    b = Phase3Logic.str(e, "b"),
+                    tool = Phase3Logic.str(e, "tool")
+                        .ifBlank { Phase3Logic.str(e, "rel") },
+                    status = statusFor(Phase3Logic.str(e, "status")),
+                )
+            },
+            legs = Phase3Logic.arr(g, "legs").map { l ->
+                GraphLeg(
+                    tool = Phase3Logic.str(l, "tool"),
+                    input = Phase3Logic.str(l, "input"),
+                    status = statusFor(Phase3Logic.str(l, "status")),
+                )
+            },
+            truncated = Phase3Logic.bool(g, "truncated") == true,
+        )
+    }
+
+    /** Display order for the graph: the seed (the target the
+     *  operator asked about) first in the server's own order,
+     *  then the discovered identifiers by confidence rank —
+     *  high, medium, low, anything unrecognized last — and by
+     *  label within a rank. Grouping only; nothing is dropped,
+     *  re-scored, or re-sorted away from the server's facts. */
+    fun graphDisplayNodes(graph: IdentityGraph): List<GraphNode> {
+        val seeds = graph.nodes.filter { it.seed }
+        val rest = graph.nodes.filter { !it.seed }.sortedWith(
+            compareBy<GraphNode> { confidenceRank(it.confidence) }
+                .thenBy { it.label.lowercase() },
+        )
+        return seeds + rest
+    }
+
+    fun confidenceRank(confidence: String): Int = when (confidence) {
+        "high" -> 0
+        "medium" -> 1
+        "low" -> 2
+        else -> 3
+    }
+
+    /** The confidence word for display: the server's bucket,
+     *  capitalized; an unrecognized word shows as the server
+     *  sent it. */
+    fun confidenceLabel(confidence: String): String =
+        when (confidence) {
+            "high" -> "High"
+            "medium" -> "Medium"
+            "low" -> "Low"
+            else -> confidence
+        }
+
+    // ---- AI Analyst -----------------------------------------------------
+    //
+    // analyst's data carries a `configured` state the surface
+    // must never guess at. With no provider key the server
+    // returns a NORMAL result — sources[0] says not_configured
+    // and data.configured is false — which is a designed state
+    // ("nothing was generated, by design"), not an error. With
+    // a key, data.configured is true and `analysis` carries the
+    // model's text (or stays null with the server's `error`
+    // when the provider could not answer). `configured` is
+    // read with the same strict-literal discipline as the key
+    // statuses (keyStatusOf): only a JSON true / false literal
+    // is a state the server reported — a string "false" is
+    // UNREPORTED and the surface falls back to the generic
+    // rendering instead of settling on a state.
+
+    enum class AnalystState { NOT_CONFIGURED, READY, UNREPORTED }
+
+    data class AnalystResult(
+        val state: AnalystState,
+        val provider: String,
+        val model: String,
+        val question: String,
+        val analysis: String?,
+        val error: String,
+        val findingsConsidered: Int?,
+        val findingsTotal: Int?,
+        val contextTruncated: Boolean,
+    )
+
+    private fun strictBoolLiteral(v: JsonElement?): Boolean? {
+        val p = v as? JsonPrimitive ?: return null
+        if (p.isString) return null
+        return p.booleanOrNull
+    }
+
+    /** Parse the analyst's data block. Null when the payload
+     *  carries no `configured` key at all — i.e. not an analyst
+     *  result (or one predating the state), never a guess. */
+    fun parseAnalystData(data: JsonObject?): AnalystResult? {
+        if (data == null || !data.containsKey("configured")) return null
+        return AnalystResult(
+            state = when (strictBoolLiteral(data["configured"])) {
+                false -> AnalystState.NOT_CONFIGURED
+                true -> AnalystState.READY
+                null -> AnalystState.UNREPORTED
+            },
+            provider = Phase3Logic.strOrNull(data, "provider") ?: "",
+            model = Phase3Logic.str(data, "model"),
+            question = Phase3Logic.str(data, "question"),
+            analysis = Phase3Logic.strOrNull(data, "analysis"),
+            error = Phase3Logic.str(data, "error"),
+            findingsConsidered = Phase3Logic.int(data, "findingsConsidered"),
+            findingsTotal = Phase3Logic.int(data, "findingsTotal"),
+            contextTruncated = Phase3Logic.bool(data, "contextTruncated") == true,
+        )
+    }
+
+    /** The provider's display name — the server's own label
+     *  for its two wired providers; anything else shows raw. */
+    fun analystProviderLabel(provider: String): String =
+        when (provider.trim().lowercase()) {
+            "anthropic" -> "Anthropic"
+            "openai" -> "OpenAI"
+            else -> provider
+        }
 
     // ---- Username profiler result --------------------------------------
 

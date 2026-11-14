@@ -340,8 +340,37 @@ android {
         // state (running / done / error in the server's words);
         // local-compute tools keep the sync twin. versionCode
         // 123 steps over 122 so it upgrades in place over 1.7.4.
-        versionCode = 123
-        versionName = "1.7.5"
+        //
+        // 1.7.6 (CTOS TRIO PARITY): the app side of Main's CToS
+        // completion trio, deployed-verified in production
+        // 2026-11-14 (server.py eab33b57…, registry 35 → 37).
+        // The Composite Profiler and the AI Analyst arrive
+        // through the EXISTING twins — the deck is driven by
+        // the server's registry metadata, so both tools list
+        // with their real names and purposes and run sync/async
+        // exactly like the rest; no new endpoints, no contract
+        // changes. What is new here: both group under Profiler;
+        // the composite's Identity Graph parses natively
+        // (nodes with verbatim {tool, source, status}
+        // provenance and the server's categorical corroboration
+        // confidence — never a score) and renders node-by-node
+        // ahead of the generic data shaping; the analyst's
+        // `configured` state is read with the key-status
+        // strict-literal discipline, and its no-key
+        // not_configured result renders as the DESIGNED state
+        // (nothing generated, next step = a provider key the
+        // Owner sets in web Command settings — keys never enter
+        // through this app) rather than an error; the run body
+        // is one suite-pinned construction whose caseId binding
+        // both dispatch paths resolve through the identical
+        // F-C1 mutate scoping check (the Analyst requires it);
+        // and the key-status surface gains Anthropic / OpenAI
+        // labels + unlock lines in the same strict style.
+        // YouTube DL did NOT ship server-side (containment) and
+        // has NO surface here. versionCode 124 steps over 123
+        // so it upgrades in place over 1.7.5.
+        versionCode = 124
+        versionName = "1.7.6"
 
         buildConfigField("String", "API_BASE_URL", "\"https://command.sentinelsafeguard.net\"")
         // The CF Access values are deliberately NOT build config

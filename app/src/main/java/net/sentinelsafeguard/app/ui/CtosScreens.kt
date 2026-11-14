@@ -1579,21 +1579,19 @@ private fun CtosServerToolPanel(
         }
     }
 
-    fun buildRunBody(): JsonObject = buildJsonObject {
-        put("input", input.trim())
-        caseId?.let { put("caseId", it) }
-        val opts = buildJsonObject {
-            if (tool.name in CtosLogic.DEPTH_TOOLS) put("depth", depth)
-            CtosLogic.MODE_TOOLS[tool.name]?.let { (key, _) ->
-                if (mode.isNotBlank()) put(key, mode)
-            }
-            if (tool.name == "metadata") {
-                put("fileB64", pickedB64 ?: "")
-                pickedName?.let { put("filename", it) }
-            }
-        }
-        if (opts.size > 0) put("options", opts)
-    }
+    // The one run-body construction (CtosLogic.toolRunBody,
+    // suite-pinned): the case binding rides the body's top
+    // level, where both dispatch paths resolve it through the
+    // identical F-C1 mutate scoping check.
+    fun buildRunBody(): JsonObject = CtosLogic.toolRunBody(
+        toolName = tool.name,
+        input = input,
+        caseId = caseId,
+        depth = depth,
+        mode = mode,
+        fileB64 = pickedB64,
+        fileName = pickedName,
+    )
 
     /** The shared failure mapping for a run (sync, async start,
      *  or a resumed watch). */
@@ -1735,6 +1733,39 @@ private fun CtosServerToolPanel(
                         color = SentinelAmber,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    Spacer(Modifier.height(6.dp))
+                }
+                if (tool.name == "analyst") {
+                    // CTOS TRIO (1.7.6): the Analyst's terms, stated
+                    // before the run like the gate's — it is
+                    // case-bound by design (its context is ONE
+                    // case's findings and the analysis is recorded
+                    // back into that case), and its no-key state is
+                    // a designed report, not a failure: with no
+                    // Anthropic or OpenAI key configured it answers
+                    // not configured and generates nothing. Keys are
+                    // set in web Command settings only.
+                    Text(
+                        "Case-bound: the AI Analyst answers your question " +
+                            "from ONE case's recorded findings and writes " +
+                            "the analysis back into that case — pick the " +
+                            "case below before running. With no Anthropic " +
+                            "or OpenAI key configured, it reports not " +
+                            "configured and generates nothing; keys are " +
+                            "set in web Command settings.",
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (panelCases.isEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "There are no cases to bind to yet — create " +
+                                "one from the deck first. Without a case, " +
+                                "Command refuses the run in its own words.",
+                            color = SentinelAmber,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     Spacer(Modifier.height(6.dp))
                 }
                 if (tool.name == "metadata") {
@@ -1962,8 +1993,39 @@ private fun CtosResultView(
         if (data != null) {
             val username = CtosLogic.parseUsernameData(data)
             val modules = Phase3Logic.arr(data, "modules")
+            // CTOS TRIO (1.7.6): the analyst's configured state
+            // and the composite's Identity Graph get their own
+            // renderings ahead of the generic shaping (an
+            // UNREPORTED analyst state falls through to it —
+            // the surface never settles on an unreported state).
+            val analyst = if (toolName == "analyst") {
+                CtosLogic.parseAnalystData(data)
+                    ?.takeIf { it.state != CtosLogic.AnalystState.UNREPORTED }
+            } else {
+                null
+            }
+            val graph = if (toolName == "composite") {
+                CtosLogic.parseIdentityGraph(data)
+            } else {
+                null
+            }
             when {
+                analyst != null -> CtosAnalystView(analyst)
                 username != null -> CtosUsernameView(username)
+                graph != null -> {
+                    CtosDataNodes(
+                        title = "Composite profile",
+                        nodes = CtosLogic.shapeData(
+                            JsonObject(
+                                data.filterKeys {
+                                    it != "modules" && it != "identityGraph"
+                                },
+                            ),
+                        ),
+                    )
+                    CtosIdentityGraphView(graph)
+                    CtosModulesView(modules)
+                }
                 toolName == "dashboard" && modules.isNotEmpty() -> {
                     CtosDataNodes(
                         title = "Target",
@@ -1971,36 +2033,248 @@ private fun CtosResultView(
                             JsonObject(data.filterKeys { it != "modules" }),
                         ),
                     )
-                    modules.forEach { mod ->
-                        val ok = Phase3Logic.bool(mod, "ok") == true
-                        val mTool = Phase3Logic.str(mod, "tool")
-                        SectionHeader("Module — $mTool")
-                        if (!ok) {
-                            Text(
-                                Phase3Logic.str(mod, "error"),
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                            )
-                        } else {
-                            val modResult = Phase3Logic.obj(mod, "result")
-                            CtosResultView(
-                                toolName = mTool,
-                                parsed = CtosLogic.ToolResult(
-                                    sources = (modResult?.get("sources")
-                                        as? kotlinx.serialization.json.JsonArray)
-                                        ?.mapNotNull { it as? JsonObject }
-                                        ?.map { OsintLogic.parseSourceEntry(it) }
-                                        ?: emptyList(),
-                                    data = modResult?.get("data") as? JsonObject,
-                                    recorded = null,
-                                ),
-                                rawResult = modResult,
-                            )
-                        }
-                    }
+                    CtosModulesView(modules)
                 }
                 else -> CtosDataNodes(title = "Data", nodes = CtosLogic.shapeData(data))
             }
+        }
+    }
+}
+
+/** The per-module rendering the dashboard pioneered — each
+ *  module's own result through the one result view (the
+ *  composite's legs ride it unchanged). */
+@Composable
+private fun CtosModulesView(modules: List<JsonObject>) {
+    modules.forEach { mod ->
+        val ok = Phase3Logic.bool(mod, "ok") == true
+        val mTool = Phase3Logic.str(mod, "tool")
+        SectionHeader("Module — $mTool")
+        if (!ok) {
+            Text(
+                Phase3Logic.str(mod, "error"),
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        } else {
+            val modResult = Phase3Logic.obj(mod, "result")
+            CtosResultView(
+                toolName = mTool,
+                parsed = CtosLogic.ToolResult(
+                    sources = (modResult?.get("sources")
+                        as? kotlinx.serialization.json.JsonArray)
+                        ?.mapNotNull { it as? JsonObject }
+                        ?.map { OsintLogic.parseSourceEntry(it) }
+                        ?: emptyList(),
+                    data = modResult?.get("data") as? JsonObject,
+                    recorded = null,
+                ),
+                rawResult = modResult,
+            )
+        }
+    }
+}
+
+/**
+ * CTOS TRIO (1.7.6): the AI Analyst's result. Three honest
+ * shapes and no fourth: NOT_CONFIGURED renders as the DESIGNED
+ * state it is (nothing was generated, nothing is wrong — the
+ * next step is a key the Owner sets on the web); READY with
+ * text renders the analysis under the server's own
+ * AI-generated label; READY without text renders the
+ * provider's failure plainly (the server's words ride the
+ * source card above; the error line here is the server's own
+ * string). An UNREPORTED state never reaches this view — the
+ * caller falls back to the generic data rendering.
+ */
+@Composable
+private fun CtosAnalystView(analyst: CtosLogic.AnalystResult) {
+    when (analyst.state) {
+        CtosLogic.AnalystState.NOT_CONFIGURED -> {
+            MirrorCard("AI Analyst — not configured") {
+                Text(
+                    "No Anthropic or OpenAI key is configured, so the " +
+                        "Analyst generated nothing — by design, it never " +
+                        "invents an answer in place of one.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (analyst.question.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    DetailLine("Question", analyst.question)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Next step: the Owner adds an Anthropic or OpenAI " +
+                        "key in web Command settings (CToS source keys), " +
+                        "then run again. Keys are never entered in this " +
+                        "app.",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        CtosLogic.AnalystState.READY -> {
+            val text = analyst.analysis
+            if (text != null) {
+                MirrorCard("AI-generated analysis") {
+                    val who = listOf(
+                        CtosLogic.analystProviderLabel(analyst.provider),
+                        analyst.model,
+                    ).filter { it.isNotBlank() }.joinToString(" / ")
+                    Text(
+                        if (who.isNotBlank()) {
+                            "AI-GENERATED ANALYSIS ($who) — analysis of " +
+                                "this case's findings, not a verified fact."
+                        } else {
+                            "AI-GENERATED ANALYSIS — analysis of this " +
+                                "case's findings, not a verified fact."
+                        },
+                        color = SentinelAmber,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(text, style = MaterialTheme.typography.bodyMedium)
+                    if (analyst.findingsConsidered != null) {
+                        Spacer(Modifier.height(6.dp))
+                        DetailLine(
+                            "Findings considered",
+                            if (analyst.findingsTotal != null) {
+                                "${analyst.findingsConsidered} of " +
+                                    "${analyst.findingsTotal}"
+                            } else {
+                                "${analyst.findingsConsidered}"
+                            },
+                        )
+                    }
+                    if (analyst.contextTruncated) {
+                        Text(
+                            "The case context was truncated at the " +
+                                "server's cap — the analysis covers the " +
+                                "findings shown, not the whole case.",
+                            color = SentinelMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            } else {
+                MirrorCard("AI Analyst — no analysis") {
+                    Text(
+                        "The provider did not return an analysis. No " +
+                            "analysis was generated, and nothing was " +
+                            "recorded in place of one.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (analyst.error.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        DetailLine("Provider outcome", analyst.error)
+                    }
+                }
+            }
+        }
+        CtosLogic.AnalystState.UNREPORTED -> Unit
+    }
+}
+
+/**
+ * CTOS TRIO (1.7.6): the Composite Profiler's Identity Graph,
+ * rendered from the server's own structure — nodes with their
+ * verbatim provenance, the per-leg statuses, and the counts.
+ * Confidence is the server's corroboration bucket (how many
+ * distinct tools carry a "found" source for the identifier);
+ * it is shown as the server's word plus that count, never as
+ * a score or a probability. A leg that answered
+ * not_configured or unavailable shows as exactly that — its
+ * silence is visible, never dressed as a negative.
+ */
+@Composable
+private fun CtosIdentityGraphView(graph: CtosLogic.IdentityGraph) {
+    SectionHeader("Identity Graph", graph.nodes.size)
+    MirrorCard("Identity Graph") {
+        Text(
+            "Every identifier the passive legs actually produced, with " +
+                "the provenance the server recorded for it. Confidence " +
+                "is a corroboration count — the number of distinct " +
+                "tools carrying a found source for the identifier — " +
+                "never a probability.",
+            color = SentinelMuted,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        DetailLine(
+            "Identifiers / links",
+            "${graph.nodes.size} / ${graph.edges.size}",
+        )
+        if (graph.truncated) {
+            Text(
+                "The graph reached the server's node cap — some " +
+                    "identifiers are not shown here.",
+                color = SentinelAmber,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        CtosLogic.graphDisplayNodes(graph).forEach { node ->
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    node.label.ifBlank { node.id },
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (node.seed) MirrorChip("TARGET")
+                if (node.kind.isNotBlank()) MirrorChip(node.kind)
+            }
+            if (!node.seed && node.confidence.isNotBlank()) {
+                Text(
+                    "Confidence ${CtosLogic.confidenceLabel(node.confidence)}" +
+                        " — ${node.corroborations} corroborating tool(s)",
+                    color = SentinelMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            node.provenance.forEach { prov ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 3.dp),
+                ) {
+                    StatusChip(prov.status)
+                    Text(
+                        listOf(prov.tool, prov.source)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" · "),
+                        color = SentinelMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+    if (graph.legs.isNotEmpty()) {
+        MirrorCard("Composite legs") {
+            graph.legs.forEach { leg ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(vertical = 3.dp),
+                ) {
+                    StatusChip(leg.status)
+                    Text(
+                        if (leg.input.isNotBlank()) {
+                            "${leg.tool} on ${leg.input}"
+                        } else {
+                            leg.tool
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            Text(
+                "A leg marked not configured or unavailable said " +
+                    "nothing either way — it is shown, not hidden.",
+                color = SentinelMuted,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }
