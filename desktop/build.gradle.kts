@@ -106,7 +106,7 @@ compose.desktop {
     application {
         mainClass = "net.sentinelsafeguard.app.desktop.MainKt"
         nativeDistributions {
-            targetFormats(TargetFormat.Deb, TargetFormat.Msi)
+            targetFormats(TargetFormat.Deb, TargetFormat.Exe)
             packageName = "command-app"
             packageVersion = "1.0.0"
             description = "Command App — desktop client for Sentinel Command, from Sentinel Safeguard"
